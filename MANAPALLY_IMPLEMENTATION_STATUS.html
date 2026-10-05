@@ -1,0 +1,248 @@
+<title>MANAPALLY Economy Implementation Status</title>
+<style>
+:root {
+  --primary: #5fae8c;
+  --ruby: #c2564f;
+  --saffron: #d9a441;
+  --indigo: #6f8fc2;
+  --gold: #dcb868;
+  --bg: #071816;
+  --text: #f5ead2;
+  --text-dim: rgba(245, 234, 210, 0.7);
+}
+
+body {
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+h1 {
+  color: var(--gold);
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+h2 {
+  color: var(--primary);
+  margin-top: 2rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(245, 234, 210, 0.2);
+}
+
+h3 {
+  color: var(--gold);
+  font-size: 1.1rem;
+  margin-top: 1.5rem;
+}
+
+.status {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.done {
+  background: rgba(95, 174, 140, 0.2);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.pending {
+  background: rgba(217, 164, 65, 0.2);
+  color: var(--saffron);
+  border: 1px solid var(--saffron);
+}
+
+.error {
+  background: rgba(194, 86, 79, 0.2);
+  color: var(--ruby);
+  border: 1px solid var(--ruby);
+}
+
+ul {
+  margin: 0.5rem 0;
+}
+
+li {
+  margin: 0.5rem 0;
+  color: var(--text-dim);
+}
+
+code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--gold);
+}
+
+pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid rgba(220, 184, 104, 0.2);
+}
+
+.fix-section {
+  background: rgba(194, 86, 79, 0.1);
+  border-left: 3px solid var(--ruby);
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.note {
+  background: rgba(95, 174, 140, 0.1);
+  border-left: 3px solid var(--primary);
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+</style>
+
+<h1>MANAPALLY Economy Implementation</h1>
+<p><strong>Status as of 2026-09-30</strong></p>
+
+<h2>✅ Completed Work <span class="status done">DONE</span></h2>
+
+<h3>1. Pure Economy Logic Module</h3>
+<ul>
+  <li>✅ <code>src/pages/Game/estate.js</code> — Complete with all property/building/mortgage rules</li>
+  <li>✅ <code>src/pages/Game/estate.test.js</code> — 15 tests passing</li>
+  <li>✅ Functions: <code>rentFor</code>, <code>canBuild</code>, <code>sellOneBuilding</code>, <code>canSellProperty</code>, <code>sellProperty</code>, <code>mortgageValue</code>, <code>unmortgageCost</code>, <code>canMortgage</code>, <code>netWorth</code>, <code>liquidatableValue</code></li>
+</ul>
+
+<h3>2. Match Rules with Net Worth</h3>
+<ul>
+  <li>✅ <code>src/pages/Game/matchRules.js</code> — <code>calculateWinner</code> uses <code>netWorth</code> instead of raw cash</li>
+  <li>✅ <code>src/pages/Game/matchRules.test.js</code> — 13 tests passing (includes net worth test)</li>
+</ul>
+
+<h3>3. Four Pieces System</h3>
+<ul>
+  <li>✅ <code>src/pages/Game/pieces.jsx</code> — Lamp, Temple, Elephant, Bell with SVG paths</li>
+  <li>✅ <code>PieceMark</code> component (variants: token, stamp, chip)</li>
+  <li>✅ <code>PropertyTally</code> component for house/hotel tally marks</li>
+  <li>✅ Color system: Emerald #5fae8c, Ruby #c2564f, Saffron #d9a441, Indigo #6f8fc2</li>
+</ul>
+
+<h3>4. Lobby System</h3>
+<ul>
+  <li>✅ <code>src/pages/Lobby/Lobby.jsx</code> — Token picker using <code>pieces.jsx</code></li>
+  <li>✅ <code>src/pages/Lobby/RoomWaiting.jsx</code> — Seat count picker (2/3/4 players)</li>
+  <li>✅ <code>src/pages/Lobby/room-waiting.css</code> — Seat picker styles</li>
+  <li>✅ <code>src/Game.jsx</code> — Passes <code>matchConfig</code> to BoardGame</li>
+</ul>
+
+<h3>5. CSS Foundation</h3>
+<ul>
+  <li>✅ <code>src/pages/Game/board-game.css</code> — All economy UI styles added</li>
+  <li>✅ Seat color classes (<code>.seat-lamp</code>, <code>.seat-temple</code>, etc.)</li>
+  <li>✅ Ownership stamp styles</li>
+  <li>✅ Property tally positioning</li>
+  <li>✅ Purchase offer modal styles</li>
+  <li>✅ Raise funds modal styles</li>
+  <li>✅ Property card action button styles</li>
+</ul>
+
+<h3>6. BoardGame.jsx Foundation</h3>
+<ul>
+  <li>✅ Fixed all ESLint errors from legacy 2-player code</li>
+  <li>✅ Reordered state to fix <code>turnCount</code> use-before-define</li>
+  <li>✅ Added <code>players</code> to all dependency arrays</li>
+  <li>✅ Added <code>deeds</code> state</li>
+  <li>✅ Added <code>purchaseOffer</code> and <code>raiseFunds</code> modal state</li>
+  <li>✅ Added helper functions: <code>transferCash</code>, <code>offerPurchase</code>, <code>handlePurchaseDecision</code>, <code>aiDecidePurchase</code>, <code>handleInsolvency</code></li>
+</ul>
+
+<h2>✅ Build Status <span class="status done">PASSING</span></h2>
+
+<div class="note">
+<p><strong>Latest build:</strong> <code>CI=true npm run build</code> — ✅ Compiled successfully</p>
+<p><strong>Bundle size:</strong> 77.03 kB (gzipped main.js)</p>
+<p><strong>Fixed issues:</strong></p>
+<ul>
+  <li>✅ Removed all <code>setActivePlayerIndex</code> calls (legacy 2-player code)</li>
+  <li>✅ Fixed <code>completedTurns</code> → <code>turnCount</code></li>
+  <li>✅ Reordered state declarations to fix <code>turnCount</code> use-before-define</li>
+  <li>✅ Added missing <code>players</code> to dependency arrays</li>
+  <li>✅ Added economy helper functions with eslint-disable (will be used in next chunk)</li>
+</ul>
+</div>
+
+<h2>🔄 Remaining Work</h2>
+
+<h3>Next Chunk: Purchase Modal UI</h3>
+<div class="note">
+<p><strong>Status:</strong> Ready to implement</p>
+<p><strong>What:</strong> Add JSX for purchase offer modal that appears when landing on unowned property</p>
+<p><strong>Where:</strong> BoardGame.jsx render section, after existing drawn-card overlay</p>
+<p><strong>Estimated lines:</strong> ~30 lines of JSX</p>
+</div>
+
+<h3>Subsequent Chunks</h3>
+<ol>
+  <li><strong>Ownership stamps & tallies on board spaces</strong> — Add PieceMark stamps and PropertyTally components to space rendering loop (~20 lines)</li>
+  <li><strong>Property card owner actions</strong> — Add Build/Sell/Mortgage/Unmortgage buttons to property card modal (~40 lines)</li>
+  <li><strong>Raise funds modal UI</strong> — Add insolvency resolution modal with liquidation options (~50 lines)</li>
+  <li><strong>Integrate economy into turn execution</strong> — Modify rollDiceHandler/completeAITurn to call rent/purchase/insolvency functions (~80 lines total across both functions)</li>
+  <li><strong>Update match result calculation</strong> — Pass deeds and spaces to calculateWinner (1 line)</li>
+  <li><strong>Final verification</strong> — Build, tests, manual testing at 2/3/4 players</li>
+</ol>
+
+<h2>📋 Next Steps</h2>
+
+<ol>
+  <li><strong>Fix build errors</strong> — Remove <code>setActivePlayerIndex</code>, fix <code>completedTurns</code></li>
+  <li><strong>Verify build</strong> — <code>CI=true npm run build</code></li>
+  <li><strong>Add purchase & rent logic</strong> — Incrementally to <code>rollDiceHandler</code> / <code>completeAITurn</code></li>
+  <li><strong>Add modal UI</strong> — Purchase offer, raise funds</li>
+  <li><strong>Add property actions</strong> — Build, sell, mortgage buttons</li>
+  <li><strong>Add visual indicators</strong> — Stamps and tally marks</li>
+  <li><strong>Test thoroughly</strong> — Manual testing at 2, 3, 4 players</li>
+</ol>
+
+<h2>🎯 Testing Checklist</h2>
+
+<p>Once implementation is complete:</p>
+
+<ul>
+  <li>✅ <code>CI=true npm run build</code> — Zero warnings</li>
+  <li>✅ <code>CI=true npx react-scripts test --testPathPattern='estate|matchRules'</code> — 28 tests pass</li>
+  <li>⬜ Buy unowned property → stamp appears</li>
+  <li>⬜ Build houses → tally marks appear</li>
+  <li>⬜ Build hotel → crossed tally appears</li>
+  <li>⬜ Land on owned property → rent transfers</li>
+  <li>⬜ Monopoly doubles base rent</li>
+  <li>⬜ Route rent scales correctly (1-4 owned)</li>
+  <li>⬜ Utility rent: 4× or 10× dice</li>
+  <li>⬜ Mortgage → ₹0 rent</li>
+  <li>⬜ Unmortgage → 10% interest charged</li>
+  <li>⬜ Insolvency → raise funds modal</li>
+  <li>⬜ Bankruptcy → deeds return to bank</li>
+  <li>⬜ Turn 248 → winner by net worth</li>
+</ul>
+
+<h2>📚 Reference</h2>
+
+<p><strong>Plan file:</strong> <code>.claude/plans/buzzing-petting-valley.md</code></p>
+<p><strong>Test commands:</strong></p>
+<pre>
+# Build
+CI=true npm run build
+
+# Run economy tests
+CI=true npx react-scripts test --testPathPattern='estate.test.js'
+
+# Run all relevant tests
+CI=true npx react-scripts test --testPathPattern='estate|matchRules'
+</pre>

@@ -1,0 +1,201 @@
+/* Section links: a quiet 40px row under the brand bar */
+
+.global-nav {
+  position: relative;
+  z-index: 20;
+  height: 40px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.global-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 3vw, 40px);
+  width: min(1180px, calc(100% - 44px));
+  height: 100%;
+  margin: 0 auto;
+}
+
+.global-nav-home,
+.global-nav-links button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.global-nav-home {
+  height: 44px;
+  transition: opacity 0.3s var(--ease);
+}
+
+.global-nav-home:hover {
+  opacity: 0.75;
+}
+
+
+
+.global-nav-links button {
+  height: 40px;
+  padding: 0 8px;
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  letter-spacing: -0.01em;
+  transition: color 0.3s var(--ease);
+}
+
+.global-nav-links button:hover {
+  color: var(--ink);
+}
+
+/* Ribbon: one line of helpful news under the global bar */
+
+.ribbon {
+  position: relative;
+  z-index: 1;
+  padding: 14px 22px;
+  text-align: center;
+  background: var(--surface);
+}
+
+.ribbon p {
+  color: var(--ink);
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+  line-height: 1.43;
+}
+
+/* Brand bar: the first row, sticks to the top and frosts once the page
+   scrolls. Above the section row so the sound pop up is never covered. */
+
+.local-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 56px;
+  background: var(--canvas);
+  border-bottom: 1px solid transparent;
+  transition:
+    background 0.5s var(--ease),
+    border-color 0.5s var(--ease),
+    backdrop-filter 0.5s var(--ease);
+}
+
+.local-nav--stuck {
+  background: color-mix(in srgb, var(--canvas) 74%, transparent);
+  border-bottom-color: var(--hairline);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.local-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1180px, calc(100% - 44px));
+  height: 100%;
+  margin: 0 auto;
+}
+
+.local-nav-title {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.local-nav-title .brand-logo-word {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.local-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.local-nav-link {
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: color 0.3s var(--ease);
+}
+
+.local-nav-link:hover {
+  color: var(--link);
+}
+
+@media (max-width: 833px) {
+  .global-nav {
+    display: none;
+  }
+
+  .local-nav-actions {
+    gap: 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .local-nav-link {
+    display: none;
+  }
+
+  .local-nav-title .brand-logo-word {
+    font-size: 1.1rem;
+  }
+}
+
+/* Theme toggle, shared by every top bar */
+
+.theme-toggle {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    color 0.3s var(--ease),
+    background 0.3s var(--ease),
+    transform 0.4s var(--ease-spring);
+}
+
+.theme-toggle:hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+.theme-toggle:active {
+  transform: rotate(-20deg) scale(0.92);
+}
+
+.theme-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}

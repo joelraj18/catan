@@ -1,0 +1,572 @@
+/* Dark theme
+   Every page draws from the tokens in index.css, so most of the dark theme
+   is the token set below. The rest are places that paint a fixed light tint
+   or white text on the sage scale, plus the neon versions of the board's
+   motion. Everything is keyed from <html data-theme="dark">. */
+
+:root[data-theme='dark'] {
+  /* Surfaces climb from near black; text steps turn into light greens */
+  --sage-25: #0f1411;
+  --sage-50: #141b16;
+  --sage-100: #1b241e;
+  --sage-200: #26332b;
+  --sage-300: #34463b;
+  --sage-400: #4d6a58;
+  --sage-500: #6d987c;
+  --sage-600: #8cc29c;
+  --sage-700: #a8dcb3;
+  --sage-800: #c8eed2;
+  --sage-900: #e6f8ea;
+
+  --canvas: #0b0f0c;
+  --surface: #141a16;
+  --surface-muted: #101512;
+
+  --ink: #f2f5f0;
+  --ink-secondary: #c9d1c7;
+  --ink-tertiary: #9aa597;
+  --ink-quaternary: #7d877b;
+
+  --accent: #1f9d55;
+  --accent-hover: #22b35f;
+  --accent-soft: rgba(57, 255, 136, 0.12);
+  --link: #5ef0a0;
+
+  --danger: #ff6b6b;
+  --success: #39ff88;
+  --neon: #39ff88;
+
+  --hairline: rgba(255, 255, 255, 0.1);
+  --hairline-strong: rgba(255, 255, 255, 0.18);
+
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 30px 60px rgba(0, 0, 0, 0.6), 0 8px 20px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------- general */
+
+[data-theme='dark'] .gold-button {
+  color: #ffffff;
+}
+
+[data-theme='dark'] .gold-button:not([disabled]):hover {
+  box-shadow: 0 0 18px rgba(57, 255, 136, 0.35);
+}
+
+/* White text on the green scale keeps a deep green behind it */
+[data-theme='dark'] .step-number,
+[data-theme='dark'] .panel-number,
+[data-theme='dark'] .results-crown {
+  background: linear-gradient(150deg, #1f9d55, #0b5e32);
+  box-shadow: 0 0 14px rgba(57, 255, 136, 0.3);
+}
+
+[data-theme='dark'] .invite-code-card .invite-link-button,
+[data-theme='dark'] .trade-button:hover {
+  color: #ffffff;
+  background: #1f9d55;
+}
+
+[data-theme='dark'] .invite-code-card .invite-link-button:hover {
+  background: #22b35f;
+  box-shadow: 0 0 14px rgba(57, 255, 136, 0.4);
+}
+
+[data-theme='dark'] .radial-dial-arc {
+  stroke: var(--neon);
+  filter: drop-shadow(0 0 4px rgba(57, 255, 136, 0.7));
+}
+
+/* Fixed light tints become deep versions of the same hue */
+[data-theme='dark'] .balance-float--loss,
+[data-theme='dark'] .seat-remove:hover,
+[data-theme='dark'] .property-card-note--warning,
+[data-theme='dark'] .raise-funds-debt,
+[data-theme='dark'] .end-game-button:hover {
+  background: #3a1517;
+}
+
+[data-theme='dark'] .offline-note,
+[data-theme='dark'] .reconnect-banner,
+[data-theme='dark'] .trade-pending,
+[data-theme='dark'] .trade-mortgages,
+[data-theme='dark'] .detention-panel,
+[data-theme='dark'] .end-vote-status {
+  background: #2a2312;
+}
+
+[data-theme='dark'] .sound-mixer-panel,
+[data-theme='dark'] .property-card-header,
+[data-theme='dark'] .centre-status {
+  background: rgba(20, 26, 22, 0.94);
+}
+
+[data-theme='dark'] .drawn-card {
+  background: linear-gradient(170deg, #1b241e, #101512);
+}
+
+[data-theme='dark'] .invite-code-card {
+  background: linear-gradient(150deg, #1b2a20, #0f1a13);
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.25),
+    0 0 24px rgba(57, 255, 136, 0.08);
+}
+
+[data-theme='dark'] .invite-code-card strong {
+  color: var(--neon);
+  text-shadow: 0 0 12px rgba(57, 255, 136, 0.45);
+}
+
+[data-theme='dark'] .route-mode--selected,
+[data-theme='dark'] .token-choice--selected {
+  box-shadow:
+    0 0 0 2px var(--token-color, var(--neon)),
+    0 0 16px color-mix(in srgb, var(--token-color, var(--neon)) 45%, transparent);
+}
+
+[data-theme='dark'] .token-choice {
+  background: color-mix(in srgb, var(--token-color) 12%, var(--surface));
+}
+
+[data-theme='dark'] .relay-chip {
+  color: #c8b8ff;
+  background: #2a2150;
+}
+
+[data-theme='dark'] .route-pill--up {
+  color: var(--neon);
+}
+
+[data-theme='dark'] .route-pill--up::before,
+[data-theme='dark'] .check-ok span,
+[data-theme='dark'] .join-stage--done .join-stage-dot {
+  box-shadow: 0 0 8px var(--neon);
+}
+
+[data-theme='dark'] .join-stage-dot {
+  background: var(--neon);
+  box-shadow: 0 0 8px var(--neon);
+}
+
+/* The black piece needs a light edge to read on dark surfaces */
+[data-theme='dark'] .seat-gun {
+  --seat: #d7dde2;
+  color: #e6ebef;
+}
+
+/* ---------------------------------------------------------- home page */
+
+[data-theme='dark'] .preview-tile--tax {
+  background: #1d2420;
+}
+
+[data-theme='dark'] .preview-centre {
+  background: linear-gradient(160deg, rgba(27, 36, 30, 0.85), rgba(16, 21, 18, 0.7));
+}
+
+[data-theme='dark'] .hero-title {
+  text-shadow: 0 0 40px rgba(57, 255, 136, 0.18);
+}
+
+/* ---------------------------------------------------------- the board */
+
+[data-theme='dark'] .game-board {
+  background: linear-gradient(135deg, #0d1a12, #0b1218 55%, #140f1f);
+  box-shadow: inset 0 0 0 1px rgba(57, 255, 136, 0.12);
+}
+
+[data-theme='dark'] .board-space {
+  background: #151b17;
+}
+
+[data-theme='dark'] .board-space--property {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--family) 22%, #121814), #121814 75%);
+}
+
+[data-theme='dark'] .board-space--property::before {
+  box-shadow: 0 0 10px var(--family);
+}
+
+[data-theme='dark'] .board-space--chance {
+  background: linear-gradient(180deg, #3a1228, #1a0e15);
+}
+
+[data-theme='dark'] .board-space--community {
+  background: linear-gradient(180deg, #3a2610, #1a130a);
+}
+
+[data-theme='dark'] .board-space--tax {
+  background: linear-gradient(180deg, #2a1f4d, #140f24);
+}
+
+[data-theme='dark'] .board-space--route {
+  background: linear-gradient(180deg, #0f2f3d, #0a171d);
+}
+
+[data-theme='dark'] .board-space--utility {
+  background: linear-gradient(180deg, #3a2e0a, #1a1507);
+}
+
+[data-theme='dark'] .board-space--detention,
+[data-theme='dark'] .board-space--parking {
+  background: linear-gradient(145deg, #12301f, #0b1b12);
+}
+
+[data-theme='dark'] .board-space--go-to-detention {
+  background: linear-gradient(145deg, #45190c, #241008);
+}
+
+[data-theme='dark'] .board-space--start {
+  background: linear-gradient(145deg, #13a862, #075a32);
+  box-shadow: inset 0 0 18px rgba(57, 255, 136, 0.35);
+}
+
+[data-theme='dark'] .board-space--chance .space-art {
+  --tile-accent: #ff4fa0;
+  color: #ff8cc0;
+}
+
+[data-theme='dark'] .board-space--community .space-art {
+  --tile-accent: #ffb03b;
+  color: #ffc46e;
+}
+
+[data-theme='dark'] .board-space--route .space-art {
+  --tile-accent: #3fd6ff;
+  color: #7fe3ff;
+}
+
+[data-theme='dark'] .board-space--utility .space-art {
+  --tile-accent: #ffd23f;
+  color: #ffe07a;
+}
+
+[data-theme='dark'] .board-space--tax .space-art,
+[data-theme='dark'] .board-space--tax .space-cost--tax {
+  --tile-accent: #b49bff;
+  color: #c9b8ff;
+}
+
+[data-theme='dark'] .board-space--go-to-detention .space-art {
+  --tile-accent: #ff7a4d;
+  color: #ffa07a;
+}
+
+[data-theme='dark'] .board-space--detention .space-art,
+[data-theme='dark'] .board-space--parking .space-art {
+  --tile-accent: #39ff88;
+  color: #7dffb3;
+}
+
+[data-theme='dark'] .space-name {
+  color: #f4f7f2;
+}
+
+[data-theme='dark'] .space-cost {
+  color: #a9b3a6;
+}
+
+[data-theme='dark'] .board-centre-art {
+  background:
+    radial-gradient(70% 55% at 50% 0%, rgba(57, 255, 136, 0.08), transparent),
+    linear-gradient(160deg, #121a15, #0d1310 55%, #120f1a);
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.14),
+    0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* The title turns neon and breathes */
+[data-theme='dark'] .board-centre-art h1 {
+  background: linear-gradient(100deg, #00e676 0%, #39ff88 35%, #b9ffd6 50%, #39ff88 65%, #00e676 100%);
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(57, 255, 136, 0.45));
+  animation:
+    titleShimmer 6s ease-in-out infinite,
+    neonPulse 3s ease-in-out infinite;
+}
+
+@keyframes neonPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px rgba(57, 255, 136, 0.35));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 16px rgba(57, 255, 136, 0.75));
+  }
+}
+
+[data-theme='dark'] .centre-message,
+[data-theme='dark'] .board-centre-art p {
+  color: #b9c4b6;
+}
+
+[data-theme='dark'] .board-centre-art::after {
+  background: linear-gradient(115deg, transparent 47%, rgba(57, 255, 136, 0.35) 50%, transparent 53%);
+}
+
+/* Tokens glow in their seat colour */
+[data-theme='dark'] .board-token {
+  background: #0f1411;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+[data-theme='dark'] .token-slot .board-token--waiting {
+  animation:
+    tokenStep var(--step, 0.5s) cubic-bezier(0.45, 0, 0.25, 1),
+    neonWait 1.8s var(--step, 0.5s) ease-in-out infinite;
+}
+
+@keyframes neonWait {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px currentColor);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 12px currentColor);
+  }
+}
+
+[data-theme='dark'] .board-space--go-flash::after,
+[data-theme='dark'] .board-space--start::after {
+  background: linear-gradient(110deg, transparent 30%, rgba(57, 255, 136, 0.9) 50%, transparent 70%);
+}
+
+[data-theme='dark'] .space-owner::after {
+  animation-name: ownerNeon;
+}
+
+@keyframes ownerNeon {
+  from {
+    box-shadow:
+      0 0 0 0 var(--seat),
+      0 0 14px var(--seat);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 8px color-mix(in srgb, var(--seat) 0%, transparent),
+      0 0 0 transparent;
+  }
+}
+
+[data-theme='dark'] .game-player--active {
+  background: color-mix(in srgb, var(--seat) 10%, var(--surface));
+  box-shadow:
+    inset 0 0 0 1.5px var(--seat),
+    0 0 18px color-mix(in srgb, var(--seat) 40%, transparent);
+  animation: activeNeon 2.6s ease-in-out infinite;
+}
+
+@keyframes activeNeon {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1.5px var(--seat),
+      0 0 10px color-mix(in srgb, var(--seat) 25%, transparent);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 1.5px var(--seat),
+      0 0 22px color-mix(in srgb, var(--seat) 55%, transparent);
+  }
+}
+
+[data-theme='dark'] .die-face rect {
+  fill: #e9f5ec;
+}
+
+/* The pips stay dark on the light die face, the sage scale turns light here */
+[data-theme='dark'] .die-face circle,
+[data-theme='dark'] .hero-die circle {
+  fill: #0c1f14;
+}
+
+[data-theme='dark'] .dice-display--rolling .die-face {
+  filter: drop-shadow(0 0 12px rgba(57, 255, 136, 0.55));
+}
+
+[data-theme='dark'] .balance-float--gain {
+  background: #0f2e1c;
+  color: var(--neon);
+  text-shadow: 0 0 10px rgba(57, 255, 136, 0.6);
+}
+
+[data-theme='dark'] .balance-float--loss {
+  color: #ff6b6b;
+  text-shadow: 0 0 10px rgba(255, 107, 107, 0.6);
+}
+
+[data-theme='dark'] .board-space--clickable:hover,
+[data-theme='dark'] .board-space--selected {
+  box-shadow:
+    0 0 0 2px var(--neon),
+    0 0 18px rgba(57, 255, 136, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='dark'] .board-centre-art h1,
+  [data-theme='dark'] .token-slot .board-token--waiting,
+  [data-theme='dark'] .game-player--active {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------- page chrome and glows */
+
+[data-theme='dark'] .lobby-topbar,
+[data-theme='dark'] .waiting-topbar,
+[data-theme='dark'] .board-topbar {
+  background: rgba(11, 15, 12, 0.78);
+  border-bottom-color: var(--hairline);
+}
+
+/* Sage glows become a faint green haze */
+[data-theme='dark'] .lobby-page {
+  background:
+    radial-gradient(70% 50% at 85% 10%, rgba(57, 255, 136, 0.07), transparent 70%),
+    var(--canvas);
+}
+
+[data-theme='dark'] .waiting-room-page {
+  background:
+    radial-gradient(70% 50% at 15% 10%, rgba(57, 255, 136, 0.07), transparent 70%),
+    var(--canvas);
+}
+
+[data-theme='dark'] .board-game-page {
+  background:
+    radial-gradient(60% 45% at 50% 0%, rgba(57, 255, 136, 0.06), transparent 70%),
+    var(--canvas);
+}
+
+[data-theme='dark'] .closing-cta {
+  background:
+    radial-gradient(60% 80% at 50% 100%, rgba(57, 255, 136, 0.1), transparent),
+    var(--canvas);
+}
+
+[data-theme='dark'] .results-hero {
+  background:
+    radial-gradient(70% 90% at 50% 0%, rgba(57, 255, 136, 0.14), transparent),
+    var(--surface);
+}
+
+[data-theme='dark'] .sage-glow--one {
+  background: radial-gradient(closest-side, rgba(57, 255, 136, 0.12), transparent);
+}
+
+[data-theme='dark'] .sage-glow--two {
+  background: radial-gradient(closest-side, rgba(0, 200, 255, 0.08), transparent);
+}
+
+[data-theme='dark'] .hero-glow {
+  background: radial-gradient(closest-side, rgba(57, 255, 136, 0.18), transparent);
+}
+
+/* Emphasis words and the big titles glow green */
+[data-theme='dark'] .hero-title,
+[data-theme='dark'] .lobby-intro h1 em,
+[data-theme='dark'] .waiting-room-intro h1 em {
+  background: linear-gradient(180deg, #b9ffd6 5%, #39ff88 55%, #00c964 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(0 0 18px rgba(57, 255, 136, 0.28));
+}
+
+[data-theme='dark'] .section-head h2 span {
+  color: #6fdc99;
+}
+
+/* The hero board slab and its preview */
+[data-theme='dark'] .board-slab {
+  background: linear-gradient(150deg, #1d2a22 0%, #16211a 45%, #101813 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.15),
+    0 30px 60px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='dark'] .preview-board {
+  background: rgba(11, 15, 12, 0.6);
+}
+
+[data-theme='dark'] .hero-die rect {
+  fill: #e9f5ec;
+}
+
+[data-theme='dark'] .hero-die {
+  box-shadow:
+    0 0 0 clamp(3px, 0.5vw, 5px) #0b5e32,
+    0 0 0 clamp(5px, 0.8vw, 8px) #1f9d55,
+    0 0 18px rgba(57, 255, 136, 0.45);
+}
+
+[data-theme='dark'] .hero-dice {
+  background: linear-gradient(150deg, #1d2a22, #101813);
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.2),
+    0 18px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* The board frame and the dice tray */
+[data-theme='dark'] .game-board-area {
+  background: linear-gradient(150deg, #1d2a22 0%, #16211a 45%, #101813 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.15),
+    0 0 40px rgba(57, 255, 136, 0.06),
+    0 30px 60px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='dark'] .dice-display {
+  background: linear-gradient(160deg, #1b241e, #101512);
+  box-shadow: inset 0 0 0 1px rgba(57, 255, 136, 0.15);
+}
+
+[data-theme='dark'] .dice-total {
+  color: var(--ink-secondary);
+}
+
+[data-theme='dark'] .die-face--idle rect {
+  fill: rgba(233, 245, 236, 0.18);
+}
+
+/* The black piece shows a light face on dark backgrounds, everywhere */
+[data-theme='dark'] .piece-mark--gun {
+  color: #e6ebef;
+}
+
+[data-theme='dark'] .detention-panel {
+  color: #ffd98a;
+}
+
+/* The hero preview board's plain tiles */
+[data-theme='dark'] .preview-tile {
+  background: #151b17;
+}
+
+[data-theme='dark'] .preview-tile--route,
+[data-theme='dark'] .preview-tile--utility {
+  background: #10232a;
+}
+
+[data-theme='dark'] .preview-tile--chance,
+[data-theme='dark'] .preview-tile--community,
+[data-theme='dark'] .preview-tile--tax {
+  background: #1d2420;
+}
+
+[data-theme='dark'] .preview-tile--corner {
+  background: linear-gradient(145deg, #12301f, #0b1b12);
+}
+
+[data-theme='dark'] .preview-tile--start {
+  background: linear-gradient(145deg, #13a862, #075a32);
+}

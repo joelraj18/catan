@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/favicon.svg" />
+    <link rel="alternate icon" href="%PUBLIC_URL%/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f6f1" />
+    <meta
+      name="description"
+      content="Manapally is a premium South Indian strategy board game for 2 to 4 players, played in your browser"
+    />
+    <script>
+      // Set the theme before anything paints, so a dark page never flashes light.
+      (function () {
+        try {
+          var saved = localStorage.getItem('manapally-theme');
+          var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        } catch (e) {}
+      })();
+    </script>
+    <title>Manapally · Premium South Indian Strategy Board Game</title>
+  </head>
+  <body>
+    <noscript>Please enable JavaScript to play Manapally</noscript>
+    <div id="root"></div>
+  </body>
+</html>
