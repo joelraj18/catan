@@ -9,8 +9,9 @@ beforeAll(() => {
 test('the home page renders the hero and the way into a room', () => {
   render(<Game />);
 
-  expect(screen.getByRole('heading', { level: 1, name: 'Manapally' })).toBeInTheDocument();
-  expect(screen.getByText('Premium South Indian Strategy Board Game')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Catan' })).toBeInTheDocument();
+  expect(screen.getByText('Settle the island, trade and build')).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: /start game/i }).length).toBeGreaterThan(0);
-  expect(screen.getByRole('heading', { name: /district families/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /development cards/i })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /beginners/i })).toBeInTheDocument();
 });

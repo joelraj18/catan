@@ -8,9 +8,8 @@
 // - Requests go straight from this browser to api.anthropic.com.
 
 import Anthropic from '@anthropic-ai/sdk';
-import * as Estate from '../pages/Game/estate';
-import { BOARD_SPACES } from '../pages/Game/boardData';
-import { TOTAL_MATCH_TURNS } from '../pages/Game/matchRules';
+import { GEOMETRY } from '../pages/Game/catanBoard';
+import { WINNING_POINTS, publicPoints, redactFor, visibleHandSize } from '../pages/Game/catanRules';
 
 export const PREMIUM_MODEL = 'claude-opus-5-5';
 export const PREMIUM_PROVIDER = 'Anthropic Claude API';
@@ -79,64 +78,65 @@ export const verifyPremiumKey = async () => {
   }
 };
 
-const SYSTEM_PROMPT = `You are a shrewd but good natured opponent in Manapally, a South Indian property strategy board game.
-Players buy districts, express stations and utilities, collect rent, and build houses and a hotel once they own a full colour family.
-The winner is the player with the highest total net worth (cash plus property value) when the turn limit is reached or when everyone else is bankrupt.
-Keep enough cash to survive rent. Completing colour families and owning several express stations is valuable.
-Reply only with the requested JSON. The comment is short friendly table talk of at most 12 words, with no full stops, dashes or underscores.`;
+const SYSTEM_PROMPT = `You are a shrewd but good natured opponent in Catan, the island settling board game.
+Players collect brick, lumber, ore, grain and wool when the dice roll the numbers of hexes next to their settlements (1 card) and cities (2 cards).
+They build roads, settlements and cities and buy development cards. The first player to ${WINNING_POINTS} victory points on their own turn wins.
+Numbers 6 and 8 roll most often, then 5 and 9, and 2 and 12 rarely. Variety of resources, good numbers and harbours matter.
+Put the robber where it hurts the leader most and never on your own hexes. Do not feed a player who is close to winning.
+You choose one of the numbered options you are given. Reply only with the requested JSON.
+The comment is short friendly table talk of at most 12 words, with no full stops, dashes or underscores.`;
 
-const PURCHASE_SCHEMA = {
+const CHOICE_SCHEMA = {
   type: 'object',
   properties: {
-    buy: { type: 'boolean' },
+    choice: { type: 'integer' },
     comment: { type: 'string' },
   },
-  required: ['buy', 'comment'],
+  required: ['choice', 'comment'],
   additionalProperties: false,
 };
 
-const BID_SCHEMA = {
-  type: 'object',
-  properties: {
-    maxBid: { type: 'integer' },
-    comment: { type: 'string' },
-  },
-  required: ['maxBid', 'comment'],
-  additionalProperties: false,
+const INSTRUCTIONS = {
+  setup: 'Choose where to place your starting settlement.',
+  robber: 'You move the robber. Choose the hex to block.',
+  turn: 'It is your trade and build phase. Choose what to do next.',
+  trade: 'Another player offers you a trade. Choose whether to accept.',
 };
 
-// A compact, factual view of the table for one decision.
-const describeTable = (playerId, space, state) => {
-  const group =
-    space.type === 'property'
-      ? Estate.getGroupSpaceIds(space.id, BOARD_SPACES)
-      : BOARD_SPACES.filter((entry) => entry.type === space.type).map((entry) => entry.id);
+// A compact, factual view of the table for one decision. Only this seat's
+// own cards are included; opponents show counts and public points.
+const describeTable = (playerId, state) => {
+  const view = redactFor(state, playerId);
+  const hexLabel = (hexId) => {
+    const hex = view.board.hexes[hexId];
+    return `${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`;
+  };
+  const buildingsOf = (id) =>
+    Object.entries(view.buildings)
+      .filter(([, building]) => building.owner === id)
+      .map(([vertexId, building]) => `${building.type} on ${GEOMETRY.vertices[vertexId].hexes.map(hexLabel).join(' + ')}`);
 
   return {
-    turn: state.turnCount,
-    turnLimit: TOTAL_MATCH_TURNS,
-    space: {
-      name: space.name,
-      kind: space.type,
-      colourFamily: space.colorGroup || null,
-      price: space.price,
-      familySize: group.length,
-      familyOwnedByYou: group.filter((id) => state.deeds[id]?.owner === playerId).length,
-      familyOwnedByOthers: group.filter((id) => state.deeds[id] && state.deeds[id].owner !== playerId).length,
-    },
+    turn: view.turnCount,
+    pointsToWin: WINNING_POINTS,
+    robberOn: hexLabel(view.board.robber),
     you: {
-      cash: state.balances[playerId],
-      netWorth: Estate.netWorth(playerId, state.balances, state.deeds, BOARD_SPACES),
-      holdings: Object.entries(state.deeds)
-        .filter(([, deed]) => deed.owner === playerId)
-        .map(([id]) => BOARD_SPACES[id].name),
+      points: publicPoints(view, playerId) + (view.devCards[playerId] || []).filter((card) => card.type === 'victoryPoint').length,
+      hand: view.hands[playerId],
+      developmentCards: (view.devCards[playerId] || []).map((card) => card.type),
+      knightsPlayed: view.knights[playerId] || 0,
+      buildings: buildingsOf(playerId),
+      longestRoad: view.longestRoad.lengths[playerId] || 0,
     },
-    opponents: state.players
-      .filter((player) => player.id !== playerId && !state.bankrupt[player.id])
+    opponents: view.players
+      .filter((player) => player.id !== playerId)
       .map((player) => ({
         name: player.name,
-        cash: state.balances[player.id],
-        netWorth: Estate.netWorth(player.id, state.balances, state.deeds, BOARD_SPACES),
+        visiblePoints: publicPoints(view, player.id),
+        cards: visibleHandSize(view.hands[player.id]),
+        developmentCards: (view.devCards[player.id] || []).length,
+        knightsPlayed: view.knights[player.id] || 0,
+        buildings: buildingsOf(player.id),
       })),
   };
 };
@@ -163,32 +163,28 @@ const ask = async (schema, instruction, context) => {
 const tidyComment = (comment) =>
   typeof comment === 'string' ? comment.replace(/[._\-–—]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) : '';
 
-// The advisor the game engine calls for AI opponents. Returns null to let the
-// engine fall back to the built in strategy.
-export const premiumAdvisor = async ({ kind, playerId, space, state }) => {
-  if (!apiKey) {
+// The advisor the game engine calls for AI opponents. The engine passes a
+// short list of legal options, best first by its own strategy; the answer
+// is the index of one of them. Returns null to let the engine fall back to
+// the built in strategy.
+export const premiumAdvisor = async ({ kind, playerId, state, options }) => {
+  if (!apiKey || !Array.isArray(options) || options.length < 2) {
     return null;
   }
 
-  const context = describeTable(playerId, space, state);
+  const context = {
+    ...describeTable(playerId, state),
+    options: options.map((label, index) => ({ choice: index, option: label })),
+  };
+  const answer = await ask(CHOICE_SCHEMA, INSTRUCTIONS[kind] || 'Choose one of the options.', context);
 
-  if (kind === 'purchase') {
-    const answer = await ask(
-      PURCHASE_SCHEMA,
-      `You landed on ${space.name}. Decide whether to buy it at the listed price.`,
-      context,
-    );
-
-    return answer ? { buy: Boolean(answer.buy), comment: tidyComment(answer.comment) } : null;
+  if (!answer) {
+    return null;
   }
 
-  const answer = await ask(
-    BID_SCHEMA,
-    `${space.name} is up for auction. Give the most you would pay, 0 to stay out. Bids move in steps of 10000.`,
-    context,
-  );
-
-  return answer
-    ? { maxBid: Math.max(0, Number(answer.maxBid) || 0), comment: tidyComment(answer.comment) }
-    : null;
+  const choice = Number(answer.choice);
+  return {
+    choice: Number.isInteger(choice) && choice >= 0 && choice < options.length ? choice : 0,
+    comment: tidyComment(answer.comment),
+  };
 };

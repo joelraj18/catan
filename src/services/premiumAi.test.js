@@ -5,8 +5,7 @@ import {
   setPremiumKey,
   verifyPremiumKey,
 } from './premiumAi';
-import { createInitialState } from '../pages/Game/gameEngine';
-import { BOARD_SPACES } from '../pages/Game/boardData';
+import GameEngine from '../pages/Game/catanEngine';
 
 const headersOf = (init) => {
   const map = {};
@@ -51,9 +50,25 @@ const message = (text, stopReason = 'end_turn') => ({
 });
 
 const players = [
-  { id: 'p1', name: 'Joel', pieceKey: 'lamp', kind: 'human' },
-  { id: 'p2', name: 'AI Opponent 1', pieceKey: 'temple', kind: 'ai' },
+  { id: 'p1', name: 'Joel', pieceKey: 'red', kind: 'human' },
+  { id: 'p2', name: 'AI Opponent 1', pieceKey: 'blue', kind: 'ai' },
+  { id: 'p3', name: 'Computer 1', pieceKey: 'white', kind: 'bot' },
 ];
+
+// A beginners' table with cards in every hand.
+const table = () => {
+  const engine = new GameEngine({
+    players,
+    options: { board: 'beginner' },
+    rollDie: () => 3,
+    pickIndex: () => 0,
+  });
+  const { state } = engine;
+  engine.destroy();
+  return state;
+};
+
+const OPTIONS = ['Intersection 12: fields 6 + hills 8', 'Intersection 30: forest 5 + pasture 9'];
 
 describe('premium AI', () => {
   let calls;
@@ -72,18 +87,19 @@ describe('premium AI', () => {
 
   test('does nothing without a key', async () => {
     mockFetch(() => fakeResponse(200, message('{}')));
-    const answer = await premiumAdvisor({ kind: 'purchase', playerId: 'p2', space: BOARD_SPACES[1], state: createInitialState(players) });
+    const answer = await premiumAdvisor({ kind: 'setup', playerId: 'p2', state: table(), options: OPTIONS });
     expect(answer).toBeNull();
     expect(calls).toHaveLength(0);
   });
 
-  test('a purchase decision sends the right request and parses the reply', async () => {
-    mockFetch(() => fakeResponse(200, message('{"buy":true,"comment":"The maroon set is mine."}')));
+  test('a decision sends the right request and parses the reply', async () => {
+    mockFetch(() => fakeResponse(200, message('{"choice":1,"comment":"Forest and sheep, lovely."}')));
     setPremiumKey('sk-ant-test-key');
 
-    const answer = await premiumAdvisor({ kind: 'purchase', playerId: 'p2', space: BOARD_SPACES[1], state: createInitialState(players) });
+    const state = table();
+    const answer = await premiumAdvisor({ kind: 'setup', playerId: 'p2', state, options: OPTIONS });
 
-    expect(answer).toEqual({ buy: true, comment: 'The maroon set is mine' });
+    expect(answer).toEqual({ choice: 1, comment: 'Forest and sheep, lovely' });
     expect(calls).toHaveLength(1);
     const [call] = calls;
     expect(call.url).toContain('https://api.anthropic.com/v1/messages');
@@ -94,24 +110,33 @@ describe('premium AI', () => {
     expect(call.body.fallbacks).toBe('default');
     expect(call.body.output_config.effort).toBe('low');
     expect(call.body.output_config.format.type).toBe('json_schema');
-    expect(call.body.output_config.format.schema.required).toEqual(['buy', 'comment']);
-    expect(call.body.messages[0].content).toContain('Koti');
+    expect(call.body.output_config.format.schema.required).toEqual(['choice', 'comment']);
+    expect(call.body.messages[0].content).toContain('forest 5 + pasture 9');
     // The key never travels inside the prompt
     expect(JSON.stringify(call.body)).not.toContain('sk-ant-test-key');
   });
 
-  test('an auction asks for a maximum bid', async () => {
-    mockFetch(() => fakeResponse(200, message('{"maxBid":90000,"comment":"Worth every rupee"}')));
+  test('the prompt shows only the AI seat\'s own cards', async () => {
+    mockFetch(() => fakeResponse(200, message('{"choice":0,"comment":"Hmm"}')));
     setPremiumKey('sk-ant-test-key');
-    const answer = await premiumAdvisor({ kind: 'bid', playerId: 'p2', space: BOARD_SPACES[6], state: createInitialState(players) });
-    expect(answer).toEqual({ maxBid: 90000, comment: 'Worth every rupee' });
-    expect(calls[0].body.output_config.format.schema.required).toEqual(['maxBid', 'comment']);
+    const state = table();
+    await premiumAdvisor({ kind: 'robber', playerId: 'p2', state, options: OPTIONS });
+    const context = JSON.parse(calls[0].body.messages[0].content.split('\n\n').slice(1).join('\n\n'));
+    expect(context.you.hand).toEqual(state.hands.p2);
+    expect(context.opponents.every((opponent) => typeof opponent.cards === 'number' && !opponent.hand)).toBe(true);
+  });
+
+  test('an out of range choice becomes the first option', async () => {
+    mockFetch(() => fakeResponse(200, message('{"choice":7,"comment":"Bold"}')));
+    setPremiumKey('sk-ant-test-key');
+    const answer = await premiumAdvisor({ kind: 'turn', playerId: 'p2', state: table(), options: OPTIONS });
+    expect(answer.choice).toBe(0);
   });
 
   test('a refusal falls back to the built in strategy', async () => {
     mockFetch(() => fakeResponse(200, message('', 'refusal')));
     setPremiumKey('sk-ant-test-key');
-    const answer = await premiumAdvisor({ kind: 'purchase', playerId: 'p2', space: BOARD_SPACES[1], state: createInitialState(players) });
+    const answer = await premiumAdvisor({ kind: 'trade', playerId: 'p2', state: table(), options: OPTIONS });
     expect(answer).toBeNull();
   });
 

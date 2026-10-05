@@ -10,22 +10,22 @@
     <meta name="theme-color" content="#f5f6f1" />
     <meta
       name="description"
-      content="Manapally is a premium South Indian strategy board game for 2 to 4 players, played in your browser"
+      content="Catan in your browser: settle the island, trade resources and build your way to 10 victory points, for 3 to 4 players"
     />
     <script>
       // Set the theme before anything paints, so a dark page never flashes light.
       (function () {
         try {
-          var saved = localStorage.getItem('manapally-theme');
+          var saved = localStorage.getItem('catan-theme');
           var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         } catch (e) {}
       })();
     </script>
-    <title>Manapally · Premium South Indian Strategy Board Game</title>
+    <title>Catan · Settle, trade and build</title>
   </head>
   <body>
-    <noscript>Please enable JavaScript to play Manapally</noscript>
+    <noscript>Please enable JavaScript to play Catan</noscript>
     <div id="root"></div>
   </body>
 </html>

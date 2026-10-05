@@ -33,7 +33,7 @@ export default function LoadingScreen({ onComplete }) {
       <div
         className="loading-track"
         role="progressbar"
-        aria-label="Loading Manapally"
+        aria-label="Loading Catan"
         aria-valuemin="0"
         aria-valuemax="100"
         aria-valuenow={progress}

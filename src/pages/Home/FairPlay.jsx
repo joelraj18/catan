@@ -1,5 +1,5 @@
 import Icon from '../../components/Icon';
-import { TOTAL_MATCH_TURNS } from '../Game/matchRules';
+import { WINNING_POINTS } from '../Game/catanRules';
 
 const pillars = [
   {
@@ -10,12 +10,12 @@ const pillars = [
   {
     icon: 'dice',
     title: 'Real two dice odds',
-    text: 'Two separate dice mean 7 is the most common total while 2 and 12 stay rare, just like at a real table',
+    text: 'Two separate dice give the rulebook odds: 7 comes up 17% of the time, 6 and 8 14% each, 2 and 12 only 3%',
   },
   {
-    icon: 'clock',
-    title: 'A fixed finish',
-    text: `Every match ends after ${TOTAL_MATCH_TURNS} turns shared by the whole table, so you always know how long a game will run`,
+    icon: 'card',
+    title: 'Hidden cards stay hidden',
+    text: `Each player only receives their own hand and development cards. Victory point cards are revealed when someone reaches ${WINNING_POINTS} points`,
   },
 ];
 

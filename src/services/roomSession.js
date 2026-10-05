@@ -11,9 +11,11 @@ import { PIECE_ORDER } from '../pages/Game/pieces.jsx';
 const CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_CHAT = 120;
 const MAX_TEXT = 240;
-const PROTOCOL = 1;
-const SEAT_KEY = 'manapally-seat';
-const HOST_GAME_KEY = 'manapally-host-game';
+const PROTOCOL = 2;
+const SEAT_KEY = 'catan-seat';
+const HOST_GAME_KEY = 'catan-host-game';
+export const MIN_PLAYERS = 3;
+export const MAX_PLAYERS = 4;
 const RECONNECT_EVERY = 3000;
 const RECONNECT_FOR = 120000;
 // During a match both sides say they are alive every BEAT_EVERY. A link that
@@ -73,7 +75,7 @@ export default class RoomSession {
     this.status = 'connecting'; // 'online' | 'offline' | 'connecting' | 'closed'
     this.transport = null;
     this.myClientId = role === 'host' ? 'host' : null;
-    this.lobby = { tableSize: 2, seats: [] };
+    this.lobby = { tableSize: MIN_PLAYERS, seats: [], board: 'beginner' };
     this.chat = [];
     this.started = false;
     this.players = null;
@@ -338,7 +340,7 @@ export default class RoomSession {
           return;
         }
 
-        if (this.lobby.seats.length >= 4) {
+        if (this.lobby.seats.length >= MAX_PLAYERS) {
           reject('full');
           return;
         }
@@ -413,7 +415,7 @@ export default class RoomSession {
     this.transport.send(peerId, { t: 'start', players: this.players, gameId: this.gameId, rejoin: true });
 
     if (this.lastGameState) {
-      this.transport.send(peerId, { t: 'game', state: this.lastGameState, sentAt: Date.now(), gameId: this.gameId });
+      this.transport.send(peerId, { t: 'game', state: this.gameFor(player.id), sentAt: Date.now(), gameId: this.gameId });
     }
 
     this.emit('peer-rejoined', { clientId: peerId, playerId: player.id });
@@ -443,7 +445,17 @@ export default class RoomSession {
       return;
     }
 
-    this.lobby.tableSize = Math.min(4, Math.max(2, size, this.lobby.seats.length));
+    this.lobby.tableSize = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, size, this.lobby.seats.length));
+    this.publishLobby();
+  }
+
+  // The beginners' map from the rulebook, or a variable (random) island.
+  setBoard(board) {
+    if (!this.isHost || this.started) {
+      return;
+    }
+
+    this.lobby.board = board === 'random' ? 'random' : 'beginner';
     this.publishLobby();
   }
 
@@ -488,7 +500,7 @@ export default class RoomSession {
 
   // Seats become players in seat order; the host is always p1.
   startGame() {
-    if (!this.isHost || this.lobby.seats.length < 2) {
+    if (!this.isHost || this.lobby.seats.length < MIN_PLAYERS) {
       return;
     }
 
@@ -520,7 +532,13 @@ export default class RoomSession {
     this.lastGameState = resume;
     writeStore(SEAT_KEY, { code: this.code, playerCode: this.players[0].code, name: this.players[0].name });
     this.broadcast({ t: 'start', players: this.players, gameId: this.gameId });
-    this.emit('start', { players: this.players, myPlayerId: 'p1', gameId: this.gameId, resume });
+    this.emit('start', {
+      players: this.players,
+      myPlayerId: 'p1',
+      gameId: this.gameId,
+      resume,
+      options: { board: this.lobby.board || 'beginner' },
+    });
     this.startBeat();
   }
 
@@ -643,16 +661,36 @@ export default class RoomSession {
     this.announceStart();
   }
 
-  broadcastGame(state) {
-    if (this.isHost) {
-      this.lastGameState = state;
-      this.broadcast({ t: 'game', state, sentAt: Date.now(), gameId: this.gameId });
+  // Each friend gets the board as their own seat sees it: `viewFor` hides
+  // other players' cards. Without it everyone gets the same snapshot.
+  broadcastGame(state, viewFor = null) {
+    if (!this.isHost) {
+      return;
     }
+
+    this.lastGameState = state;
+    this.viewFor = viewFor;
+
+    if (!viewFor) {
+      this.broadcast({ t: 'game', state, sentAt: Date.now(), gameId: this.gameId });
+      return;
+    }
+
+    const sentAt = Date.now();
+    (state.players || []).forEach((player) => {
+      if (player.clientId) {
+        this.transport?.send(player.clientId, { t: 'game', state: viewFor(state, player.id), sentAt, gameId: this.gameId });
+      }
+    });
+  }
+
+  gameFor(playerId) {
+    return this.viewFor ? this.viewFor(this.lastGameState, playerId) : this.lastGameState;
   }
 
   postSystem(text) {
     if (this.isHost) {
-      this.appendChat({ name: 'Manapally', pieceKey: null, text, system: true });
+      this.appendChat({ name: 'Catan', pieceKey: null, text, system: true });
     }
   }
 

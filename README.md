@@ -1,10 +1,31 @@
-# Manapally
+# Catan
 
-A property trading board game set in Andhra Pradesh and Telangana, played in the browser with friends, computer opponents or premium AI opponents.
+Catan in the browser: settle the island, trade resources and build your way to 10 victory points. For 3 to 4 players, with friends, computer opponents or premium AI opponents. An unofficial fan edition following the 5th edition rules (Game Rules & Almanac, 2020).
+
+## The game
+
+- **Boards.** The host picks the beginners' map from the rulebook (Illustration A, with every starting settlement and road placed and starting resources dealt), or a random island: shuffled terrain, number tokens with no two red numbers (6 and 8) side by side, shuffled harbours, and a two round snake set-up.
+- **A turn.** Roll for production (settlements 1 card, cities 2, nothing under the robber, the bank shortage rule applies), then trade and build in any order. A 7 makes everyone with more than 7 cards discard half (rounded down); the roller moves the robber and steals a random card.
+- **Trading.** Domestic trades only with the player whose turn it is (offers to one player or the whole table, counter offers from the others), no gifts and no like for like. Maritime trade at 4:1, 3:1 with a generic harbour or 2:1 with a special harbour.
+- **Building.** Road (brick, lumber), settlement (brick, lumber, wool, grain) with the Distance Rule, city (3 ore, 2 grain), development card (ore, wool, grain). Each player has 15 roads, 5 settlements and 4 cities.
+- **Development cards.** 14 knights, 2 Road Building, 2 Year of Plenty, 2 Monopoly and 5 victory points. One card per turn, never one bought that turn; victory point cards count straight away.
+- **Special cards.** Longest Road (5+ continuous roads, broken by an opponent's settlement, with the Almanac's tie rules) and Largest Army (3+ knights), 2 points each.
+- **Winning.** The first player with 10 or more points during their own turn wins.
+
+Each player only receives their own hand and development cards; others see counts. Dice use the browser's cryptographic random generator.
+
+## Code map
+
+- `src/pages/Game/catanBoard.js` hex geometry (19 hexes, 54 intersections, 72 paths), the beginners' map and the random map
+- `src/pages/Game/catanRules.js` the rules as pure functions, including what each seat may see
+- `src/pages/Game/catanEngine.js` the host's game engine: phases, turns, trades, timers, computer moves
+- `src/pages/Game/catanBot.js` computer opponents
+- `src/pages/Game/hexArt.jsx` the island drawn in SVG, `BoardGame.jsx` the game screen
+- `src/services/premiumAi.js` premium AI opponents with the player's own Claude API key
 
 ## How players connect
 
-Manapally is a static site with no backend. The host's browser runs the match. Friends reach it in one of two ways:
+Catan is a static site with no backend. The host's browser runs the match. Friends reach it in one of two ways:
 
 - **Direct.** A WebRTC data channel between the browsers, introduced by the public PeerJS signalling server. This is the fastest route.
 - **Relay.** Messages go through public Nostr relays over secure websockets on port 443, the same port as ordinary websites. College, office and VPN networks that block WebRTC or the PeerJS server usually allow this. Every message is encrypted with AES GCM under a key derived from the room code, and is sent as an ephemeral event that relays forward without storing.
@@ -50,5 +71,5 @@ These are ICE relay credentials, not secrets, and they are served to every visit
 ## Scripts
 
 - `npm start` runs the development server.
-- `npm test` runs the unit tests.
+- `npm test` runs the unit tests, including a rules audit that plays complete computer games and checks every snapshot.
 - `npm run build` builds the site, and `npm run deploy` publishes it to GitHub Pages.

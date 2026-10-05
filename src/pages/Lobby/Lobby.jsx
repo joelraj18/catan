@@ -12,14 +12,14 @@ const playerOptions = PIECE_ORDER.map((key) => ({
 }));
 
 const nextSteps = [
-  'Choose a display name and a piece',
+  'Choose a display name and a colour',
   'Create a room and share its code or invite link',
   'Friends open the link or enter the code to join, or add computer and AI opponents',
 ];
 
 const JOIN_ERRORS = {
   'not-found':
-    'No open room with that code, check the code and ask the host to keep the Manapally tab open on their screen',
+    'No open room with that code, check the code and ask the host to keep the Catan tab open on their screen',
   blocked: 'Your network blocks game connections, open Having trouble joining below and run Check connection',
   unsupported: 'This browser cannot open game connections, try Chrome, Edge, Firefox or Safari',
   full: 'That table is already full',
@@ -56,7 +56,7 @@ const CHECK_WORDS = { ok: 'Open', limited: 'Limited', blocked: 'Blocked' };
 // already filled in. Read directly so the room module still loads lazily.
 const lastSeat = () => {
   try {
-    return JSON.parse(window.localStorage.getItem('manapally-seat') || 'null') || {};
+    return JSON.parse(window.localStorage.getItem('catan-seat') || 'null') || {};
   } catch {
     return {};
   }
@@ -64,7 +64,7 @@ const lastSeat = () => {
 
 const codeInput = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 
-export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initialCode = '' }) {
+export default function Lobby({ onBack, onSession, initialPiece = 'red', initialCode = '' }) {
   const [displayName, setDisplayName] = useState('');
   const [roomCode, setRoomCode] = useState(() => codeInput(initialCode));
   const [stage, setStage] = useState('');
@@ -73,7 +73,7 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
   const nameRef = useRef(null);
   const [rejoinRoom, setRejoinRoom] = useState(() => lastSeat().code || '');
   const [rejoinId, setRejoinId] = useState(() => lastSeat().playerCode || '');
-  const [selectedToken, setSelectedToken] = useState(PIECES[initialPiece] ? initialPiece : 'lamp');
+  const [selectedToken, setSelectedToken] = useState(PIECES[initialPiece] ? initialPiece : 'red');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(null); // 'create' | 'join' | 'rejoin' | null
 
@@ -183,7 +183,7 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
   return (
     <main className="lobby-page">
       <div className="lobby-topbar">
-        <button className="lobby-brand" type="button" onClick={onBack} aria-label="Manapally home">
+        <button className="lobby-brand" type="button" onClick={onBack} aria-label="Catan home">
           <BrandLogo size={22} />
         </button>
 
@@ -244,14 +244,14 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
             maxLength="18"
             autoComplete="nickname"
             value={displayName}
-            placeholder="How shall the court know you?"
+            placeholder="What should the table call you?"
             onChange={(event) => setDisplayName(event.target.value)}
           />
 
           <div className="token-heading">
             <div>
-              <p className="field-label">Choose your piece</p>
-              <span>If a friend already holds it, you get the next free piece</span>
+              <p className="field-label">Choose your colour</p>
+              <span>If a friend already holds it, you get the next free colour</span>
             </div>
 
             <span className="selected-token-name">{selectedPlayer.name}</span>
@@ -311,8 +311,8 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
           </div>
 
           <p className="rejoin-help">
-            Your Player ID is shown under the dice during a match, enter it with the room code to take
-            back your seat with your cash, properties and place on the board
+            Your Player ID is shown in the game, enter it with the room code to take back your seat
+            with your cards, roads and settlements
           </p>
 
           <div className="join-room-row rejoin-row">
@@ -347,7 +347,7 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
             <summary>Having trouble joining</summary>
 
             <p>
-              Manapally connects friends directly, and when a college, office or VPN network blocks that it
+              Catan connects friends directly, and when a college, office or VPN network blocks that it
               switches to Relay by itself, a secure route over the same port as any website
             </p>
 
@@ -403,8 +403,8 @@ export default function Lobby({ onBack, onSession, initialPiece = 'lamp', initia
             )}
 
             <ul className="join-tips">
-              <li>Ask the host for the invite link, it opens Manapally with the room code filled in</li>
-              <li>The host keeps the Manapally tab open and the screen on, a phone pauses tabs in the background</li>
+              <li>Ask the host for the invite link, it opens Catan with the room code filled in</li>
+              <li>The host keeps the Catan tab open and the screen on, a phone pauses tabs in the background</li>
               <li>Open the link in Chrome, Safari or Edge, not inside Instagram or WhatsApp</li>
               <li>If nothing works, switch between wifi and mobile data and turn off any VPN</li>
             </ul>

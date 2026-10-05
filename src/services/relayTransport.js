@@ -88,10 +88,10 @@ const fromBase64 = (text) => Uint8Array.from(atob(text), (char) => char.charCode
 
 // --------------------------------------------------------------- sealing
 
-const roomTopic = (code) => bytesToHex(sha256(encoder.encode(`manapally topic ${code.toUpperCase()}`))).slice(0, 32);
+const roomTopic = (code) => bytesToHex(sha256(encoder.encode(`catan topic ${code.toUpperCase()}`))).slice(0, 32);
 
 const roomKey = (code) =>
-  crypto.subtle.importKey('raw', sha256(encoder.encode(`manapally room ${code.toUpperCase()}`)), 'AES-GCM', false, [
+  crypto.subtle.importKey('raw', sha256(encoder.encode(`catan room ${code.toUpperCase()}`)), 'AES-GCM', false, [
     'encrypt',
     'decrypt',
   ]);
@@ -369,7 +369,8 @@ export const openRelayPool = (
 };
 
 // One event per tick carries every queued message. A newer board snapshot
-// for everyone replaces one still waiting, since only the latest matters.
+// for the same recipient replaces one still waiting, since only the latest
+// matters.
 const makeOutbox = (pool, header, { tickCalm = TICK_CALM, tickBusy = TICK_BUSY } = {}) => {
   let queue = [];
   let timer = null;
@@ -412,8 +413,8 @@ const makeOutbox = (pool, header, { tickCalm = TICK_CALM, tickBusy = TICK_BUSY }
 
   return {
     push: (item) => {
-      if (item.kind === 'msg' && item.payload?.t === 'game' && item.to === '*') {
-        queue = queue.filter((entry) => !(entry.kind === 'msg' && entry.payload?.t === 'game' && entry.to === '*'));
+      if (item.kind === 'msg' && item.payload?.t === 'game') {
+        queue = queue.filter((entry) => !(entry.kind === 'msg' && entry.payload?.t === 'game' && entry.to === item.to));
       }
       queue.push(item);
       schedule(isUrgent(item));

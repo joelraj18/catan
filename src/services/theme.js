@@ -2,7 +2,7 @@
 // until they make one, the page follows the system setting, live. The theme
 // is a data attribute on <html>, which dark.css keys every override from.
 
-const KEY = 'manapally-theme';
+const KEY = 'catan-theme';
 const META_COLOUR = { light: '#f5f6f1', dark: '#0b0f0c' };
 const listeners = new Set();
 

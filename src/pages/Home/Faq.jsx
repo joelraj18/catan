@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { TOTAL_MATCH_TURNS } from '../Game/matchRules';
 
 const questions = [
   {
@@ -7,8 +6,8 @@ const questions = [
     a: 'No account is needed, enter a display name in the lobby and you are ready to start',
   },
   {
-    q: 'Can I play on my own?',
-    a: 'Yes, add computer opponents to any open seat in your room, or premium AI opponents if you have a Claude API key',
+    q: 'How many players can play?',
+    a: 'Catan is played by 3 or 4 players. Fill any open seat with a computer opponent, or a premium AI opponent if you have a Claude API key',
   },
   {
     q: 'Can friends join my room?',
@@ -16,31 +15,31 @@ const questions = [
   },
   {
     q: 'My friend cannot join, what can we try?',
-    a: 'Send the invite link from the waiting room so the code is filled in for them, and keep the Manapally tab open on the host screen because phones pause tabs in the background, joining uses Auto by default, which connects directly and switches to Relay on college, office or VPN networks that block direct links, if it still fails open Having trouble joining in the lobby and run Check connection, then try mobile data or a hotspot',
+    a: 'Send the invite link from the waiting room so the code is filled in for them, and keep the Catan tab open on the host screen because phones pause tabs in the background, joining uses Auto by default, which connects directly and switches to Relay on college, office or VPN networks that block direct links, if it still fails open Having trouble joining in the lobby and run Check connection, then try mobile data or a hotspot',
   },
   {
-    q: 'How long does a match last?',
-    a: `A match is ${TOTAL_MATCH_TURNS} completed turns shared by the whole table, AI turns resolve in a couple of seconds so most of the time is yours to plan`,
+    q: 'Which board should I pick?',
+    a: 'The beginners\u2019 board is the balanced map from the rulebook with every starting settlement and road already placed. The random board shuffles terrain, numbers and harbours, never puts two red numbers side by side, and starts with each player placing two settlements and roads in turn',
   },
   {
     q: 'How much time do I get on my turn?',
-    a: 'As long as you like before you roll, then 10 seconds after your move to build houses and hotels before the turn passes on, or press End turn to finish sooner',
+    a: 'As long as you like before you roll, then up to four minutes to trade and build. Placing set-up pieces, discarding and moving the robber have their own countdowns, and when one runs out the computer makes that move for you so the table never stalls',
   },
   {
     q: 'What if I lose my connection or close the tab?',
-    a: 'Your seat is kept, the computer plays it for you until you return, open Manapally, choose Rejoin in the lobby and enter the room code with the Player ID shown under the dice',
+    a: 'Your seat is kept, the computer plays it for you until you return, open Catan, choose Rejoin in the lobby and enter the room code with the Player ID shown in the game',
   },
   {
-    q: 'Can I trade with other players?',
-    a: 'Yes, at any time, even on another player\'s turn or from Jail, offer any mix of properties, cash and Get Out of Jail Free cards, both sides must give something, buildings must be sold before a colour family is traded, and a mortgaged property costs its new owner 10% of the mortgage straight away or the full payoff',
+    q: 'How does trading work?',
+    a: 'On your turn you can offer cards to everyone or to one player, and trade with the bank at 4:1, or 3:1 and 2:1 with a harbour. On someone else\u2019s turn you can make offers to that player only. Gifts and trading a resource for the same resource are not allowed',
   },
   {
     q: 'How is the winner decided?',
-    a: `The highest total net worth wins, cash plus the value of every property held, when all ${TOTAL_MATCH_TURNS} turns are played, when every other player is bankrupt, or when everyone at the table agrees to end the game`,
+    a: 'The first player to have 10 or more victory points during their own turn wins at once. Points come from settlements, cities, the Longest Road, the Largest Army and victory point cards',
   },
   {
     q: 'Can I play on my phone?',
-    a: 'Yes, the layout adapts to any screen and on narrow phones the board scrolls sideways so every space stays readable',
+    a: 'Yes, the layout adapts to any screen and the island scales to fit, tap a highlighted spot to build',
   },
   {
     q: 'How do I turn the music on or off?',

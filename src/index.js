@@ -9,7 +9,7 @@ import { initTheme } from './services/theme';
 
 initTheme();
 
-function ManapallyApp() {
+function CatanApp() {
   const [isLoading, setIsLoading] = useState(true);
 
   if (isLoading) {
@@ -29,7 +29,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
-    <ManapallyApp />
+    <CatanApp />
   </React.StrictMode>,
 );
 

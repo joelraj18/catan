@@ -8,7 +8,7 @@ export default function Footer({ onNavigate, onPlay, onMusicToggle, musicEnabled
       title: 'Play',
       links: [
         { label: 'Start game', action: onPlay },
-        { label: 'Choose a piece', action: () => onNavigate('pieces') },
+        { label: 'Choose a colour', action: () => onNavigate('pieces') },
         { label: musicEnabled ? 'Turn music off' : 'Turn music on', action: onMusicToggle },
       ],
     },
@@ -16,8 +16,8 @@ export default function Footer({ onNavigate, onPlay, onMusicToggle, musicEnabled
       title: 'Learn',
       links: [
         { label: 'How to play', action: () => onNavigate('how-to-play') },
-        { label: 'Board guide', action: () => onNavigate('board-guide') },
-        { label: 'District families', action: () => onNavigate('districts') },
+        { label: 'The island', action: () => onNavigate('board-guide') },
+        { label: 'Development cards', action: () => onNavigate('development-cards') },
       ],
     },
     {
@@ -35,13 +35,12 @@ export default function Footer({ onNavigate, onPlay, onMusicToggle, musicEnabled
       <div className="footer-inner">
         <ol className="footer-notes">
           <li>
-            Matches run for a fixed 248 completed turns shared by every seat, so a two
-            player table gives each player 124 turns and a four player table gives each
-            player 62
+            The first player to reach 10 victory points during their own turn wins, counting
+            settlements, cities, the Longest Road, the Largest Army and victory point cards
           </li>
           <li>
-            The winner is the player with the highest total net worth, cash plus the value
-            of every property held, when the turns run out or everyone else is bankrupt
+            An unofficial fan edition for playing with friends, based on the 5th edition
+            rules. Catan is a trademark of Catan GmbH
           </li>
           <li>
             Friends join by room code over a direct browser to browser connection, premium AI
@@ -76,7 +75,7 @@ export default function Footer({ onNavigate, onPlay, onMusicToggle, musicEnabled
 
         <div className="footer-legal">
           <p className="footer-legal-copy">
-            <span>Copyright © {new Date().getFullYear()} Manapally</span>
+            <span>Copyright © {new Date().getFullYear()} Catan fan edition</span>
             <span>All rights reserved</span>
           </p>
           <p className="footer-legal-region">India</p>

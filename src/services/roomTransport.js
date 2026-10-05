@@ -21,10 +21,10 @@
 import Peer from 'peerjs';
 import { guestWithRelay, hostWithRelay } from './relayTransport';
 
-const ID_PREFIX = 'manapally-room-';
+const ID_PREFIX = 'catan-room-';
 const CONNECT_TIMEOUT = 15000;
 const DIRECT_GRACE = 7000;
-const ROUTE_KEY = 'manapally-route';
+const ROUTE_KEY = 'catan-route';
 
 export const transportKind = () => {
   try {

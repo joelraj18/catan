@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PIECES } from '../pages/Game/pieces.jsx';
 
 // Table chat shared by everyone in a private room. System lines (joins,
-// auction results, bankruptcies) are set apart from player messages.
+// the Longest Road changing hands, the winner) are set apart from player messages.
 export default function ChatPanel({ session, title = 'Table chat', compact = false }) {
   const [messages, setMessages] = useState(() => session?.chat || []);
   const [draft, setDraft] = useState('');

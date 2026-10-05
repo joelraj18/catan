@@ -6,9 +6,9 @@ import ThemeToggle from './ThemeToggle';
 
 const sectionLinks = [
   { id: 'overview', label: 'Overview' },
-  { id: 'pieces', label: 'Pieces' },
+  { id: 'pieces', label: 'Colours' },
   { id: 'how-to-play', label: 'How to play' },
-  { id: 'board-guide', label: 'Board guide' },
+  { id: 'board-guide', label: 'The island' },
   { id: 'tips', label: 'Tips' },
   { id: 'faq', label: 'FAQ' },
 ];
@@ -31,7 +31,7 @@ export default function Navbar({ audio, onAudio, onNavigate, onPlay }) {
     <>
       <div className={`local-nav ${isStuck ? 'local-nav--stuck' : ''}`}>
         <div className="local-nav-inner">
-          <button className="local-nav-title" type="button" onClick={() => onNavigate('top')} aria-label="Manapally home">
+          <button className="local-nav-title" type="button" onClick={() => onNavigate('top')} aria-label="Catan home">
             <BrandLogo size={22} showWordmark />
           </button>
 

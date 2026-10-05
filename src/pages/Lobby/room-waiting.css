@@ -727,3 +727,10 @@
 .premium-ai-status--checking .status-dot {
   background: var(--sage-400);
 }
+
+.board-choice-note {
+  margin: 8px 0 0;
+  color: var(--ink-tertiary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
