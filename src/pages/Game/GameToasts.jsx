@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GEOMETRY, RESOURCE_LABELS } from './catanBoard';
+import { RESOURCE_LABELS, geometryOf } from './catanBoard';
 import { hasResources } from './catanRules';
 import { ResourceIcon } from './hexArt.jsx';
 
@@ -67,7 +67,7 @@ export const describeEvent = (event, { me, nameOf, board, buildings }) => {
         : { tone: 'info', title: `${actor} played Year of Plenty`, bundle: event.bundle };
     case 'robber': {
       if (event.actor === me) return null;
-      const touches = GEOMETRY.hexes[event.to]?.vertices.some((vertexId) => buildings?.[vertexId]?.owner === me);
+      const touches = geometryOf(board).hexes[event.to]?.vertices.some((vertexId) => buildings?.[vertexId]?.owner === me);
       if (!touches) return null;
       const hex = board?.hexes?.[event.to];
       return {

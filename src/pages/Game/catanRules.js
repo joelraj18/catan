@@ -2,10 +2,11 @@
 // its input; the engine applies the results. Rule references are to the
 // 2020 Game Rules & Almanac.
 
-import { GEOMETRY, PIPS, RESOURCES, TERRAINS } from './catanBoard';
+import { PIPS, RESOURCES, TERRAINS, geometryOf } from './catanBoard';
 
 export const WINNING_POINTS = 10;
 export const BANK_SIZE = 19; // of each resource
+export const BANK_SIZES = { standard: 19, large: 24 }; // the 5-6 player extension adds 5 of each
 export const LONGEST_ROAD_MIN = 5;
 export const LARGEST_ARMY_MIN = 3;
 export const HAND_LIMIT = 7; // more than this when a 7 is rolled means discarding half
@@ -27,6 +28,12 @@ export const DEV_DECK = {
   monopoly: 2,
 };
 
+// The 5-6 player extension adds 6 knights and one of each progress card.
+export const DEV_DECKS = {
+  standard: DEV_DECK,
+  large: { knight: 20, victoryPoint: 5, roadBuilding: 3, yearOfPlenty: 3, monopoly: 3 },
+};
+
 export const DEV_CARDS = {
   knight: { label: 'Knight', kind: 'knight', text: 'Move the robber, then steal 1 resource from a player next to its new hex' },
   roadBuilding: { label: 'Road Building', kind: 'progress', text: 'Place 2 new roads for free' },
@@ -36,7 +43,7 @@ export const DEV_CARDS = {
 };
 
 export const emptyHand = () => ({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
-export const fullBank = () => ({ brick: BANK_SIZE, lumber: BANK_SIZE, ore: BANK_SIZE, grain: BANK_SIZE, wool: BANK_SIZE });
+export const fullBank = (size = BANK_SIZE) => ({ brick: size, lumber: size, ore: size, grain: size, wool: size });
 
 export const handSize = (hand) => RESOURCES.reduce((sum, resource) => sum + (hand?.[resource] || 0), 0);
 
@@ -57,7 +64,7 @@ export const cleanBundle = (bundle) => {
   const clean = {};
   RESOURCES.forEach((resource) => {
     const count = Math.floor(Number(bundle?.[resource]) || 0);
-    if (count > 0 && count <= BANK_SIZE) clean[resource] = count;
+    if (count > 0 && count <= BANK_SIZES.large) clean[resource] = count;
   });
   return clean;
 };
@@ -88,25 +95,27 @@ export const piecesLeft = (state, playerId) => {
 
 // ---------------------------------------------------------- placement
 
-const vertexOf = (id) => GEOMETRY.vertices[id];
-const edgeOf = (id) => GEOMETRY.edges[id];
+// The geometry of the board a state (or a bare board) is played on.
+export const geoOf = (stateOrBoard) => geometryOf(stateOrBoard?.board ?? stateOrBoard);
+const vertexOf = (state, id) => geoOf(state).vertices[id];
+const edgeOf = (state, id) => geoOf(state).edges[id];
 
-export const isVertex = (id) => Number.isInteger(id) && id >= 0 && id < GEOMETRY.vertices.length;
-export const isEdge = (id) => Number.isInteger(id) && id >= 0 && id < GEOMETRY.edges.length;
-export const isHex = (id) => Number.isInteger(id) && id >= 0 && id < GEOMETRY.hexes.length;
+export const isVertex = (id, state = null) => Number.isInteger(id) && id >= 0 && id < geoOf(state).vertices.length;
+export const isEdge = (id, state = null) => Number.isInteger(id) && id >= 0 && id < geoOf(state).edges.length;
+export const isHex = (id, state = null) => Number.isInteger(id) && id >= 0 && id < geoOf(state).hexes.length;
 
 // Distance Rule: the intersection is free and none of its neighbours holds
 // a settlement or city, anyone's.
 export const distanceRuleOk = (state, vertexId) =>
-  !state.buildings[vertexId] && vertexOf(vertexId).neighbours.every((other) => !state.buildings[other]);
+  !state.buildings[vertexId] && vertexOf(state, vertexId).neighbours.every((other) => !state.buildings[other]);
 
 const touchesOwnRoad = (state, playerId, vertexId) =>
-  vertexOf(vertexId).edges.some((edge) => state.roads[edge] === playerId);
+  vertexOf(state, vertexId).edges.some((edge) => state.roads[edge] === playerId);
 
 // A settlement needs the Distance Rule and, after set-up, one of the
 // player's own roads leading to it.
 export const canPlaceSettlement = (state, playerId, vertexId, { setup = false } = {}) => {
-  if (!isVertex(vertexId) || !distanceRuleOk(state, vertexId)) return false;
+  if (!isVertex(vertexId, state) || !distanceRuleOk(state, vertexId)) return false;
   if (piecesLeft(state, playerId).settlement <= 0) return false;
   return setup || touchesOwnRoad(state, playerId, vertexId);
 };
@@ -114,10 +123,10 @@ export const canPlaceSettlement = (state, playerId, vertexId, { setup = false } 
 // A road continues one of the player's roads, settlements or cities. It may
 // not continue a road through an intersection an opponent has built on.
 export const canPlaceRoad = (state, playerId, edgeId, { fromVertex = null } = {}) => {
-  if (!isEdge(edgeId) || state.roads[edgeId] !== undefined) return false;
+  if (!isEdge(edgeId, state) || state.roads[edgeId] !== undefined) return false;
   if (piecesLeft(state, playerId).road <= 0) return false;
 
-  const ends = edgeOf(edgeId).vertices;
+  const ends = edgeOf(state, edgeId).vertices;
 
   // In set-up the road must touch the settlement just placed.
   if (fromVertex !== null) return ends.includes(fromVertex);
@@ -125,7 +134,7 @@ export const canPlaceRoad = (state, playerId, edgeId, { fromVertex = null } = {}
   return ends.some((vertexId) => {
     const building = state.buildings[vertexId];
     if (building) return building.owner === playerId;
-    return vertexOf(vertexId).edges.some((edge) => edge !== edgeId && state.roads[edge] === playerId);
+    return vertexOf(state, vertexId).edges.some((edge) => edge !== edgeId && state.roads[edge] === playerId);
   });
 };
 
@@ -137,10 +146,10 @@ export const canBuildCity = (state, playerId, vertexId) => {
 };
 
 export const legalSettlementSpots = (state, playerId, options) =>
-  GEOMETRY.vertices.filter((vertex) => canPlaceSettlement(state, playerId, vertex.id, options)).map((v) => v.id);
+  geoOf(state).vertices.filter((vertex) => canPlaceSettlement(state, playerId, vertex.id, options)).map((v) => v.id);
 
 export const legalRoadSpots = (state, playerId, options) =>
-  GEOMETRY.edges.filter((edge) => canPlaceRoad(state, playerId, edge.id, options)).map((e) => e.id);
+  geoOf(state).edges.filter((edge) => canPlaceRoad(state, playerId, edge.id, options)).map((e) => e.id);
 
 export const legalCitySpots = (state, playerId) =>
   Object.keys(state.buildings)
@@ -152,7 +161,7 @@ export const legalCitySpots = (state, playerId) =>
 // Resources each hex next to this intersection produces (the desert gives
 // nothing). Used for starting resources and for scoring spots.
 export const vertexResources = (board, vertexId) =>
-  vertexOf(vertexId)
+  vertexOf(board, vertexId)
     .hexes.map((hexId) => TERRAINS[board.hexes[hexId].terrain].resource)
     .filter(Boolean);
 
@@ -164,7 +173,7 @@ export const productionFor = (state, roll) => {
     const resource = TERRAINS[hex.terrain].resource;
     if (!resource) return;
 
-    GEOMETRY.hexes[hex.id].vertices.forEach((vertexId) => {
+    geoOf(state).hexes[hex.id].vertices.forEach((vertexId) => {
       const building = state.buildings[vertexId];
       if (!building) return;
       owed[building.owner] = owed[building.owner] || emptyHand();
@@ -212,7 +221,7 @@ export const discardCount = (hand, limit = HAND_LIMIT) => {
 // Players with a settlement or city on the hex who have cards to steal.
 export const robberVictims = (state, hexId, thiefId) => {
   const owners = new Set();
-  GEOMETRY.hexes[hexId].vertices.forEach((vertexId) => {
+  geoOf(state).hexes[hexId].vertices.forEach((vertexId) => {
     const building = state.buildings[vertexId];
     if (building && building.owner !== thiefId) owners.add(building.owner);
   });
@@ -267,17 +276,17 @@ export const longestRoadLength = (state, playerId) => {
   const walk = (vertexId, used, length) => {
     best = Math.max(best, length);
     if (blocked(vertexId)) return;
-    vertexOf(vertexId).edges.forEach((edgeId) => {
+    vertexOf(state, vertexId).edges.forEach((edgeId) => {
       if (!ownSet.has(edgeId) || used.has(edgeId)) return;
       used.add(edgeId);
-      const [a, b] = edgeOf(edgeId).vertices;
+      const [a, b] = edgeOf(state, edgeId).vertices;
       walk(a === vertexId ? b : a, used, length + 1);
       used.delete(edgeId);
     });
   };
 
   own.forEach((edgeId) => {
-    const [a, b] = edgeOf(edgeId).vertices;
+    const [a, b] = edgeOf(state, edgeId).vertices;
     const used = new Set([edgeId]);
     walk(a, used, 1);
     walk(b, used, 1);
@@ -337,7 +346,7 @@ export const totalPoints = (state, playerId) => publicPoints(state, playerId) + 
 export const vertexScore = (state, vertexId, weights = {}) => {
   const seen = new Set();
   let score = 0;
-  vertexOf(vertexId).hexes.forEach((hexId) => {
+  vertexOf(state, vertexId).hexes.forEach((hexId) => {
     const hex = state.board.hexes[hexId];
     const resource = TERRAINS[hex.terrain].resource;
     if (!resource || !hex.number) return;

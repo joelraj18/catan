@@ -1,13 +1,16 @@
 // The island of Catan: hex geometry, the beginners' map from the rulebook
-// and the variable (random) map.
+// and the variable (random) map, for the classic island and the larger one
+// of the 5-6 player extension.
 //
-// The 19 land hexes sit in rows of 3-4-5-4-3, pointy side up. Everything a
-// rule needs (which hexes touch an intersection, which intersections are
-// neighbours, which paths meet at an intersection) is derived once from the
-// hex centres, so every module shares the same ids:
-//   hexes     0..18, row by row, left to right
-//   vertices  0..53, top to bottom, left to right (the intersections)
-//   edges     0..71 (the paths), each joining two vertices
+// The classic 19 land hexes sit in rows of 3-4-5-4-3, pointy side up; the
+// extension's 30 sit in rows of 3-4-5-6-5-4-3. Everything a rule needs
+// (which hexes touch an intersection, which intersections are neighbours,
+// which paths meet at an intersection) is derived once from the hex
+// centres, so every module shares the same ids for a board:
+//   hexes     row by row, left to right
+//   vertices  top to bottom, left to right (the intersections)
+//   edges     the paths, each joining two vertices
+// geometryOf(board) gives the geometry a board was laid out on.
 
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
@@ -34,28 +37,39 @@ export const RESOURCE_LABELS = {
 // Pips under each number token: how many of the 36 dice outcomes roll it.
 export const PIPS = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
 
-const ROW_LENGTHS = [3, 4, 5, 4, 3];
 const SQRT3 = Math.sqrt(3);
 
-// Axial coordinates, row by row (r = -2..2).
-const AXIAL = [];
-ROW_LENGTHS.forEach((length, index) => {
-  const r = index - 2;
-  const start = Math.max(-2, -2 - r);
-  for (let i = 0; i < length; i += 1) {
-    AXIAL.push({ q: start + i, r, row: index });
-  }
-});
+export const LAYOUTS = {
+  standard: [3, 4, 5, 4, 3],
+  large: [3, 4, 5, 6, 5, 4, 3],
+};
 
 const round = (value) => Math.round(value * 1000) / 1000;
 
-const buildGeometry = () => {
-  const hexes = AXIAL.map(({ q, r, row }, id) => ({
+// Axial coordinates, row by row, every row centred under the same middle.
+const axialFor = (rows) => {
+  const middle = (rows.length - 1) / 2;
+  const widest = Math.max(...rows);
+  const centre = widest % 2 === 0 ? 0.5 : 0;
+  const cells = [];
+  rows.forEach((length, row) => {
+    const r = row - middle;
+    const start = Math.round(centre - (length - 1) / 2 - r / 2);
+    for (let i = 0; i < length; i += 1) cells.push({ q: start + i, r, row });
+  });
+  return cells;
+};
+
+const buildGeometry = (rows) => {
+  const cells = axialFor(rows);
+  const raw = cells.map(({ q, r }) => SQRT3 * (q + r / 2));
+  const shift = (Math.min(...raw) + Math.max(...raw)) / 2;
+  const hexes = cells.map(({ q, r, row }, id) => ({
     id,
     q,
     r,
     row,
-    x: round(SQRT3 * (q + r / 2)),
+    x: round(SQRT3 * (q + r / 2) - shift),
     y: round(1.5 * r),
   }));
 
@@ -140,30 +154,52 @@ const buildGeometry = () => {
     })
     .sort((a, b) => a.angle - b.angle);
 
-  return { hexes, vertices, edges, coast };
+  const maxX = Math.max(...vertices.map((vertex) => Math.abs(vertex.x)));
+  const maxY = Math.max(...vertices.map((vertex) => Math.abs(vertex.y)));
+  return { hexes, vertices, edges, coast, maxX, maxY };
 };
 
-export const GEOMETRY = buildGeometry();
+const STANDARD = { layout: 'standard', ...buildGeometry(LAYOUTS.standard) };
+const LARGE = { layout: 'large', ...buildGeometry(LAYOUTS.large) };
+
+// The classic island, which every board used before the extension.
+export const GEOMETRY = STANDARD;
+export const GEOMETRIES = { standard: STANDARD, large: LARGE };
 export const HEX_COUNT = GEOMETRY.hexes.length;
 export const VERTEX_COUNT = GEOMETRY.vertices.length;
 export const EDGE_COUNT = GEOMETRY.edges.length;
 
-// Nine harbours spaced around the coast (30 coastal paths), never sharing an
-// intersection.
-const HARBOR_SLOTS = [1, 4, 8, 11, 14, 18, 21, 24, 28];
+// The geometry a board was laid out on.
+export const geometryOf = (board) =>
+  board?.layout === 'large' || board?.hexes?.length === LARGE.hexes.length ? LARGE : STANDARD;
 
-export const HARBORS = HARBOR_SLOTS.map((slot) => {
-  const coast = GEOMETRY.coast[slot];
-  const edge = GEOMETRY.edges[coast.edge];
-  const length = Math.hypot(coast.mx, coast.my) || 1;
-  return {
-    edge: edge.id,
-    vertices: edge.vertices,
-    // A spot out at sea for drawing the harbour marker.
-    x: round(coast.mx + (coast.mx / length) * 0.62),
-    y: round(coast.my + (coast.my / length) * 0.62),
-  };
-});
+// The board size for a number of players: the extension island from 5.
+export const layoutFor = (playerCount) => (playerCount >= 5 ? 'large' : 'standard');
+
+// Harbours spaced around the coast, never sharing an intersection: the
+// rulebook's nine on the classic island (30 coastal paths) and eleven
+// evenly spaced on the extension.
+const HARBOR_SLOTS = {
+  standard: [1, 4, 8, 11, 14, 18, 21, 24, 28],
+  large: Array.from({ length: 11 }, (_, i) => Math.floor(((i + 0.25) * LARGE.coast.length) / 11)),
+};
+
+const harborsOf = (geometry) =>
+  HARBOR_SLOTS[geometry.layout].map((slot) => {
+    const coast = geometry.coast[slot];
+    const edge = geometry.edges[coast.edge];
+    const length = Math.hypot(coast.mx, coast.my) || 1;
+    return {
+      edge: edge.id,
+      vertices: edge.vertices,
+      // A spot out at sea for drawing the harbour marker.
+      x: round(coast.mx + (coast.mx / length) * 0.62),
+      y: round(coast.my + (coast.my / length) * 0.62),
+    };
+  });
+
+export const HARBORS = harborsOf(STANDARD);
+const HARBORS_LARGE = harborsOf(LARGE);
 
 // ------------------------------------------------------------- beginners
 
@@ -199,26 +235,31 @@ export const BEGINNER_SETTLEMENTS = {
 // nobody plays the red position.
 export const BEGINNER_COLOURS = ['red', 'blue', 'white', 'orange'];
 
-export const buildBoard = (hexes, harborTypes) => ({
+export const buildBoard = (hexes, harborTypes, layout = 'standard') => ({
+  layout,
   hexes: hexes.map(({ id, terrain, number }) => ({ id, terrain, number })),
-  harbors: HARBORS.map((harbor, index) => ({ ...harbor, type: harborTypes[index] })),
+  harbors: (layout === 'large' ? HARBORS_LARGE : HARBORS).map((harbor, index) => ({ ...harbor, type: harborTypes[index] })),
   robber: hexes.find((hex) => hex.terrain === 'desert').id,
 });
 
-export const beginnerBoard = () => buildBoard(BEGINNER_HEXES, BEGINNER_HARBOR_TYPES);
-
 // ---------------------------------------------------------------- random
 
-const TERRAIN_BAG = [
-  ...Array(4).fill('forest'),
-  ...Array(4).fill('pasture'),
-  ...Array(4).fill('fields'),
-  ...Array(3).fill('hills'),
-  ...Array(3).fill('mountains'),
-  'desert',
-];
-export const NUMBER_BAG = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
-const HARBOR_BAG = ['any', 'any', 'any', 'any', 'brick', 'lumber', 'ore', 'grain', 'wool'];
+const bag = (counts) => Object.entries(counts).flatMap(([item, count]) => Array(count).fill(item));
+
+const TERRAIN_BAGS = {
+  standard: bag({ forest: 4, pasture: 4, fields: 4, hills: 3, mountains: 3, desert: 1 }),
+  // The 5-6 player extension: 28 resource hexes and two deserts.
+  large: bag({ forest: 6, pasture: 6, fields: 6, hills: 5, mountains: 5, desert: 2 }),
+};
+export const NUMBER_BAGS = {
+  standard: [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12],
+  large: [2, 2, ...[3, 4, 5, 6, 8, 9, 10, 11].flatMap((n) => [n, n, n]), 12, 12],
+};
+export const NUMBER_BAG = NUMBER_BAGS.standard;
+const HARBOR_BAGS = {
+  standard: ['any', 'any', 'any', 'any', 'brick', 'lumber', 'ore', 'grain', 'wool'],
+  large: ['any', 'any', 'any', 'any', 'any', 'brick', 'lumber', 'ore', 'grain', 'wool', 'wool'],
+};
 
 export const shuffle = (items, pickIndex) => {
   const list = [...items];
@@ -233,12 +274,14 @@ const RED = [6, 8];
 const EXTREMES = [2, 12];
 
 // True when no two numbers of the group sit on neighbouring hexes.
-export const numbersApart = (hexes, group) =>
-  hexes.every(
+export const numbersApart = (hexes, group) => {
+  const geometry = geometryOf({ hexes });
+  return hexes.every(
     (hex) =>
       !group.includes(hex.number) ||
-      GEOMETRY.hexes[hex.id].neighbours.every((other) => !group.includes(hexes[other].number)),
+      geometry.hexes[hex.id].neighbours.every((other) => !group.includes(hexes[other].number)),
   );
+};
 
 // True when no two red numbers (6 and 8) sit on neighbouring hexes.
 export const redNumbersApart = (hexes) => numbersApart(hexes, RED);
@@ -250,11 +293,11 @@ export const numbersOk = (hexes, { redsMayTouch = false, extremesMayTouch = true
 
 // The variable set-up: shuffled terrain, shuffled number tokens placed by
 // the host's number rules, desert without a token, shuffled harbours.
-export const randomBoard = (pickIndex, rules = {}) => {
-  const terrains = shuffle(TERRAIN_BAG, pickIndex);
+export const randomBoard = (pickIndex, rules = {}, layout = 'standard') => {
+  const terrains = shuffle(TERRAIN_BAGS[layout], pickIndex);
 
   for (let attempt = 0; attempt < 5000; attempt += 1) {
-    const numbers = shuffle(NUMBER_BAG, pickIndex);
+    const numbers = shuffle(NUMBER_BAGS[layout], pickIndex);
     let next = 0;
     const hexes = terrains.map((terrain, id) => ({
       id,
@@ -263,12 +306,28 @@ export const randomBoard = (pickIndex, rules = {}) => {
     }));
 
     if (numbersOk(hexes, rules)) {
-      return buildBoard(hexes, shuffle(HARBOR_BAG, pickIndex));
+      return buildBoard(hexes, shuffle(HARBOR_BAGS[layout], pickIndex), layout);
     }
   }
 
-  return beginnerBoard();
+  return beginnerBoard(layout);
 };
+
+// A fixed, balanced extension island for the beginners' choice with 5 or 6
+// players: always the same layout, drawn once from a fixed seed.
+const fixedPick = (seed) => (range) => {
+  seed = (seed * 1103515245 + 12345) % 2147483648;
+  return Math.floor((seed / 2147483648) * range);
+};
+let largeBeginner = null;
+
+export function beginnerBoard(layout = 'standard') {
+  if (layout === 'large') {
+    largeBeginner = largeBeginner || randomBoard(fixedPick(2026), {}, 'large');
+    return largeBeginner;
+  }
+  return buildBoard(BEGINNER_HEXES, BEGINNER_HARBOR_TYPES);
+}
 
 // A short, stable name for one island layout: the SHA-256 of its terrain,
 // numbers and harbours. Two boards share it only if they are the same board.

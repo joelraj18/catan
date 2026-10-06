@@ -218,7 +218,7 @@ export default function Lobby({ onBack, onSession, initialPiece = 'red', initial
 
           <div className="lobby-status">
             <span className="status-dot" />
-            Private rooms for 2 to 4 players, anywhere in the world
+            Private rooms for 2 to 6 players, anywhere in the world
           </div>
         </div>
 

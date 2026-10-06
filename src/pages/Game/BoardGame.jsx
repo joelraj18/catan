@@ -1335,7 +1335,7 @@ export default function BoardGame({
               </span>
             </div>
 
-            <div className="player-list">
+            <div className={`player-list ${players.length >= 5 ? 'player-list--compact' : ''}`}>
               {players.map((player, index) => {
                 const active = index === view.activeIndex && !over && phase !== 'setup';
                 const placing = phase === 'setup' && view.setup && players[view.setup.order[view.setup.step]]?.id === player.id;

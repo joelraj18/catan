@@ -8,7 +8,7 @@
 // - Requests go straight from this browser to api.anthropic.com.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { GEOMETRY } from '../pages/Game/catanBoard';
+import { geometryOf } from '../pages/Game/catanBoard';
 import { publicPoints, redactFor, visibleHandSize } from '../pages/Game/catanRules';
 import { settingsOf } from '../pages/Game/gameSettings';
 
@@ -140,7 +140,8 @@ export const describeBoard = (board, rules = settingsOf(null)) => {
   const harbours = board.harbors
     .map((harbor) => `${harbor.type === 'any' ? '3:1' : `2:1 ${harbor.type}`} at intersections ${harbor.vertices.join('+')}`)
     .join('; ');
-  return `Table rules: first to ${rules.victoryPoints} points wins; a 7 makes anyone holding more than ${rules.handLimit} cards discard half.\nBoard, rows of 3-4-5-4-3 hexes from the top left: ${hexes}.\nHarbours: ${harbours}.`;
+  const rows = geometryOf(board).layout === 'large' ? '3-4-5-6-5-4-3 (the 5-6 player extension)' : '3-4-5-4-3';
+  return `Table rules: first to ${rules.victoryPoints} points wins; a 7 makes anyone holding more than ${rules.handLimit} cards discard half.\nBoard, rows of ${rows} hexes from the top left: ${hexes}.\nHarbours: ${harbours}.`;
 };
 
 const handCode = (hand) =>
@@ -155,7 +156,7 @@ export const describeTable = (playerId, state) => {
   const buildingsOf = (id) =>
     Object.entries(view.buildings)
       .filter(([, building]) => building.owner === id)
-      .map(([vertexId, building]) => `${building.type === 'city' ? 'C' : 'S'}${vertexId}(${GEOMETRY.vertices[vertexId].hexes.map((h) => `H${h}`).join('')})`)
+      .map(([vertexId, building]) => `${building.type === 'city' ? 'C' : 'S'}${vertexId}(${geometryOf(view.board).vertices[vertexId].hexes.map((h) => `H${h}`).join('')})`)
       .join(' ');
   const own = view.devCards[playerId] || [];
   const me = [

@@ -11,11 +11,11 @@
 import {
   BEGINNER_COLOURS,
   BEGINNER_SETTLEMENTS,
-  GEOMETRY,
   RESOURCES,
   RESOURCE_LABELS,
   beginnerBoard,
   boardFingerprint,
+  layoutFor,
   randomBoard,
   shuffle,
 } from './catanBoard';
@@ -23,7 +23,8 @@ import { cleanSettings, handLimitOf, settingsOf, victoryPointsOf } from './gameS
 import {
   COSTS,
   DEV_CARDS,
-  DEV_DECK,
+  BANK_SIZES,
+  DEV_DECKS,
   addResources,
   canBuildCity,
   canPlaceRoad,
@@ -33,6 +34,7 @@ import {
   discardCount,
   emptyHand,
   fullBank,
+  geoOf,
   handSize,
   hasResources,
   hiddenPoints,
@@ -103,18 +105,20 @@ export const listResources = (bundle) =>
     .map(([resource, count]) => `${count} ${RESOURCE_LABELS[resource].toLowerCase()}`)
     .join(', ');
 
-const newDeck = (pickIndex) => {
+const newDeck = (pickIndex, layout = 'standard') => {
   const cards = [];
-  Object.entries(DEV_DECK).forEach(([type, count]) => {
+  Object.entries(DEV_DECKS[layout]).forEach(([type, count]) => {
     for (let i = 0; i < count; i += 1) cards.push(type);
   });
   return shuffle(cards, pickIndex);
 };
 
 // Which beginner position each player takes. With 3 players nobody plays
-// red; a player who chose red takes the free position instead.
+// red, with 2 nobody plays red or white; a player whose colour has no
+// position takes a free one instead.
 export const beginnerPositions = (players) => {
-  const positions = players.length === 3 ? BEGINNER_COLOURS.filter((colour) => colour !== 'red') : BEGINNER_COLOURS;
+  const unused = players.length === 3 ? ['red'] : players.length === 2 ? ['red', 'white'] : [];
+  const positions = BEGINNER_COLOURS.filter((colour) => !unused.includes(colour));
   const assigned = {};
   const free = [...positions];
   players.forEach((player) => {
@@ -131,14 +135,14 @@ export const beginnerPositions = (players) => {
 
 // A road for a beginner settlement, pointing inland and not crossing
 // another start.
-const beginnerRoad = (roads, vertexId) => {
-  const vertex = GEOMETRY.vertices[vertexId];
+const beginnerRoad = (roads, vertexId, geometry = geoOf(null)) => {
+  const vertex = geometry.vertices[vertexId];
   const options = vertex.edges
     .filter((edgeId) => roads[edgeId] === undefined)
     .map((edgeId) => {
-      const [a, b] = GEOMETRY.edges[edgeId].vertices;
+      const [a, b] = geometry.edges[edgeId].vertices;
       const other = a === vertexId ? b : a;
-      return { edgeId, inland: GEOMETRY.vertices[other].hexes.length, other };
+      return { edgeId, inland: geometry.vertices[other].hexes.length, other };
     })
     .sort((a, b) => b.inland - a.inland || a.other - b.other);
   return options[0].edgeId;
@@ -163,7 +167,7 @@ export const beginnerPieces = (players, board, hands = byId(players, emptyHand),
   players.forEach((player) => {
     const spots = BEGINNER_SETTLEMENTS[positions[player.id]];
     [spots.first, spots.star].forEach((vertexId) => {
-      roads[beginnerRoad(roads, vertexId)] = player.id;
+      roads[beginnerRoad(roads, vertexId, geoOf(board))] = player.id;
     });
 
     const start = {};
@@ -184,7 +188,12 @@ export const tableRules = (options = {}) => cleanSettings({ ...options, turnSeco
 export const createInitialState = (players, { options = {}, board, pickIndex = secureIndex } = {}) => {
   const settings = tableRules({ ...options, board: board ?? options.board });
   const mode = settings.board;
-  const island = mode === 'random' ? randomBoard(pickIndex, settings) : beginnerBoard();
+  // 5 and 6 players play on the extension island, with a bigger bank and
+  // deck. There are no printed starting places for it, so everyone places
+  // their first pieces in turn, as on a random island.
+  const layout = layoutFor(players.length);
+  const island = mode === 'random' ? randomBoard(pickIndex, settings, layout) : beginnerBoard(layout);
+  const placing = mode === 'random' || layout === 'large';
   return {
     version: 0,
     options: settings,
@@ -202,8 +211,8 @@ export const createInitialState = (players, { options = {}, board, pickIndex = s
     buildings: {}, // vertexId -> { owner, type: 'settlement' | 'city' }
     roads: {}, // edgeId -> owner
     hands: byId(players, emptyHand),
-    bank: fullBank(),
-    devDeck: newDeck(pickIndex),
+    bank: fullBank(BANK_SIZES[layout]),
+    devDeck: newDeck(pickIndex, layout),
     devCards: byId(players, () => []), // { id, type, boughtTurn }
     devCounter: 0,
     knights: byId(players, () => 0),
@@ -212,9 +221,9 @@ export const createInitialState = (players, { options = {}, board, pickIndex = s
     turnCount: 0,
     activeIndex: 0,
     // 'setup' | 'pre-roll' | 'discard' | 'robber' | 'steal' | 'actions' | 'road-building'
-    turnPhase: mode === 'random' ? 'setup' : 'pre-roll',
+    turnPhase: placing ? 'setup' : 'pre-roll',
     // { order: [seat index], step, expect: 'settlement' | 'road', vertexId } during set-up
-    setup: mode === 'random' ? { order: players.map((_, index) => index), step: 0, expect: 'settlement', vertexId: null } : null,
+    setup: placing ? { order: players.map((_, index) => index), step: 0, expect: 'settlement', vertexId: null } : null,
     pendingDiscards: {}, // playerId -> cards still to discard
     stealFrom: [], // who the robber may steal from
     robberReturn: 'actions',
@@ -484,7 +493,7 @@ export default class GameEngine {
     patch = this.record(`${starter.name} rolled highest and goes first`, starter.id);
     this.state = { ...this.state, ...patch };
 
-    if (this.state.options.board === 'beginner') {
+    if (!this.state.setup) {
       this.placeBeginnerPieces();
       this.state = {
         ...this.state,
@@ -892,7 +901,7 @@ export default class GameEngine {
     const ranked = Bot.rankSetupSettlements(this.state, id).slice(0, 6);
     const options = ranked.map(({ vertexId }) => ({
       vertexId,
-      label: `Intersection ${vertexId}: ${GEOMETRY.vertices[vertexId].hexes
+      label: `Intersection ${vertexId}: ${geoOf(this.state).vertices[vertexId].hexes
         .map((hexId) => {
           const hex = this.state.board.hexes[hexId];
           return `${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`;
@@ -908,7 +917,7 @@ export default class GameEngine {
     const options = ranked.map(({ hexId }) => {
       const hex = this.state.board.hexes[hexId];
       const owners = new Set(
-        GEOMETRY.hexes[hexId].vertices.map((v) => this.state.buildings[v]?.owner).filter(Boolean),
+        geoOf(this.state).hexes[hexId].vertices.map((v) => this.state.buildings[v]?.owner).filter(Boolean),
       );
       return {
         hexId,
@@ -1025,7 +1034,7 @@ export default class GameEngine {
       if (bundleSize(start)) {
         this.give(playerId, start);
         this.note(`${this.nameOf(playerId)} collected ${listResources(start)}`, playerId);
-        this.event('produce', { gains: { [playerId]: start }, hexes: GEOMETRY.vertices[vertexId].hexes });
+        this.event('produce', { gains: { [playerId]: start }, hexes: geoOf(this.state).vertices[vertexId].hexes });
       }
     }
 
@@ -1808,12 +1817,11 @@ export default class GameEngine {
   }
 }
 
-// Short descriptions used for the premium AI's options.
 // Short descriptions used for the premium AI's options. With the state they
 // name the hexes a spot touches, so Claude can judge it without the map.
 const spotLabel = (state, vertexId) =>
   state
-    ? `V${vertexId} (${GEOMETRY.vertices[vertexId].hexes
+    ? `V${vertexId} (${geoOf(state).vertices[vertexId].hexes
         .map((hexId) => {
           const hex = state.board.hexes[hexId];
           return `${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`;
@@ -1829,7 +1837,7 @@ export const describeAction = (action, state = null) => {
     case 'place-settlement':
       return `Build a settlement at ${spotLabel(state, action.vertexId)}`;
     case 'place-road': {
-      const [a, b] = GEOMETRY.edges[action.edgeId].vertices;
+      const [a, b] = geoOf(state).edges[action.edgeId].vertices;
       return `Build a road from V${a} to V${b}`;
     }
     case 'buy-dev':

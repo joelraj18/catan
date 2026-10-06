@@ -26,15 +26,16 @@ const hostSession = () => {
 };
 
 describe('room session', () => {
-  test('Catan tables seat 3 to 4 players', () => {
-    expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([3, 4]);
+  test('Catan tables seat 2 to 6 players, 3 to begin with', () => {
+    expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([2, 6]);
     const session = new RoomSession('host');
     session.started = false;
     session.publishLobby = jest.fn();
-    session.setTableSize(2);
     expect(session.lobby.tableSize).toBe(3);
-    session.setTableSize(6);
-    expect(session.lobby.tableSize).toBe(4);
+    session.setTableSize(1);
+    expect(session.lobby.tableSize).toBe(2);
+    session.setTableSize(9);
+    expect(session.lobby.tableSize).toBe(6);
   });
 
   test('the host picks the board, which travels with the start', () => {

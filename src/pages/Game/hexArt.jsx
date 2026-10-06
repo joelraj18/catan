@@ -1,5 +1,5 @@
 import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GEOMETRY, PIPS, RESOURCE_LABELS, TERRAINS } from './catanBoard';
+import { PIPS, RESOURCE_LABELS, TERRAINS, geometryOf } from './catanBoard';
 import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
 import './hex-board.css';
 
@@ -26,10 +26,10 @@ const placeOf = (board, hexIds) =>
 
 const px = (value) => Math.round(value * UNIT * 10) / 10;
 
-const hexPoints = (hex, inset = 0) =>
+const hexPoints = (geo, hex, inset = 0) =>
   hex.vertices
     .map((vertexId) => {
-      const v = GEOMETRY.vertices[vertexId];
+      const v = geo.vertices[vertexId];
       const x = hex.x + (v.x - hex.x) * (1 - inset);
       const y = hex.y + (v.y - hex.y) * (1 - inset);
       return `${px(x)},${px(y)}`;
@@ -37,19 +37,26 @@ const hexPoints = (hex, inset = 0) =>
     .join(' ');
 
 // Island outline for the sand rim: every coastal path, pushed slightly out.
-const coastPoints = (() => {
-  const points = [];
-  GEOMETRY.coast.forEach(({ edge }) => {
-    GEOMETRY.edges[edge].vertices.forEach((vertexId) => {
-      if (!points.includes(vertexId)) points.push(vertexId);
+const coastCache = new Map();
+const coastPointsOf = (geo) => {
+  if (!coastCache.has(geo)) {
+    const points = [];
+    geo.coast.forEach(({ edge }) => {
+      geo.edges[edge].vertices.forEach((vertexId) => {
+        if (!points.includes(vertexId)) points.push(vertexId);
+      });
     });
-  });
-  return points
-    .map((id) => GEOMETRY.vertices[id])
-    .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x))
-    .map((v) => `${px(v.x * 1.07)},${px(v.y * 1.07)}`)
-    .join(' ');
-})();
+    coastCache.set(
+      geo,
+      points
+        .map((id) => geo.vertices[id])
+        .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x))
+        .map((v) => `${px(v.x * 1.07)},${px(v.y * 1.07)}`)
+        .join(' '),
+    );
+  }
+  return coastCache.get(geo);
+};
 
 // Terrain motifs, drawn around (0,0) inside a hex of radius UNIT.
 function TerrainMotif({ terrain }) {
@@ -214,8 +221,8 @@ function TileArt({ terrain }) {
 // The robber is a small dragon. It sleeps curled up on the hex it blocks;
 // when it is sent somewhere new it wakes, flies there in an arc with its
 // wings beating, lands and settles back to sleep.
-const robberSpot = (hexId) => {
-  const hex = GEOMETRY.hexes[hexId];
+const robberSpot = (geo, hexId) => {
+  const hex = geo.hexes[hexId];
   // Over the tile's symbol, clear of the number token below it.
   return { x: px(hex.x) + 2, y: px(hex.y) - 10 };
 };
@@ -223,18 +230,18 @@ const robberSpot = (hexId) => {
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-function Dragon({ hexId }) {
+function Dragon({ hexId, geo }) {
   const ref = useRef(null);
   const last = useRef(hexId);
   const [flying, setFlying] = useState(false);
-  const { x, y } = robberSpot(hexId);
+  const { x, y } = robberSpot(geo, hexId);
 
   useLayoutEffect(() => {
     const from = last.current;
     last.current = hexId;
     const node = ref.current;
     if (from === hexId || from === null || from === undefined || !node?.animate || reducedMotion()) return undefined;
-    const a = robberSpot(from);
+    const a = robberSpot(geo, from);
     const lift = Math.min(90, 40 + Math.hypot(x - a.x, y - a.y) * 0.25);
     const midX = (a.x + x) / 2;
     const midY = Math.min(a.y, y) - lift;
@@ -255,7 +262,7 @@ function Dragon({ hexId }) {
       flight.cancel();
       setFlying(false);
     };
-  }, [hexId, x, y]);
+  }, [hexId, x, y, geo]);
 
   return (
     <g
@@ -350,8 +357,13 @@ function HexBoard({
   const mine = PIECES[myPiece] || PIECES.red;
   const isPicked = (kind, id) => selected?.kind === kind && selected.id === id;
   const isNew = useArrivals(roads, buildings);
-  const width = px(5.55);
-  const height = px(4.85);
+  const geo = geometryOf(board);
+  // The sea is a flat-topped hexagon around the island, with room for the
+  // harbours on every side.
+  const seaX = geo.maxX + 1.2;
+  const seaY = geo.maxY + 0.76;
+  const width = px(seaX + 0.05);
+  const height = px(seaY + 0.09);
 
   return (
     <svg
@@ -378,16 +390,16 @@ function HexBoard({
         points={[0, 1, 2, 3, 4, 5]
           .map((i) => {
             const angle = (Math.PI / 180) * (60 * i);
-            return `${px(Math.cos(angle) * 5.5)},${px(Math.sin(angle) * 5.5)}`;
+            return `${px(Math.cos(angle) * seaX)},${px((Math.sin(angle) / Math.sin(Math.PI / 3)) * seaY)}`;
           })
           .join(' ')}
         fill={`url(#sea-${uid})`}
       />
-      <polygon className="hex-board-sand" points={coastPoints} />
+      <polygon className="hex-board-sand" points={coastPointsOf(geo)} />
 
       {/* Harbours */}
       {board.harbors.map((harbor) => {
-        const [a, b] = harbor.vertices.map((id) => GEOMETRY.vertices[id]);
+        const [a, b] = harbor.vertices.map((id) => geo.vertices[id]);
         return (
           <g key={harbor.edge} className={`harbor harbor--${harbor.type}`}>
             <title>{harbor.type === 'any' ? 'Harbour: any 3 identical resources for 1' : `Harbour: 2 ${RESOURCE_LABELS[harbor.type].toLowerCase()} for 1`}</title>
@@ -413,7 +425,7 @@ function HexBoard({
 
       {/* Terrain */}
       {board.hexes.map((tile) => {
-        const hex = GEOMETRY.hexes[tile.id];
+        const hex = geo.hexes[tile.id];
         const producing = rolled && tile.number === rolled && board.robber !== tile.id;
         const target = hexSet.has(tile.id);
         const picked = target && isPicked('robber', tile.id);
@@ -428,8 +440,8 @@ function HexBoard({
             aria-label={target ? `Move the robber to ${TERRAINS[tile.terrain].label} ${tile.number || ''}` : undefined}
             onKeyDown={target && onHex ? onPress(() => onHex(tile.id)) : undefined}
           >
-            <polygon points={hexPoints(hex, 0.03)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
-            <polygon points={hexPoints(hex, 0.03)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(geo, hex, 0.03)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
+            <polygon points={hexPoints(geo, hex, 0.03)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
             <g transform={`translate(${px(hex.x)} ${px(hex.y) + (tile.number ? -25 : 0)})`}>
               <TileArt terrain={tile.terrain} />
             </g>
@@ -448,7 +460,7 @@ function HexBoard({
 
       {/* Roads */}
       {Object.entries(roads).map(([edgeId, owner]) => {
-        const [a, b] = GEOMETRY.edges[edgeId].vertices.map((id) => GEOMETRY.vertices[id]);
+        const [a, b] = geo.edges[edgeId].vertices.map((id) => geo.vertices[id]);
         const colour = colourOf(owner);
         const shrink = 0.18;
         const x1 = a.x + (b.x - a.x) * shrink;
@@ -465,7 +477,7 @@ function HexBoard({
 
       {/* Open paths for a road */}
       {[...edgeSet].map((edgeId) => {
-        const [a, b] = GEOMETRY.edges[edgeId].vertices.map((id) => GEOMETRY.vertices[id]);
+        const [a, b] = geo.edges[edgeId].vertices.map((id) => geo.vertices[id]);
         const picked = isPicked('road', edgeId);
         return (
           <React.Fragment key={`edge-${edgeId}`}>
@@ -484,7 +496,7 @@ function HexBoard({
             onClick={onEdge ? () => onEdge(edgeId) : undefined}
             role="button"
             tabIndex={0}
-            aria-label={`${picked ? 'Confirm the road' : 'Build a road'} by ${placeOf(board, GEOMETRY.edges[edgeId].hexes)}`}
+            aria-label={`${picked ? 'Confirm the road' : 'Build a road'} by ${placeOf(board, geo.edges[edgeId].hexes)}`}
             aria-pressed={picked}
             onKeyDown={onPress(() => onEdge?.(edgeId))}
           />
@@ -493,11 +505,11 @@ function HexBoard({
       })}
 
       {/* Robber */}
-      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} />}
+      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} />}
 
       {/* Settlements and cities */}
       {Object.entries(buildings).map(([vertexId, building]) => {
-        const v = GEOMETRY.vertices[vertexId];
+        const v = geo.vertices[vertexId];
         const colour = colourOf(building.owner);
         const city = building.type === 'city';
         const upgradable = citySet.has(Number(vertexId));
@@ -526,7 +538,7 @@ function HexBoard({
 
       {/* Open intersections for a settlement */}
       {[...vertexSet].map((vertexId) => {
-        const v = GEOMETRY.vertices[vertexId];
+        const v = geo.vertices[vertexId];
         const picked = isPicked('settlement', vertexId);
         if (picked) {
           return (
@@ -562,36 +574,37 @@ function HexBoard({
         );
       })}
 
-      {selected && <ConfirmChip selected={selected} board={board} />}
+      {selected && <ConfirmChip selected={selected} geo={geo} />}
     </svg>
   );
 }
 
 // Where a first tap landed, and the words for the second.
-const chipAt = (selected) => {
+const chipAt = (selected, geo) => {
   const { kind, id } = selected;
   if (kind === 'road') {
-    const [a, b] = GEOMETRY.edges[id]?.vertices.map((vertexId) => GEOMETRY.vertices[vertexId]) || [];
+    const [a, b] = geo.edges[id]?.vertices.map((vertexId) => geo.vertices[vertexId]) || [];
     return a && { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, text: 'Tap again to build the road' };
   }
   if (kind === 'settlement' || kind === 'city') {
-    const v = GEOMETRY.vertices[id];
+    const v = geo.vertices[id];
     return v && { x: v.x, y: v.y, text: `Tap again to build the ${kind}` };
   }
   if (kind === 'robber') {
-    const hex = GEOMETRY.hexes[id];
+    const hex = geo.hexes[id];
     return hex && { x: hex.x, y: hex.y - 0.35, text: 'Tap again to send the robber' };
   }
   return null;
 };
 
 // The small label that asks for the confirming tap, kept inside the board.
-function ConfirmChip({ selected }) {
-  const at = chipAt(selected);
+function ConfirmChip({ selected, geo }) {
+  const at = chipAt(selected, geo);
   if (!at) return null;
   const width = at.text.length * 6.1 + 22;
-  const x = Math.max(-330 + width / 2, Math.min(330 - width / 2, px(at.x)));
-  const above = px(at.y) - 34 > -280;
+  const edge = px(geo.maxX + 1.15);
+  const x = Math.max(-edge + width / 2, Math.min(edge - width / 2, px(at.x)));
+  const above = px(at.y) - 34 > -px(geo.maxY + 0.6);
   const y = above ? px(at.y) - 30 : px(at.y) + 30;
   return (
     <g className="confirm-chip" transform={`translate(${x} ${y})`} aria-hidden="true">

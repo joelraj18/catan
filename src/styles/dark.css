@@ -160,6 +160,16 @@
   color: #eb9a4f;
 }
 
+[data-theme='dark'] .seat-green {
+  --seat: #4fc58a;
+  color: #4fc58a;
+}
+
+[data-theme='dark'] .seat-purple {
+  --seat: #a888ec;
+  color: #a888ec;
+}
+
 [data-theme='dark'] {
   --sea: #24648f;
   --sea-deep: #1a4b6e;

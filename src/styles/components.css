@@ -40,6 +40,16 @@
   color: #e07a1f;
 }
 
+.seat-green {
+  --seat: #178a55;
+  color: #178a55;
+}
+
+.seat-purple {
+  --seat: #7a4cc8;
+  color: #7a4cc8;
+}
+
 
 .you-chip {
   display: inline-block;

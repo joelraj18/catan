@@ -3472,3 +3472,32 @@
   --card: #6b51b8;
   --card-ink: #3f2a85;
 }
+
+/* Five or six at the table: slimmer seat cards so everyone fits */
+
+.player-list--compact {
+  gap: 6px;
+}
+
+.player-list--compact .seat-card {
+  gap: 4px;
+  padding: 6px 8px 7px 11px;
+}
+
+.player-list--compact .seat-avatar {
+  transform: scale(0.82);
+}
+
+.player-list--compact .stat-tag em,
+.player-list--compact .pieces-left {
+  display: none;
+}
+
+.player-list--compact .seat-card-foot:not(:has(.award-pill)) {
+  display: none;
+}
+
+.player-list--compact .vp-medal {
+  transform: scale(0.85);
+  transform-origin: right center;
+}

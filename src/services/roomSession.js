@@ -15,8 +15,8 @@ const MAX_TEXT = 240;
 const PROTOCOL = 2;
 const SEAT_KEY = 'catan-seat';
 const HOST_GAME_KEY = 'catan-host-game';
-export const MIN_PLAYERS = 3;
-export const MAX_PLAYERS = 4;
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 6; // 5 and 6 play on the extension island
 const RECONNECT_EVERY = 3000;
 const RECONNECT_FOR = 120000;
 // During a match both sides say they are alive every BEAT_EVERY. A link that
@@ -76,7 +76,7 @@ export default class RoomSession {
     this.status = 'connecting'; // 'online' | 'offline' | 'connecting' | 'closed'
     this.transport = null;
     this.myClientId = role === 'host' ? 'host' : null;
-    this.lobby = { tableSize: MIN_PLAYERS, seats: [], board: 'beginner', settings: { ...DEFAULT_SETTINGS } };
+    this.lobby = { tableSize: 3, seats: [], board: 'beginner', settings: { ...DEFAULT_SETTINGS } };
     this.chat = [];
     this.started = false;
     this.players = null;

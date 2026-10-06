@@ -251,8 +251,8 @@ export default function RoomWaiting({ session, onLeave }) {
           {isHost && (
             <div className="seat-count-section">
               <span className="field-label">Table size</span>
-              <div className="seat-count-picker">
-                {[3, 4].map((count) => (
+              <div className="seat-count-picker settings-picker">
+                {[2, 3, 4, 5, 6].map((count) => (
                   <button
                     key={count}
                     type="button"
@@ -261,7 +261,7 @@ export default function RoomWaiting({ session, onLeave }) {
                     disabled={count < seats.length}
                     aria-pressed={lobby.tableSize === count}
                   >
-                    {count} Players
+                    {count}
                   </button>
                 ))}
               </div>
