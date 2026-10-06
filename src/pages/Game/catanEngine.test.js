@@ -725,3 +725,200 @@ describe('premium AI seats', () => {
     expect(engine.state.thinking).toBeNull();
   });
 });
+
+describe('round 2 rules', () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Active player first, then the others in seat order.
+  const table = (engine) => [0, 1, 2].map((i) => engine.state.players[(engine.state.activeIndex + i) % 3].id);
+
+  test('only a Knight may be played before the roll', async () => {
+    const engine = track(engineWith());
+    const me = active(engine);
+    const old = ['yearOfPlenty', 'monopoly', 'roadBuilding', 'knight'].map((type, i) => ({ id: 300 + i, type, boughtTurn: -1 }));
+    engine.state = { ...engine.state, devCards: { ...engine.state.devCards, [me]: old } };
+    expect(engine.state.turnPhase).toBe('pre-roll');
+    expect(engine.playDev(me, 'yearOfPlenty', { resources: ['ore', 'ore'] })).toBe(false);
+    expect(engine.playDev(me, 'monopoly', { resource: 'wool' })).toBe(false);
+    expect(engine.playDev(me, 'roadBuilding')).toBe(false);
+    expect(engine.state.devPlayedThisTurn).toBe(false);
+    expect(engine.playDev(me, 'knight')).toBe(true);
+  });
+
+  test('a single yes to an open offer trades without asking the offering player again', async () => {
+    const engine = track(engineWith());
+    engine.timing = { ...engine.timing, acceptWindow: 30 };
+    const [me, x] = table(engine);
+    await rollTo(engine, [1, 1]);
+    give(engine, me, { brick: 1 });
+    give(engine, x, { ore: 1 });
+    expect(engine.proposeTrade(me, { give: { brick: 1 }, get: { ore: 1 } })).toBe(true);
+    const offer = engine.state.trades[0];
+    expect(engine.respondTrade(x, offer.id, true)).toBe(true);
+    expect(engine.state.trades[0].closesAt).toBeGreaterThan(0);
+    await wait(60);
+    expect(engine.state.trades).toHaveLength(0);
+    expect(engine.state.events.at(-1)).toMatchObject({ type: 'trade', actor: me, partner: x });
+    expect(conserved(engine.state)).toBe(true);
+  });
+
+  test('once everyone has answered, a single yes trades at once', async () => {
+    const engine = track(engineWith());
+    const [me, x, y] = table(engine);
+    await rollTo(engine, [1, 1]);
+    give(engine, me, { brick: 1 });
+    give(engine, x, { ore: 1 });
+    expect(engine.proposeTrade(me, { give: { brick: 1 }, get: { ore: 1 } })).toBe(true);
+    const offer = engine.state.trades[0];
+    expect(engine.respondTrade(y, offer.id, false)).toBe(true);
+    expect(engine.respondTrade(x, offer.id, true)).toBe(true);
+    expect(engine.state.trades).toHaveLength(0);
+  });
+
+  test('several yeses: the offering player picks, or the first taker gets it in time', async () => {
+    const engine = track(engineWith());
+    engine.timing = { ...engine.timing, tradeWait: 40 };
+    const [me, x, y] = table(engine);
+    await rollTo(engine, [1, 1]);
+    give(engine, me, { brick: 2 });
+    give(engine, x, { ore: 2 });
+    give(engine, y, { ore: 2 });
+
+    expect(engine.proposeTrade(me, { give: { brick: 1 }, get: { ore: 1 } })).toBe(true);
+    let offer = engine.state.trades[0];
+    engine.respondTrade(x, offer.id, true);
+    engine.respondTrade(y, offer.id, true);
+    expect(engine.state.trades[0]).toMatchObject({ choosing: true, accepted: [x, y] });
+    const yOre = engine.state.hands[y].ore;
+    expect(engine.completeTrade(me, offer.id, y)).toBe(true);
+    expect(engine.state.hands[y].ore).toBe(yOre - 1);
+
+    expect(engine.proposeTrade(me, { give: { brick: 1 }, get: { ore: 1 } })).toBe(true);
+    offer = engine.state.trades[0];
+    engine.respondTrade(y, offer.id, true);
+    engine.respondTrade(x, offer.id, true);
+    const xOre = engine.state.hands[x].ore;
+    const yOreNow = engine.state.hands[y].ore;
+    await wait(80);
+    expect(engine.state.trades).toHaveLength(0);
+    // y said yes first.
+    expect(engine.state.hands[y].ore).toBe(yOreNow - 1);
+    expect(engine.state.hands[x].ore).toBe(xOre);
+  });
+
+  test('Monopoly records who gave how much, steals show only to the two players', async () => {
+    const engine = track(engineWith());
+    const [me, x, y] = table(engine);
+    await rollTo(engine, [1, 1]);
+    engine.state = { ...engine.state, devCards: { ...engine.state.devCards, [me]: [{ id: 400, type: 'monopoly', boughtTurn: -1 }] } };
+    give(engine, x, { wool: 3 });
+    const yWool = engine.state.hands[y].wool;
+    const xWool = engine.state.hands[x].wool;
+    expect(engine.playDev(me, 'monopoly', { resource: 'wool' })).toBe(true);
+    const event = engine.state.events.at(-1);
+    expect(event).toMatchObject({ type: 'monopoly', actor: me, resource: 'wool', total: xWool + yWool });
+    expect(event.from[x]).toBe(xWool);
+    expect(engine.state.log.at(-1).text).toContain(`${xWool} from`);
+
+    const steal = { id: 999, type: 'steal', turn: 1, actor: me, victim: x, resource: 'ore' };
+    const state = { ...engine.state, events: [...engine.state.events, steal] };
+    expect(redactFor(state, me).events.at(-1).resource).toBe('ore');
+    expect(redactFor(state, x).events.at(-1).resource).toBe('ore');
+    expect(redactFor(state, y).events.at(-1).resource).toBeNull();
+  });
+
+  test('every move leaves an event, numbered in order', async () => {
+    const engine = track(engineWith());
+    const me = active(engine);
+    await rollTo(engine, [3, 3]);
+    give(engine, me, { brick: 1, lumber: 1 });
+    engine.placeRoad(me, legalRoadSpots(engine.state, me)[0]);
+    const types = engine.state.events.map((event) => event.type);
+    expect(types).toContain('roll');
+    expect(types.at(-1)).toBe('build');
+    const ids = engine.state.events.map((event) => event.id);
+    expect(ids).toEqual([...ids].sort((a, b) => a - b));
+  });
+});
+
+describe('table settings in play', () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const timed = (options, timing = {}) => {
+    const random = seeded(5);
+    return track(
+      new GameEngine({
+        players: seats(['human', 'human', 'human']),
+        timing: { ...CALM, ...timing },
+        options: { board: 'beginner', ...options },
+        rollDie: () => 1 + Math.floor(random() * 6),
+        pickIndex: (n) => Math.floor(random() * n),
+        random,
+      }),
+    );
+  };
+
+  test('with the turn timer, the dice roll themselves and an idle turn passes on', async () => {
+    // 15 seconds scaled down to 45 ms.
+    const engine = timed({ turnSeconds: 15 }, { clockScale: 0.003 });
+    engine.rollDie = () => 2; // a 4, never the robber
+    const first = active(engine);
+    engine.start();
+    expect(engine.state.phaseLength).toBe(45);
+    await wait(80);
+    expect(engine.state.dice).not.toBeNull();
+    const turn = engine.state.turnCount;
+    await wait(120);
+    expect(engine.state.turnCount).toBeGreaterThan(turn);
+    expect(engine.state.log.some((entry) => entry.text === `${first.toUpperCase()}'s time ran out, the turn passes on`)).toBe(true);
+  });
+
+  test('every move starts the move clock again', async () => {
+    const engine = timed({ turnSeconds: 15 }, { clockScale: 0.004 }); // 60 ms per move
+    const me = active(engine);
+    await rollTo(engine, [3, 3]);
+    if (engine.state.turnPhase !== 'actions') return;
+    await wait(40);
+    give(engine, me, { brick: 1, lumber: 1 });
+    expect(engine.placeRoad(me, legalRoadSpots(engine.state, me)[0])).toBe(true);
+    await wait(40); // 80 ms into the turn, 40 ms after the move
+    expect(active(engine)).toBe(me);
+    await wait(120);
+    expect(active(engine)).not.toBe(me);
+  });
+
+  test('without a timer, people roll when they like', async () => {
+    const engine = timed({});
+    engine.start();
+    await wait(20);
+    expect(engine.state.phaseEndsAt).toBeNull();
+    expect(engine.state.dice).toBeNull();
+  });
+
+  test('the discard limit and the points to win follow the table', async () => {
+    const engine = timed({ handLimit: 9, victoryPoints: 8 });
+    const [me, x] = [0, 1].map((i) => engine.state.players[(engine.state.activeIndex + i) % 3].id);
+    give(engine, x, { ore: 9 - handSize(engine.state.hands[x]) });
+    expect(handSize(engine.state.hands[x])).toBe(9);
+    await rollTo(engine, [3, 4]);
+    expect(engine.state.pendingDiscards[x]).toBeUndefined();
+
+    const other = timed({ victoryPoints: 8 });
+    const who = active(other);
+    other.state = {
+      ...other.state,
+      longestRoad: { ...other.state.longestRoad, holder: who },
+      largestArmy: who,
+      buildings: Object.fromEntries(Object.entries(other.state.buildings).map(([v, b]) => [v, b.owner === who ? { ...b, type: 'city' } : b])),
+    };
+    expect(totalPoints(other.state, who)).toBe(8);
+    await rollTo(other, [1, 1]);
+    expect(other.state.gameOver).toMatchObject({ reason: 'victory', winners: [who] });
+    expect(me).toBeDefined();
+  });
+
+  test('a fresh game carries its island fingerprint and its rules', () => {
+    const engine = timed({ board: 'random', turnSeconds: 30, redsMayTouch: true });
+    expect(engine.state.boardId).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/);
+    expect(engine.state.options).toMatchObject({ board: 'random', turnSeconds: 30, redsMayTouch: true, handLimit: 7 });
+  });
+});

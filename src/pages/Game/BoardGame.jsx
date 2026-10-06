@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
 import SoundMixer from '../../components/SoundMixer';
+import VoicePanel, { useVoice } from '../../components/VoicePanel';
 import GoldButton from '../../components/GoldButton';
 import ThemeToggle from '../../components/ThemeToggle';
 import { premiumAdvisor } from '../../services/premiumAi';
@@ -12,7 +13,6 @@ import GameEngine, { AI_CALL_BUDGET, DEFAULT_TIMING, createInitialState } from '
 import {
   COSTS,
   DEV_CARDS,
-  WINNING_POINTS,
   bundleSize,
   hasResources,
   hiddenPoints,
@@ -26,6 +26,11 @@ import {
   tradeShapeProblem,
   visibleHandSize,
 } from './catanRules';
+import CardFlights from './CardFlights.jsx';
+import Dice3D from './Dice3D.jsx';
+import { DevRow, ResourceRow } from './GameCards.jsx';
+import GameToasts from './GameToasts.jsx';
+import { settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
 import {
   ArmyIcon,
@@ -43,8 +48,6 @@ import {
 } from './tableIcons.jsx';
 import { PieceMark } from './pieces.jsx';
 import './board-game.css';
-
-import winnerSound from '../../assets/sounds/Winner.mp3';
 
 const PIP_LAYOUT = {
   1: [[50, 50]],
@@ -118,6 +121,36 @@ function useCountdown(endsAt) {
 function Countdown({ endsAt, render }) {
   const left = useCountdown(endsAt);
   return render(Math.ceil(left / 1000), left);
+}
+
+// The move clock: a ring that empties as the seconds run out, with a soft
+// tick in the last five seconds when it is this player's own clock.
+function TurnClock({ endsAt, length, label, mine, sound }) {
+  const left = useCountdown(endsAt);
+  const seconds = Math.ceil(left / 1000);
+  const lastTick = useRef(null);
+
+  useEffect(() => {
+    if (!mine || !sound || seconds > 5 || seconds <= 0 || lastTick.current === seconds) return;
+    lastTick.current = seconds;
+    sound();
+  }, [mine, sound, seconds]);
+
+  const fraction = length ? Math.min(1, Math.max(0, left / length)) : 0;
+  return (
+    <div
+      className={`turn-clock ${seconds <= 5 ? 'turn-clock--urgent' : ''} ${mine ? 'turn-clock--mine' : ''}`}
+      role="timer"
+      aria-label={`${seconds} seconds ${label}`}
+    >
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <circle className="turn-clock-track" cx="20" cy="20" r="17" />
+        <circle className="turn-clock-fill" cx="20" cy="20" r="17" pathLength="100" style={{ strokeDashoffset: 100 - fraction * 100 }} />
+      </svg>
+      <strong>{seconds}</strong>
+      <span>{label}</span>
+    </div>
+  );
 }
 
 // The coloured role tag on a player's card.
@@ -285,25 +318,31 @@ export default function BoardGame({
   onExit,
   onRestart,
   resume = null,
-  boardMode = 'beginner',
+  settings = null,
 }) {
   const isHost = !session || session.isHost;
+  const tableOptions = settings || { board: 'beginner' };
   const [state, setState] = useState(() => {
     const cached = !isHost && session?.lastGame;
-    return cached ? cached.state : resume || createInitialState(seatPlayers, { board: boardMode });
+    return cached ? cached.state : resume || createInitialState(seatPlayers, { options: tableOptions });
   });
   const [connection, setConnection] = useState('online');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [clockOffset, setClockOffset] = useState(0);
   const [sheet, setSheet] = useState(null); // 'rules' | 'costs' | 'dice' | 'end' | 'trade' | 'dev' | null
-  const [mode, setMode] = useState(null); // 'road' | 'settlement' | 'city' while placing
+  // A spot or card chosen with a first tap, built or played by a second tap
+  // on the same thing: { kind: 'road' | 'settlement' | 'city' | 'robber' |
+  // 'dev' | 'play', id }
+  const [pending, setPending] = useState(null);
+  const pendingRef = useRef(null);
+  const [focus, setFocus] = useState(null); // 'road' | 'settlement' | 'city': only those spots
   const [tradeDraft, setTradeDraft] = useState(null); // { give, get, to }
-  const [bankDraft, setBankDraft] = useState({ give: null, get: null });
   const [discardDraft, setDiscardDraft] = useState(emptyBundle);
   const [devPick, setDevPick] = useState(null); // { card, resources: [] , resource }
   const [showResults, setShowResults] = useState(true);
   const engineRef = useRef(null);
+  const voice = useVoice(session);
 
   // ------------------------------------------------------------- engine
 
@@ -317,7 +356,7 @@ export default function BoardGame({
       advisor: premiumAdvisor,
       timing: testTiming(),
       initialState: resume,
-      options: { board: boardMode },
+      options: tableOptions,
       onChange: (next) => {
         setState(next);
         session?.broadcastGame(next, redactFor);
@@ -432,40 +471,30 @@ export default function BoardGame({
   // -------------------------------------------------------------- sound
 
   const effectsOn = audioSettings.effectsOn && audioSettings.effectsVolume > 0;
-  const winnerRef = useRef(null);
-
-  if (!winnerRef.current && typeof Audio !== 'undefined') {
-    winnerRef.current = new Audio(winnerSound);
-    winnerRef.current.preload = 'auto';
-  }
-
-  useEffect(() => {
-    const winner = winnerRef.current;
-    return () => winner?.pause();
-  }, []);
-
+  const tickSound = useMemo(
+    () => (effectsOn ? () => playSfx('tick', audioSettings.effectsVolume) : null),
+    [effectsOn, audioSettings.effectsVolume],
+  );
   const lastSfx = useRef(state.sfx?.id ?? 0);
 
+  // Every sound is made on the spot, the win included: a calm chord rather
+  // than a recording. Sounds of one move play a moment apart.
   useEffect(() => {
     const sfx = state.sfx;
 
     if (!sfx || sfx.id === lastSfx.current) {
-      return;
+      return undefined;
     }
 
     lastSfx.current = sfx.id;
 
     if (!effectsOn) {
-      return;
+      return undefined;
     }
 
-    if (sfx.key === 'winner' && winnerRef.current) {
-      winnerRef.current.volume = Math.min(1, Math.max(0, audioSettings.effectsVolume));
-      winnerRef.current.currentTime = 0;
-      winnerRef.current.play().catch(() => {});
-    } else {
-      playSfx(sfx.key, audioSettings.effectsVolume);
-    }
+    const keys = (sfx.keys || [sfx.key]).map((key) => (key === 'winner' ? 'win' : key));
+    const timers = keys.map((key, index) => window.setTimeout(() => playSfx(key, audioSettings.effectsVolume), index * 260));
+    return () => timers.slice(1).forEach((timer) => window.clearTimeout(timer));
   }, [state.sfx, effectsOn, audioSettings.effectsVolume]);
 
   // ------------------------------------------------------------ keyboard
@@ -483,7 +512,9 @@ export default function BoardGame({
     const onKey = (event) => {
       if (event.key === 'Escape') {
         setSheet(null);
-        setMode(null);
+        pendingRef.current = null;
+        setPending(null);
+        setFocus(null);
         setTradeDraft(null);
         setDevPick(null);
       }
@@ -511,16 +542,30 @@ export default function BoardGame({
   const deckLeft = typeof view.devDeck === 'number' ? view.devDeck : view.devDeck?.length || 0;
   const left = me ? piecesLeft(view, myPlayerId) : { road: 0, settlement: 0, city: 0 };
   const rates = me ? maritimeRates(view, myPlayerId) : {};
+  // Before the roll only a Knight may be played; progress cards wait for it.
   const playableDev = myDev.filter(
-    (card) => card.type && card.type !== 'victoryPoint' && card.boughtTurn !== view.turnCount,
+    (card) =>
+      card.type &&
+      card.type !== 'victoryPoint' &&
+      card.boughtTurn !== view.turnCount &&
+      (phase === 'actions' || card.type === 'knight'),
   );
   const canPlayDev = isMyTurn && !view.busy && !over && !view.devPlayedThisTurn && (phase === 'pre-roll' || phase === 'actions');
   const myPoints = me ? publicPoints(view, myPlayerId) + hiddenPoints(view, myPlayerId) : 0;
+  const rules = settingsOf(view);
+  const goal = rules.victoryPoints;
 
-  // Placement mode is cleared whenever the phase moves on.
+  // A first tap belongs to its moment: it is dropped whenever the phase,
+  // the turn or the set-up step moves on.
+  const pick = useCallback((next) => {
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
+  const momentKey = `${view.turnCount}:${phase}:${view.setup?.step ?? ''}:${view.setup?.expect ?? ''}:${isMyTurn}`;
   useEffect(() => {
-    if (!canBuildNow) setMode(null);
-  }, [canBuildNow]);
+    pick(null);
+    setFocus(null);
+  }, [momentKey, pick]);
 
   useEffect(() => {
     setDiscardDraft(emptyBundle());
@@ -542,32 +587,74 @@ export default function BoardGame({
     if (phase === 'road-building') return { edges: legalRoadSpots(view, myPlayerId) };
     if (phase === 'robber') return { hexes: view.board.hexes.filter((hex) => hex.id !== view.board.robber).map((hex) => hex.id) };
     if (phase !== 'actions') return {};
-    if (mode === 'road') return { edges: legalRoadSpots(view, myPlayerId) };
-    if (mode === 'settlement') return { vertices: legalSettlementSpots(view, myPlayerId) };
-    if (mode === 'city') return { cities: legalCitySpots(view, myPlayerId) };
-    return {};
-  }, [view, me, over, setupTurn, isMyTurn, phase, mode, myPlayerId]);
+    // Everything you can afford right now shows on the board at once.
+    const hand = view.hands[myPlayerId];
+    const pieces = piecesLeft(view, myPlayerId);
+    const show = (kind, cost) => hasResources(hand, cost) && pieces[kind] > 0 && (!focus || focus === kind);
+    return {
+      browse: true,
+      edges: show('road', COSTS.road) ? legalRoadSpots(view, myPlayerId) : [],
+      vertices: show('settlement', COSTS.settlement) ? legalSettlementSpots(view, myPlayerId) : [],
+      cities: show('city', COSTS.city) ? legalCitySpots(view, myPlayerId) : [],
+    };
+  }, [view, me, over, setupTurn, isMyTurn, phase, focus, myPlayerId]);
 
+  // First tap chooses, a second tap on the same thing confirms.
+  const choose = useCallback(
+    (kind, id, action) => {
+      const current = pendingRef.current;
+      if (current && current.kind === kind && current.id === id) {
+        pick(null);
+        action();
+      } else {
+        pick({ kind, id });
+      }
+    },
+    [pick],
+  );
+
+  const citySpots = highlight.cities;
   const onVertex = useCallback(
     (vertexId) => {
-      act({ type: mode === 'city' ? 'build-city' : 'place-settlement', vertexId });
-      setMode(null);
+      const city = (citySpots || []).includes(vertexId);
+      choose(city ? 'city' : 'settlement', vertexId, () => {
+        act({ type: city ? 'build-city' : 'place-settlement', vertexId });
+        setFocus(null);
+      });
     },
-    [act, mode],
+    [act, choose, citySpots],
   );
 
   const onEdge = useCallback(
-    (edgeId) => {
-      act({ type: 'place-road', edgeId });
-      setMode((current) => (current === 'road' ? null : current));
-    },
-    [act],
+    (edgeId) =>
+      choose('road', edgeId, () => {
+        act({ type: 'place-road', edgeId });
+        setFocus(null);
+      }),
+    [act, choose],
   );
 
-  const onHex = useCallback((hexId) => act({ type: 'move-robber', hexId }), [act]);
+  const onHex = useCallback((hexId) => choose('robber', hexId, () => act({ type: 'move-robber', hexId })), [act, choose]);
+
+  // A tap on the board away from any spot lets go of the first choice.
+  const onBoardClick = (event) => {
+    if (!pendingRef.current) return;
+    if (!event.target.closest?.('.spot, .building--upgradable, .hex-tile--target, .confirm-chip')) pick(null);
+  };
 
   const localTime = (at) => (at ? at + (isHost ? 0 : clockOffset) : 0);
   const phaseEndsAt = localTime(view.phaseEndsAt);
+  const clockIsMine = Boolean(setupTurn || iOweDiscard || (isMyTurn && phase !== 'discard'));
+  const clockLabel =
+    phase === 'pre-roll'
+      ? 'to roll'
+      : phase === 'setup'
+        ? 'to place'
+        : phase === 'discard'
+          ? 'to discard'
+          : phase === 'robber' || phase === 'steal'
+            ? 'for the robber'
+            : 'for this move';
   const log = view.log || [];
   const myCode = me?.code;
   const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
@@ -580,9 +667,12 @@ export default function BoardGame({
   const waitingOnVote = endVote ? voters.filter((player) => !endVote.agreed.includes(player.id)) : [];
   const mustVote = endVote && !endVote.passed && iAmVoter && !endVote.agreed.includes(myPlayerId);
 
-  // Offers this player should see.
+  // Offers this player made or already answered. Offers waiting on their
+  // answer pop up at the side (GameToasts) with Accept and Decline.
   const trades = (view.trades || []).filter(
-    (trade) => trade.from === myPlayerId || trade.to === myPlayerId || (!trade.to && trade.from !== myPlayerId),
+    (trade) =>
+      trade.from === myPlayerId ||
+      ((trade.to === myPlayerId || !trade.to) && trade.responses?.[myPlayerId] !== undefined),
   );
   const canTrade = me && phase === 'actions' && !over && !view.busy;
 
@@ -610,7 +700,6 @@ export default function BoardGame({
 
   const openTrade = () => {
     setTradeDraft({ give: emptyBundle(), get: emptyBundle(), to: null });
-    setBankDraft({ give: null, get: null });
     setSheet('trade');
   };
 
@@ -623,8 +712,8 @@ export default function BoardGame({
       const round = view.setup.step < players.length ? 'first' : 'second';
       if (placer.id !== myPlayerId) return `${placer.name} is placing their ${round} ${view.setup.expect}`;
       return view.setup.expect === 'settlement'
-        ? `Place your ${round} settlement on a highlighted intersection`
-        : 'Place a road next to the settlement you just built';
+        ? `Tap a glowing intersection for your ${round} settlement, then tap it again`
+        : 'Tap a path next to your new settlement, then tap it again';
     }
     if (phase === 'discard') {
       if (iOweDiscard) return `A 7 was rolled, discard ${iOweDiscard} cards`;
@@ -635,14 +724,15 @@ export default function BoardGame({
       return activePlayer.away ? 'Away, the computer is playing' : `${kindLabel(activePlayer)} is playing`;
     }
     if (view.rolling) return 'Rolling';
-    if (phase === 'pre-roll') return 'Roll the dice, or play a development card first';
-    if (phase === 'robber') return 'Move the robber: click any other hex';
+    if (phase === 'pre-roll') return playableDev.some((card) => card.type === 'knight') ? 'Roll the dice, or play a Knight first' : 'Roll the dice';
+    if (phase === 'robber') return pending?.kind === 'robber' ? 'Tap the same hex again to send the robber there' : 'Tap a hex for the robber, then tap it again';
     if (phase === 'steal') return 'Choose who to rob';
-    if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}`;
-    if (mode === 'road') return 'Click a highlighted path to build a road';
-    if (mode === 'settlement') return 'Click a highlighted intersection to build a settlement';
-    if (mode === 'city') return 'Click one of your settlements to upgrade it';
-    return 'Trade and build, then end your turn';
+    if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}: tap a path, then tap it again`;
+    if (pending && ['road', 'settlement', 'city'].includes(pending.kind)) return `Tap again to build the ${pending.kind}, or tap elsewhere to cancel`;
+    if ((highlight.edges || []).length || (highlight.vertices || []).length || (highlight.cities || []).length) {
+      return 'Tap a glowing spot to build, tap again to confirm';
+    }
+    return 'Trade, or end your turn';
   })();
 
   // ------------------------------------------------------------- sheets
@@ -659,7 +749,7 @@ export default function BoardGame({
           </header>
           <div className="property-card-body">
             <p className="end-sheet-text">
-              You hold more than 7 resource cards, so half of them (rounded down) go back to the bank
+              You hold more than {rules.handLimit} resource cards, so half of them (rounded down) go back to the bank
             </p>
             <BundlePicker value={discardDraft} onChange={setDiscardDraft} limits={myHand} label="Cards to discard" />
             <div className="purchase-offer-actions">
@@ -788,6 +878,28 @@ export default function BoardGame({
     else act({ type: 'play-dev', card: type });
   };
 
+  // How the bank pays for a draft: each resource given must be a whole
+  // number of lots at your rate, and the lots buy exactly the cards asked
+  // for. Returns the single trades to make, or a reason it does not work.
+  const bankPlan = (give, get) => {
+    const gives = Object.entries(give);
+    const wants = Object.entries(get).flatMap(([resource, count]) => Array(count).fill(resource));
+    if (!gives.length || !wants.length) return { problem: 'Pick what to give and what to get' };
+    if (wants.some((resource) => give[resource])) return { problem: 'The same resource cannot be on both sides' };
+    const lots = [];
+    for (const [resource, count] of gives) {
+      if (count % rates[resource]) {
+        return { problem: `The bank takes ${RESOURCE_LABELS[resource].toLowerCase()} ${rates[resource]} at a time` };
+      }
+      for (let i = 0; i < count / rates[resource]; i += 1) lots.push(resource);
+    }
+    if (lots.length !== wants.length) {
+      return { problem: `That gives ${lots.length} lot${lots.length === 1 ? '' : 's'} for ${wants.length} card${wants.length === 1 ? '' : 's'}` };
+    }
+    if (Object.entries(get).some(([resource, count]) => view.bank[resource] < count)) return { problem: 'The bank is out of that' };
+    return { trades: lots.map((resource, i) => ({ give: resource, get: wants[i] })) };
+  };
+
   const renderTradeSheet = () => {
     if (sheet !== 'trade' || !tradeDraft || !canTrade) return null;
     const close = () => {
@@ -796,18 +908,30 @@ export default function BoardGame({
     };
     const give = Object.fromEntries(Object.entries(tradeDraft.give).filter(([, n]) => n > 0));
     const get = Object.fromEntries(Object.entries(tradeDraft.get).filter(([, n]) => n > 0));
-    const problem = tradeShapeProblem(give, get) || (!hasResources(myHand, give) ? 'You do not have those cards' : null);
     const others = players.filter((player) => player.id !== myPlayerId);
+    const toBank = isMyTurn && tradeDraft.to === 'bank';
     const target = isMyTurn ? tradeDraft.to : activePlayer.id;
-    const bankGive = bankDraft.give;
-    const bankRate = bankGive ? rates[bankGive] : null;
-    const bankReady = bankGive && bankDraft.get && bankDraft.get !== bankGive && myHand[bankGive] >= bankRate && view.bank[bankDraft.get] > 0;
+    const bank = bankPlan(give, get);
+    const problem = toBank
+      ? bank.problem
+      : tradeShapeProblem(give, get) || (!hasResources(myHand, give) ? 'You do not have those cards' : null);
+    const best = Math.min(...RESOURCES.map((resource) => rates[resource]));
+    const setTo = (to) => setTradeDraft((draft) => ({ ...draft, to }));
+
+    const send = () => {
+      if (toBank) {
+        bank.trades.forEach((trade) => act({ type: 'maritime', give: trade.give, get: trade.get }));
+      } else {
+        act({ type: 'trade-propose', give, get, to: target });
+      }
+      close();
+    };
 
     return (
       <div className="property-card-overlay end-overlay" onClick={close}>
         <div className="property-card trade-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="trade-title">
           <header className="property-card-header">
-            <p className="property-card-kicker">{isMyTurn ? 'Your trade phase' : `Offer to ${activePlayer.name}`}</p>
+            <p className="property-card-kicker">{isMyTurn ? 'Players or the bank, in one place' : `Offer to ${activePlayer.name}`}</p>
             <h3 id="trade-title">Trade</h3>
             <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
@@ -815,132 +939,87 @@ export default function BoardGame({
           </header>
 
           <div className="property-card-body">
-            <section className="property-card-section">
-              <h4>With players</h4>
-              {isMyTurn ? (
-                <div className="cards-tabs" role="tablist" aria-label="Offer to">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={!tradeDraft.to}
-                    className={`cards-tab ${!tradeDraft.to ? 'cards-tab--active' : ''}`}
-                    onClick={() => setTradeDraft((draft) => ({ ...draft, to: null }))}
-                  >
-                    <span>Everyone</span>
-                  </button>
-                  {others.map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={tradeDraft.to === player.id}
-                      className={`cards-tab seat-${player.pieceKey} ${tradeDraft.to === player.id ? 'cards-tab--active' : ''}`}
-                      onClick={() => setTradeDraft((draft) => ({ ...draft, to: player.id }))}
-                    >
-                      <PieceMark piece={player.pieceKey} variant="token" />
-                      <span>
-                        {player.name} · {visibleHandSize(view.hands[player.id])}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="trade-note">Only the player whose turn it is can trade, so this offer goes to {activePlayer.name}</p>
-              )}
-
-              <div className="trade-columns">
-                <div>
-                  <p className="trade-side-title">You give</p>
-                  <BundlePicker
-                    value={tradeDraft.give}
-                    limits={myHand}
-                    label="You give"
-                    onChange={(next) => setTradeDraft((draft) => ({ ...draft, give: next }))}
-                  />
-                </div>
-                <div>
-                  <p className="trade-side-title">You get</p>
-                  <BundlePicker
-                    value={tradeDraft.get}
-                    label="You get"
-                    onChange={(next) => setTradeDraft((draft) => ({ ...draft, get: next }))}
-                  />
-                </div>
+            <div className="trade-columns">
+              <div>
+                <p className="trade-side-title">You give</p>
+                <BundlePicker
+                  value={tradeDraft.give}
+                  limits={myHand}
+                  label="You give"
+                  onChange={(next) => setTradeDraft((draft) => ({ ...draft, give: next }))}
+                />
               </div>
+              <span className="trade-swap" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 8h14l-4-4M20 16H6l4 4" />
+                </svg>
+              </span>
+              <div>
+                <p className="trade-side-title">You get</p>
+                <BundlePicker
+                  value={tradeDraft.get}
+                  label="You get"
+                  onChange={(next) => setTradeDraft((draft) => ({ ...draft, get: next }))}
+                />
+              </div>
+            </div>
 
-              {problem && bundleSize(give) + bundleSize(get) > 0 && <p className="trade-problem">{problem}</p>}
-
-              <div className="purchase-offer-actions">
-                <GoldButton
-                  disabled={Boolean(problem)}
-                  onClick={() => {
-                    act({ type: 'trade-propose', give, get, to: target });
-                    close();
-                  }}
+            <p className="trade-side-title trade-to-title">Trade with</p>
+            {isMyTurn ? (
+              <div className="trade-targets" role="radiogroup" aria-label="Trade with">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!tradeDraft.to}
+                  className={`trade-target ${!tradeDraft.to ? 'trade-target--active' : ''}`}
+                  onClick={() => setTo(null)}
                 >
-                  Send offer{target ? ` to ${nameOf(target)}` : ' to everyone'}
-                </GoldButton>
-              </div>
-              <p className="trade-note">No gifts, and never the same resource on both sides</p>
-            </section>
-
-            {isMyTurn && (
-              <section className="property-card-section">
-                <h4>With the bank</h4>
-                <p className="trade-note">
-                  4:1 always. A harbour gives 3:1, or 2:1 for its resource. Your rates:{' '}
-                  {RESOURCES.map((resource) => `${RESOURCE_LABELS[resource]} ${rates[resource]}:1`).join(' · ')}
-                </p>
-                <div className="bank-trade">
-                  <div className="resource-choice resource-choice--small" aria-label="Give">
-                    {RESOURCES.map((resource) => (
-                      <button
-                        key={resource}
-                        type="button"
-                        className={`resource-choice-btn res-${resource} ${bankGive === resource ? 'is-picked' : ''}`}
-                        disabled={myHand[resource] < rates[resource]}
-                        onClick={() => setBankDraft((draft) => ({ ...draft, give: resource }))}
-                      >
-                        <ResourceIcon resource={resource} size={18} />
-                        <span>
-                          {rates[resource]} {RESOURCE_LABELS[resource]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <span className="trade-swap" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M4 8h14l-4-4M20 16H6l4 4" />
-                    </svg>
-                  </span>
-                  <div className="resource-choice resource-choice--small" aria-label="Get">
-                    {RESOURCES.map((resource) => (
-                      <button
-                        key={resource}
-                        type="button"
-                        className={`resource-choice-btn res-${resource} ${bankDraft.get === resource ? 'is-picked' : ''}`}
-                        disabled={resource === bankGive || view.bank[resource] < 1}
-                        onClick={() => setBankDraft((draft) => ({ ...draft, get: resource }))}
-                      >
-                        <ResourceIcon resource={resource} size={18} />
-                        <span>1 {RESOURCE_LABELS[resource]}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="purchase-offer-actions">
-                  <GoldButton
-                    variant="ghost"
-                    disabled={!bankReady}
-                    onClick={() => act({ type: 'maritime', give: bankGive, get: bankDraft.get })}
+                  <strong>Everyone</strong>
+                  <span>Open offer</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={toBank}
+                  className={`trade-target trade-target--bank ${toBank ? 'trade-target--active' : ''} ${!bank.problem ? 'trade-target--ready' : ''}`}
+                  onClick={() => setTo('bank')}
+                >
+                  <strong>Bank</strong>
+                  <span>{best}:1{best < 4 ? ' with your harbour' : ''}</span>
+                </button>
+                {others.map((player) => (
+                  <button
+                    key={player.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={tradeDraft.to === player.id}
+                    className={`trade-target seat-${player.pieceKey} ${tradeDraft.to === player.id ? 'trade-target--active' : ''}`}
+                    onClick={() => setTo(player.id)}
                   >
-                    {bankReady
-                      ? `Trade ${bankRate} ${RESOURCE_LABELS[bankGive].toLowerCase()} for 1 ${RESOURCE_LABELS[bankDraft.get].toLowerCase()}`
-                      : 'Pick what to give and what to get'}
-                  </GoldButton>
-                </div>
-              </section>
+                    <strong>
+                      <PieceMark piece={player.pieceKey} variant="token" /> {player.name}
+                    </strong>
+                    <span>{visibleHandSize(view.hands[player.id])} cards</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="trade-note">Only the player whose turn it is can trade, so this offer goes to {activePlayer.name}</p>
             )}
+
+            {toBank && (
+              <p className="trade-note">
+                Your rates: {RESOURCES.map((resource) => `${RESOURCE_LABELS[resource]} ${rates[resource]}:1`).join(' · ')}
+              </p>
+            )}
+            {problem && bundleSize(give) + bundleSize(get) > 0 && <p className="trade-problem">{problem}</p>}
+
+            <div className="purchase-offer-actions">
+              <GoldButton disabled={Boolean(problem)} onClick={send}>
+                {toBank ? 'Trade with the bank' : `Send offer${target ? ` to ${nameOf(target)}` : ' to everyone'}`}
+              </GoldButton>
+            </div>
+            {!toBank && <p className="trade-note">No gifts, and never the same resource on both sides</p>}
           </div>
         </div>
       </div>
@@ -969,7 +1048,7 @@ export default function BoardGame({
               </svg>
             </span>
             <p className="property-card-kicker">
-              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${WINNING_POINTS} or more points`}
+              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${goal} or more points`}
             </p>
             <h3 id="results-title">{headline}</h3>
             <p className="results-sub">Every point counts, hidden victory point cards are now revealed</p>
@@ -1034,7 +1113,7 @@ export default function BoardGame({
         <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="info-title">
           <header className="property-card-header">
             <p className="property-card-kicker">{sheet === 'dice' ? 'Fair play' : 'Reference'}</p>
-            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'How the dice work'}</h3>
+            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'Dice and island'}</h3>
             <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
             </button>
@@ -1046,7 +1125,7 @@ export default function BoardGame({
                   <h4>1. Roll for resources</h4>
                   <p>
                     Every hex with the rolled number pays each settlement next to it 1 card and each city 2 cards, unless the
-                    robber sits on it. A 7 pays nothing: anyone with more than 7 cards discards half, then you move the robber
+                    robber sits on it. A 7 pays nothing: anyone with more than {rules.handLimit} cards discards half, then you move the robber
                     and steal a card.
                   </p>
                 </div>
@@ -1068,9 +1147,41 @@ export default function BoardGame({
                 <div className="property-card-section">
                   <h4>Winning</h4>
                   <p>
-                    The first player with {WINNING_POINTS} victory points on their own turn wins. Settlement 1, city 2, Longest
+                    The first player with {goal} victory points on their own turn wins. Settlement 1, city 2, Longest
                     Road (5+ roads) 2, Largest Army (3+ knights) 2, victory point card 1.
                   </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>This table</h4>
+                  <ul className="table-rules-list">
+                    <li>
+                      <span>Turn timer</span>
+                      <strong>
+                        {rules.turnSeconds
+                          ? `${timerLabel(rules.turnSeconds)} to roll, then ${timerLabel(rules.turnSeconds)} per move`
+                          : 'Off'}
+                      </strong>
+                    </li>
+                    <li>
+                      <span>Discard on a 7</span>
+                      <strong>More than {rules.handLimit} cards</strong>
+                    </li>
+                    <li>
+                      <span>Victory</span>
+                      <strong>{goal} points</strong>
+                    </li>
+                    {rules.board === 'random' && (
+                      <li>
+                        <span>Number tokens</span>
+                        <strong>
+                          {[
+                            rules.redsMayTouch ? '6 and 8 may touch' : '6 and 8 kept apart',
+                            rules.extremesMayTouch ? '2 and 12 may touch' : '2 and 12 kept apart',
+                          ].join(' · ')}
+                        </strong>
+                      </li>
+                    )}
+                  </ul>
                 </div>
               </>
             )}
@@ -1092,6 +1203,19 @@ export default function BoardGame({
                   Dice are rolled on the host with the cryptographically secure generator built into the browser, so every
                   roll is fair and unpredictable
                 </p>
+                {view.boardId && (
+                  <div className="property-card-section island-id">
+                    <h4>This island</h4>
+                    <p>
+                      <code className="island-code">Island {view.boardId}</code>
+                    </p>
+                    <p>
+                      {rules.board === 'random'
+                        ? 'Terrain, numbers and harbours were shuffled for this game with the same secure generator. The code is a SHA-256 fingerprint of the layout: a different island always gets a different code, so you can compare it with the islands of earlier games'
+                        : 'The beginners\u2019 map from the rulebook is always the same island, so it always has this code. Choose Random island before the game for a freshly shuffled one'}
+                    </p>
+                  </div>
+                )}
                 <div className="property-card-section">
                   <h4>Perfectly fair with rejection sampling</h4>
                   <p>
@@ -1126,14 +1250,6 @@ export default function BoardGame({
     return null;
   };
 
-  const steal = view.lastSteal;
-  const stealNote =
-    steal && steal.resource && steal.turn === view.turnCount && (steal.thief === myPlayerId || steal.victim === myPlayerId)
-      ? steal.thief === myPlayerId
-        ? `You stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from ${nameOf(steal.victim)}`
-        : `${nameOf(steal.thief)} stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from you`
-      : null;
-
   return (
     <main className="board-game-page">
       <header className="board-topbar">
@@ -1150,7 +1266,7 @@ export default function BoardGame({
             </>
           ) : null}
           <span>First to</span>
-          <strong>{WINNING_POINTS}</strong>
+          <strong>{goal}</strong>
           <span className="round-goal-long">victory points wins</span>
           <span className="round-goal-short">VP wins</span>
           <button
@@ -1205,17 +1321,23 @@ export default function BoardGame({
         </div>
       )}
 
+      <CardFlights events={view.events} me={myPlayerId} board={view.board} />
+
+      {me && (
+        <GameToasts view={view} myPlayerId={myPlayerId} act={act} players={players} myHand={myHand} localTime={localTime} />
+      )}
+
       <section className="board-game-layout">
         <aside className="board-side">
           <section className="player-panel" aria-label="Players">
             <div className="player-panel-head">
               <p className="eyebrow">The table</p>
               <span className="player-panel-goal">
-                <SunIcon size={14} /> {WINNING_POINTS} to win
+                <SunIcon size={14} /> {goal} to win
               </span>
             </div>
 
-            <div className="player-list">
+            <div className={`player-list ${players.length >= 5 ? 'player-list--compact' : ''}`}>
               {players.map((player, index) => {
                 const active = index === view.activeIndex && !over && phase !== 'setup';
                 const placing = phase === 'setup' && view.setup && players[view.setup.order[view.setup.step]]?.id === player.id;
@@ -1226,8 +1348,11 @@ export default function BoardGame({
                 const role = roleFor(player, myPlayerId);
                 return (
                   <article
-                    className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''}`}
+                    className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''} ${
+                      voice?.speaking(player.clientId || (player.id === 'p1' ? 'host' : null)) ? 'seat-card--speaking' : ''
+                    }`}
                     key={player.id}
+                    data-anchor={`seat-${player.id}`}
                   >
                     <div className="seat-card-head">
                       <span className="seat-avatar">
@@ -1248,8 +1373,8 @@ export default function BoardGame({
 
                       <span
                         className="vp-medal"
-                        style={{ '--vp': Math.min(1, points / WINNING_POINTS) }}
-                        title={`${points} of ${WINNING_POINTS} victory points${hidden ? `, ${hidden} hidden from the others` : ''}`}
+                        style={{ '--vp': Math.min(1, points / goal) }}
+                        title={`${points} of ${goal} victory points${hidden ? `, ${hidden} hidden from the others` : ''}`}
                       >
                         <svg viewBox="0 0 40 40" aria-hidden="true">
                           <circle className="vp-medal-track" cx="20" cy="20" r="17" />
@@ -1297,6 +1422,18 @@ export default function BoardGame({
                       )}
                     </div>
 
+                    {(active || placing) && phase !== 'discard' && view.phaseEndsAt && view.phaseLength && (
+                      <span
+                        key={view.phaseEndsAt}
+                        className="seat-clock"
+                        aria-hidden="true"
+                        style={{
+                          '--clock-from': Math.min(1, Math.max(0, (phaseEndsAt - Date.now()) / view.phaseLength)),
+                          '--clock-ms': `${Math.max(0, phaseEndsAt - Date.now())}ms`,
+                        }}
+                      />
+                    )}
+
                     {player.kind === 'ai' && view.aiUsage?.[player.id] && (
                       <p className="ai-usage" title="Claude calls and tokens this game">
                         Claude {Math.min(view.aiUsage[player.id].calls, AI_CALL_BUDGET)}/{AI_CALL_BUDGET} calls ·{' '}
@@ -1308,7 +1445,7 @@ export default function BoardGame({
               })}
             </div>
 
-            <div className="bank-row" aria-label="The bank">
+            <div className="bank-row" aria-label="The bank" data-anchor="bank">
               <span className="bank-row-label">Bank</span>
               {RESOURCES.map((resource) => (
                 <span key={resource} className={`bank-chip res-${resource}`} title={`${view.bank[resource]} ${RESOURCE_LABELS[resource]} left`}>
@@ -1323,6 +1460,7 @@ export default function BoardGame({
             </div>
           </section>
 
+          {session && <VoicePanel session={session} compact />}
           {session && <ChatPanel session={session} compact />}
 
           <section className="activity-log" aria-label="Activity log">
@@ -1345,7 +1483,8 @@ export default function BoardGame({
           </section>
         </aside>
 
-        <section className="game-board-area catan-board-area" aria-label="Catan game board">
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+        <section className="game-board-area catan-board-area" aria-label="Catan game board" onClick={onBoardClick}>
           <p className="board-prompt" aria-live="polite">
             {prompt}
           </p>
@@ -1358,6 +1497,8 @@ export default function BoardGame({
             onVertex={onVertex}
             onEdge={onEdge}
             onHex={onHex}
+            selected={pending}
+            myPiece={me?.pieceKey}
             rolled={phase === 'actions' && rolledTotal !== 7 ? rolledTotal : null}
           />
 
@@ -1456,23 +1597,27 @@ export default function BoardGame({
             aria-live="polite"
             aria-label={view.dice ? `Rolled ${view.dice[0]} and ${view.dice[1]}` : 'Dice ready'}
           >
-            <div className="dice-pair">
-              <DieFace value={view.dice?.[0]} />
-              <DieFace value={view.dice?.[1]} />
-            </div>
+            <Dice3D dice={view.dice} rolling={view.rolling} rollKey={view.dice ? `${view.turnCount}:${view.dice.join('-')}` : null} />
             <span className="dice-total">
-              {view.dice ? `Total ${view.dice[0] + view.dice[1]}` : view.rolling ? 'Rolling' : 'Ready to roll'}
+              {view.dice && !view.rolling ? (
+                <span key={`${view.turnCount}:${view.dice.join('-')}`} className="dice-total-badge">
+                  Total {view.dice[0] + view.dice[1]}
+                </span>
+              ) : view.rolling ? (
+                'Rolling'
+              ) : (
+                'Ready to roll'
+              )}
             </span>
           </div>
 
           {view.phaseEndsAt && !over && (
-            <Countdown
+            <TurnClock
               endsAt={phaseEndsAt}
-              render={(seconds, left) => (
-                <p className={`phase-timer ${left < 15000 ? 'phase-timer--urgent' : ''}`} aria-live="off">
-                  {seconds} s left for this move
-                </p>
-              )}
+              length={view.phaseLength}
+              label={clockLabel}
+              mine={clockIsMine}
+              sound={tickSound}
             />
           )}
 
@@ -1483,7 +1628,7 @@ export default function BoardGame({
           ) : canBuildNow ? (
             <GoldButton
               onClick={() => {
-                setMode(null);
+                pick(null);
                 act({ type: 'end-turn' });
               }}
             >
@@ -1505,107 +1650,82 @@ export default function BoardGame({
             </GoldButton>
           )}
 
-          {stealNote && <p className="private-note">{stealNote}</p>}
-
           {me && (
-            <section className="hand-panel" aria-label="Your cards">
+            <section className="hand-panel" aria-label="Your cards" data-anchor="hand">
               <div className="hand-head">
                 <p className="eyebrow">Your hand</p>
                 <span className="hand-points">
-                  {myPoints} VP{hiddenPoints(view, myPlayerId) ? ` (${hiddenPoints(view, myPlayerId)} hidden)` : ''}
+                  {bundleSize(myHand)} card{bundleSize(myHand) === 1 ? '' : 's'} · {myPoints} VP
+                  {hiddenPoints(view, myPlayerId) ? ` (${hiddenPoints(view, myPlayerId)} hidden)` : ''}
                 </span>
               </div>
-              <ul className="hand-cards">
-                {RESOURCES.map((resource) => (
-                  <li key={resource} className={`hand-card res-${resource} ${myHand[resource] ? '' : 'hand-card--empty'}`}>
-                    <ResourceIcon resource={resource} size={20} />
-                    <strong>{myHand[resource]}</strong>
-                    <span>{RESOURCE_LABELS[resource]}</span>
-                  </li>
-                ))}
-              </ul>
+              <ResourceRow hand={myHand} />
+              <DevRow
+                cards={myDev}
+                turnCount={view.turnCount}
+                canPlay={canPlayDev}
+                playable={playableDev}
+                onPlay={(type) => choose('play', type, () => playDev(type))}
+                selected={pending?.kind === 'play' ? pending.id : null}
+                deck={
+                  canBuildNow
+                    ? {
+                        left: deckLeft,
+                        ready: hasResources(myHand, COSTS.dev) && deckLeft > 0,
+                        selected: pending?.kind === 'dev',
+                        onBuy: () => choose('dev', 'deck', () => act({ type: 'buy-dev' })),
+                      }
+                    : null
+                }
+              />
+              {view.devPlayedThisTurn && isMyTurn && myDev.length > 0 && (
+                <p className="trade-note">One development card per turn, already played</p>
+              )}
             </section>
           )}
 
           {canBuildNow && (
-            <section className={`build-panel seat-${me.pieceKey}`} aria-label="Build">
-              <p className="eyebrow">Build</p>
-              {[
-                ['road', 'Road', COSTS.road, left.road, legalRoadSpots(view, myPlayerId).length],
-                ['settlement', 'Settlement', COSTS.settlement, left.settlement, legalSettlementSpots(view, myPlayerId).length],
-                ['city', 'City', COSTS.city, left.city, legalCitySpots(view, myPlayerId).length],
-              ].map(([key, label, cost, piecesRemaining, spots]) => {
-                const affordable = hasResources(myHand, cost);
-                const disabled = !affordable || piecesRemaining <= 0 || spots === 0;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`build-option ${mode === key ? 'build-option--active' : ''}`}
-                    disabled={disabled}
-                    aria-pressed={mode === key}
-                    onClick={() => setMode((current) => (current === key ? null : key))}
-                    title={
-                      !affordable ? 'Not enough resources' : piecesRemaining <= 0 ? 'No pieces left' : spots === 0 ? 'Nowhere to build' : ''
-                    }
-                  >
-                    <BuildArt kind={key} />
-                    <span className="build-option-text">
-                      <strong>{label}</strong>
-                      <em>{piecesRemaining} left</em>
-                    </span>
-                    <CostChips cost={cost} size={20} />
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                className="build-option"
-                disabled={!hasResources(myHand, COSTS.dev) || deckLeft === 0}
-                onClick={() => act({ type: 'buy-dev' })}
-              >
-                <BuildArt kind="dev" />
-                <span className="build-option-text">
-                  <strong>Development card</strong>
-                  <em>{deckLeft} left</em>
-                </span>
-                <CostChips cost={COSTS.dev} size={20} />
-              </button>
-            </section>
-          )}
-
-          {myDev.length > 0 && (
-            <section className="dev-panel" aria-label="Your development cards">
-              <p className="eyebrow">Development cards</p>
+            <section className={`build-guide seat-${me.pieceKey}`} aria-label="Build">
+              <div className="build-guide-head">
+                <p className="eyebrow">Build on the board</p>
+                <span>Tap a spot, tap again</span>
+              </div>
               <ul>
-                {myDev.map((card) => {
-                  const info = DEV_CARDS[card.type];
-                  const fresh = card.boughtTurn === view.turnCount;
-                  const playable = canPlayDev && card.type !== 'victoryPoint' && !fresh && playableDev.includes(card);
+                {[
+                  ['road', 'Road', COSTS.road, left.road, legalRoadSpots(view, myPlayerId).length],
+                  ['settlement', 'Settlement', COSTS.settlement, left.settlement, legalSettlementSpots(view, myPlayerId).length],
+                  ['city', 'City', COSTS.city, left.city, legalCitySpots(view, myPlayerId).length],
+                ].map(([key, label, cost, piecesRemaining, spots]) => {
+                  const ready = hasResources(myHand, cost) && piecesRemaining > 0 && spots > 0;
                   return (
-                    <li key={card.id} className={`dev-card dev-card--${info?.kind}`}>
-                      <div>
-                        <strong>{info?.label}</strong>
-                        <span>{info?.text}</span>
-                      </div>
-                      {card.type === 'victoryPoint' ? (
-                        <em>Counts automatically</em>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-link"
-                          disabled={!playable}
-                          onClick={() => playDev(card.type)}
-                          aria-label={fresh ? `${info?.label}, playable next turn` : `Play ${info?.label}`}
-                        >
-                          {fresh ? 'Next turn' : 'Play'}
-                        </button>
-                      )}
+                    <li key={key}>
+                      <button
+                        type="button"
+                        className={`build-chip ${ready ? 'build-chip--ready' : ''} ${focus === key ? 'build-chip--focus' : ''}`}
+                        disabled={!ready}
+                        aria-pressed={focus === key}
+                        onClick={() => setFocus((current) => (current === key ? null : key))}
+                        title={
+                          ready
+                            ? `Show only where a ${label.toLowerCase()} can go`
+                            : !hasResources(myHand, cost)
+                              ? 'Not enough resources'
+                              : piecesRemaining <= 0
+                                ? 'No pieces left'
+                                : 'Nowhere to build'
+                        }
+                      >
+                        <BuildArt kind={key} size={20} />
+                        <span className="build-chip-name">
+                          {label}
+                          <em>{piecesRemaining} left</em>
+                        </span>
+                        <CostChips cost={cost} size={14} />
+                      </button>
                     </li>
                   );
                 })}
               </ul>
-              {view.devPlayedThisTurn && isMyTurn && <p className="trade-note">One development card per turn, already played</p>}
             </section>
           )}
 
@@ -1637,6 +1757,9 @@ export default function BoardGame({
                             <span className="trade-note">
                               {Object.values(trade.responses || {}).length ? 'Declined so far' : 'Waiting for answers'}
                             </span>
+                          )}
+                          {accepters.length === 1 && !trade.to && !trade.choosing && (
+                            <span className="trade-note">Trading in a moment</span>
                           )}
                           <button type="button" className="text-link" onClick={() => act({ type: 'trade-cancel', tradeId: trade.id })}>
                             Withdraw
@@ -1702,7 +1825,7 @@ export default function BoardGame({
               Building costs
             </button>
             <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
-              How the dice work
+              Fair play{view.boardId ? ` · Island ${view.boardId.slice(0, 4)}` : ''}
             </button>
             {/* Phones hide the top bar's goal pill, so the turn guide lives here too */}
             <button type="button" className="dice-info-button dice-info-button--rules" onClick={() => setSheet('rules')}>

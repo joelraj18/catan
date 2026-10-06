@@ -3,13 +3,15 @@
 // Bots never peek at hidden cards except their own (opponents count only by
 // hand size and public points).
 
-import { GEOMETRY, PIPS, RESOURCES, TERRAINS } from './catanBoard';
+import { PIPS, RESOURCES, TERRAINS } from './catanBoard';
+import { handLimitOf, victoryPointsOf } from './gameSettings';
 import {
   COSTS,
   canBuildCity,
   canPlaceRoad,
   canPlaceSettlement,
   discardCount,
+  geoOf,
   handSize,
   hasResources,
   legalCitySpots,
@@ -32,7 +34,7 @@ export const productionProfile = (state, playerId) => {
   const profile = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
   Object.entries(state.buildings).forEach(([vertexId, building]) => {
     if (building.owner !== playerId) return;
-    GEOMETRY.vertices[vertexId].hexes.forEach((hexId) => {
+    geoOf(state).vertices[vertexId].hexes.forEach((hexId) => {
       const hex = state.board.hexes[hexId];
       const resource = TERRAINS[hex.terrain].resource;
       if (resource && hex.number) profile[resource] += PIPS[hex.number] * (building.type === 'city' ? 2 : 1);
@@ -79,11 +81,11 @@ export const chooseSetupSettlement = (state, playerId) => rankSetupSettlements(s
 export const chooseSetupRoad = (state, playerId, fromVertex) => {
   const options = legalRoadSpots(state, playerId, { fromVertex });
   return best(options, (edgeId) => {
-    const [a, b] = GEOMETRY.edges[edgeId].vertices;
+    const [a, b] = geoOf(state).edges[edgeId].vertices;
     const far = a === fromVertex ? b : a;
-    const next = GEOMETRY.vertices[far].neighbours.filter((v) => v !== fromVertex);
+    const next = geoOf(state).vertices[far].neighbours.filter((v) => v !== fromVertex);
     const reach = next.map((v) => (canPlaceSettlement(state, playerId, v, { setup: true }) ? vertexScore(state, v) : 0));
-    return Math.max(0, ...reach) + GEOMETRY.vertices[far].hexes.length * 0.3;
+    return Math.max(0, ...reach) + geoOf(state).vertices[far].hexes.length * 0.3;
   });
 };
 
@@ -97,7 +99,7 @@ export const rankRobberHexes = (state, playerId) =>
     .map((hex) => {
       let score = 0;
       let mine = false;
-      GEOMETRY.hexes[hex.id].vertices.forEach((vertexId) => {
+      geoOf(state).hexes[hex.id].vertices.forEach((vertexId) => {
         const building = state.buildings[vertexId];
         if (!building) return;
         if (building.owner === playerId) {
@@ -299,7 +301,7 @@ export const bestSettlementSpot = (state, playerId) =>
 export const bestCitySpot = (state, playerId) => best(legalCitySpots(state, playerId), (v) => vertexScore(state, v));
 
 export const robberOnMe = (state, playerId) =>
-  GEOMETRY.hexes[state.board.robber].vertices.some((vertexId) => state.buildings[vertexId]?.owner === playerId);
+  geoOf(state).hexes[state.board.robber].vertices.some((vertexId) => state.buildings[vertexId]?.owner === playerId);
 
 // Plays a knight before rolling when the robber sits on one of its hexes.
 export const wantsKnightBeforeRoll = (state, playerId) =>
@@ -309,7 +311,7 @@ export const wantsKnightBeforeRoll = (state, playerId) =>
 
 // Keeps the cards the next build needs, throws away surplus first.
 export const chooseDiscard = (state, playerId) => {
-  const count = discardCount(handOf(state, playerId));
+  const count = state.pendingDiscards?.[playerId] ?? discardCount(handOf(state, playerId), handLimitOf(state));
   const hand = { ...handOf(state, playerId) };
   const goal = chooseGoal(state, playerId);
   const keep = goal ? goal.cost : {};
@@ -335,7 +337,7 @@ export const tradeValue = (state, playerId, trade) => {
   const hand = handOf(state, playerId);
 
   if (!hasResources(hand, paying)) return { blocked: true, margin: -Infinity };
-  if (partner && publicPoints(state, partner) >= 8) return { blocked: true, margin: -Infinity };
+  if (partner && publicPoints(state, partner) >= victoryPointsOf(state) - 2) return { blocked: true, margin: -Infinity };
 
   const goal = chooseGoal(state, playerId);
   const need = goal ? missingFor(hand, goal.cost) : {};

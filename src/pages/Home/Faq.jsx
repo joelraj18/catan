@@ -7,7 +7,7 @@ const questions = [
   },
   {
     q: 'How many players can play?',
-    a: 'Catan is played by 3 or 4 players. Fill any open seat with a computer opponent, or a premium AI opponent if you have a Claude API key',
+    a: 'Catan is played by 2 to 6 players; with 5 or 6 the island grows to the 30 hexes of the extension, with a bigger bank and development deck. Fill any open seat with a computer opponent, or a premium AI opponent if you have a Claude API key',
   },
   {
     q: 'How does the premium AI opponent work?',

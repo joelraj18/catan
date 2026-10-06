@@ -197,7 +197,7 @@ export default function Game() {
         players={match.players}
         myPlayerId={match.myPlayerId}
         resume={match.resume}
-        boardMode={match.options?.board || match.resume?.options?.board || 'beginner'}
+        settings={match.resume?.options || match.options || null}
         session={session}
         audio={audio}
         onAudio={updateAudio}

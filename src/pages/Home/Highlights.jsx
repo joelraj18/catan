@@ -4,7 +4,7 @@ import FeatureCard from '../../components/FeatureCard';
 import Icon from '../../components/Icon';
 
 const stats = [
-  { value: '3 to 4', label: 'Players at one table' },
+  { value: '2 to 6', label: 'Players at one table' },
   { value: '19', label: 'Terrain hexes on the island' },
   { value: String(NUMBER_BAG.length), label: 'Number tokens, 2 to 12' },
   { value: String(RESOURCES.length * BANK_SIZE), label: 'Resource cards in the bank' },

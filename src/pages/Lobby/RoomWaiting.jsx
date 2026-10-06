@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ApiKeyInfo from '../../components/ApiKeyInfo';
 import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
+import VoicePanel from '../../components/VoicePanel';
 import GoldButton from '../../components/GoldButton';
 import ThemeToggle from '../../components/ThemeToggle';
 import {
@@ -13,6 +14,13 @@ import {
 } from '../../services/premiumAi';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../services/roomSession';
 import { PIECES, PieceMark } from '../Game/pieces.jsx';
+import {
+  DEFAULT_SETTINGS,
+  HAND_LIMIT_CHOICES,
+  TIMER_CHOICES,
+  VICTORY_CHOICES,
+  timerLabel,
+} from '../Game/gameSettings';
 import '../Game/board-game.css';
 import './lobby.css';
 import './room-waiting.css';
@@ -226,6 +234,7 @@ export default function RoomWaiting({ session, onLeave }) {
             </p>
           )}
 
+          <VoicePanel session={session} />
           <ChatPanel session={session} title="Room chat" />
         </div>
 
@@ -244,8 +253,8 @@ export default function RoomWaiting({ session, onLeave }) {
           {isHost && (
             <div className="seat-count-section">
               <span className="field-label">Table size</span>
-              <div className="seat-count-picker">
-                {[3, 4].map((count) => (
+              <div className="seat-count-picker settings-picker">
+                {[2, 3, 4, 5, 6].map((count) => (
                   <button
                     key={count}
                     type="button"
@@ -254,7 +263,7 @@ export default function RoomWaiting({ session, onLeave }) {
                     disabled={count < seats.length}
                     aria-pressed={lobby.tableSize === count}
                   >
-                    {count} Players
+                    {count}
                   </button>
                 ))}
               </div>
@@ -291,6 +300,12 @@ export default function RoomWaiting({ session, onLeave }) {
                 : 'The balanced map from the rulebook, with every starting settlement and road already placed'}
             </p>
           </div>
+
+          <GameSettings
+            settings={{ ...DEFAULT_SETTINGS, ...(lobby.settings || {}), board: lobby.board || 'beginner' }}
+            isHost={isHost}
+            onChange={(patch) => session.setSettings(patch)}
+          />
 
           <div className="player-seat-list">
             {seats.map((seat, index) => {
@@ -465,7 +480,7 @@ export default function RoomWaiting({ session, onLeave }) {
                 {isHost
                   ? seats.length < MIN_PLAYERS
                     ? `Wait for friends or add opponents to the open seats, Catan needs ${MIN_PLAYERS} to ${MAX_PLAYERS} players`
-                    : `Start with ${seats.length} players, the first to 10 victory points on their turn wins`
+                    : `Start with ${seats.length} players, the first to ${lobby.settings?.victoryPoints || 10} victory points on their turn wins`
                   : 'Waiting for the host to start the game'}
               </span>
             </div>
@@ -481,5 +496,77 @@ export default function RoomWaiting({ session, onLeave }) {
 
       {showKeyInfo && <ApiKeyInfo onClose={() => setShowKeyInfo(false)} />}
     </main>
+  );
+}
+
+// The table rules the host sets before the game; guests see them as a summary.
+function GameSettings({ settings, isHost, onChange }) {
+  const random = settings.board === 'random';
+
+  if (!isHost) {
+    return (
+      <div className="seat-count-section game-settings">
+        <span className="field-label">Table rules</span>
+        <ul className="settings-summary">
+          <li>Timer {timerLabel(settings.turnSeconds)}</li>
+          <li>Discard above {settings.handLimit}</li>
+          <li>{settings.victoryPoints} points to win</li>
+          {random && <li>{settings.redsMayTouch ? '6 & 8 may touch' : '6 & 8 apart'}</li>}
+          {random && <li>{settings.extremesMayTouch ? '2 & 12 may touch' : '2 & 12 apart'}</li>}
+        </ul>
+      </div>
+    );
+  }
+
+  const segment = (label, key, choices, format = (value) => value, note = null) => (
+    <div className="settings-row">
+      <span className="settings-label">
+        {label}
+        {note && <em>{note}</em>}
+      </span>
+      <div className="seat-count-picker settings-picker" role="group" aria-label={label}>
+        {choices.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            className={`seat-count-btn ${settings[key] === choice ? 'seat-count-btn--selected' : ''}`}
+            aria-pressed={settings[key] === choice}
+            onClick={() => onChange({ [key]: choice })}
+          >
+            {format(choice)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const toggle = (label, key, note) => (
+    <label className={`settings-toggle ${random ? '' : 'settings-toggle--off'}`}>
+      <input
+        type="checkbox"
+        checked={settings[key]}
+        disabled={!random}
+        onChange={(event) => onChange({ [key]: event.target.checked })}
+      />
+      <span className="settings-switch" aria-hidden="true" />
+      <span className="settings-toggle-text">
+        <strong>{label}</strong>
+        <em>{note}</em>
+      </span>
+    </label>
+  );
+
+  return (
+    <div className="seat-count-section game-settings">
+      <span className="field-label">Table rules</span>
+      {segment('Turn timer', 'turnSeconds', TIMER_CHOICES, timerLabel, 'to roll, then per move')}
+      {segment('Discard on a 7 above', 'handLimit', HAND_LIMIT_CHOICES, (value) => `${value} cards`)}
+      {segment('Points to win', 'victoryPoints', VICTORY_CHOICES)}
+      <div className="settings-toggles">
+        {toggle('6 and 8 may touch', 'redsMayTouch', 'Red numbers side by side make rich, swingy spots')}
+        {toggle('2 and 12 may touch', 'extremesMayTouch', 'Off keeps the rarest numbers apart')}
+      </div>
+      {!random && <p className="board-choice-note">Number rules apply to the random island</p>}
+    </div>
   );
 }

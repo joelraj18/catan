@@ -26,15 +26,16 @@ const hostSession = () => {
 };
 
 describe('room session', () => {
-  test('Catan tables seat 3 to 4 players', () => {
-    expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([3, 4]);
+  test('Catan tables seat 2 to 6 players, 3 to begin with', () => {
+    expect([MIN_PLAYERS, MAX_PLAYERS]).toEqual([2, 6]);
     const session = new RoomSession('host');
     session.started = false;
     session.publishLobby = jest.fn();
-    session.setTableSize(2);
     expect(session.lobby.tableSize).toBe(3);
-    session.setTableSize(6);
-    expect(session.lobby.tableSize).toBe(4);
+    session.setTableSize(1);
+    expect(session.lobby.tableSize).toBe(2);
+    session.setTableSize(9);
+    expect(session.lobby.tableSize).toBe(6);
   });
 
   test('the host picks the board, which travels with the start', () => {
@@ -46,6 +47,27 @@ describe('room session', () => {
     expect(session.lobby.board).toBe('random');
     session.setBoard('anything');
     expect(session.lobby.board).toBe('beginner');
+  });
+
+  test('the host sets the table rules, which are checked and travel with the start', () => {
+    const session = new RoomSession('host');
+    session.publishLobby = jest.fn();
+    session.transport = { send: jest.fn(), broadcast: jest.fn() };
+    session.setBoard('random');
+    session.setSettings({ turnSeconds: 45, handLimit: 9, victoryPoints: 12, redsMayTouch: true, extremesMayTouch: false });
+    session.setSettings({ turnSeconds: 3, handLimit: 'many' }); // not on offer: back to the defaults
+    expect(session.lobby.settings).toMatchObject({ board: 'random', turnSeconds: 15, handLimit: 7, victoryPoints: 12, redsMayTouch: true });
+
+    session.lobby.seats = [
+      { seatId: 'host', name: 'Host', pieceKey: 'red', kind: 'human', clientId: 'host' },
+      { seatId: 'bot-1', name: 'Computer 1', pieceKey: 'blue', kind: 'bot', clientId: null },
+      { seatId: 'bot-2', name: 'Computer 2', pieceKey: 'white', kind: 'bot', clientId: null },
+    ];
+    const started = jest.fn();
+    session.on('start', started);
+    session.startGame();
+    clearInterval(session.beatTimer);
+    expect(started.mock.calls[0][0].options).toMatchObject({ board: 'random', victoryPoints: 12, extremesMayTouch: false });
   });
 
   test('each friend receives only their own cards', () => {

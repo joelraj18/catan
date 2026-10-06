@@ -4,8 +4,8 @@
 .res-brick { color: var(--res-brick); }
 .res-lumber { color: var(--res-lumber); }
 .res-ore { color: var(--res-ore); }
-.res-grain { color: #b88a12; }
-.res-wool { color: #5e9a2c; }
+.res-grain { color: var(--res-grain); }
+.res-wool { color: var(--res-wool); }
 
 .hex-board {
   display: block;
@@ -18,11 +18,6 @@
   contain: paint;
 }
 
-/* The dark theme's neon edge: every tile outline, blurred once, in one layer */
-.hex-glow {
-  display: none;
-  pointer-events: none;
-}
 
 .hex-tile {
   --glow: var(--terrain-desert);
@@ -67,9 +62,33 @@
 }
 
 .hex-tile-face {
-  stroke: #f3e7bf;
-  stroke-width: 3;
+  stroke: #f7eccb;
+  stroke-width: 4;
   stroke-linejoin: round;
+}
+
+/* The tile's resource symbol, in a tone of the tile's own colour */
+.hex-tile-glyph {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.hex-tile--forest .hex-tile-glyph { color: #173f1d; }
+.hex-tile--hills .hex-tile-glyph { color: #7c2c0e; }
+.hex-tile--mountains .hex-tile-glyph { color: #39434f; }
+.hex-tile--fields .hex-tile-glyph { color: #8a5f00; }
+.hex-tile--pasture .hex-tile-glyph { color: #2f5a17; }
+
+.hex-tile--fields .resource-icon-light,
+.hex-tile--fields .resource-icon-line {
+  fill: #fff6d6;
+  stroke: #fff6d6;
+}
+
+.hex-tile--pasture .hex-tile-glyph .resource-icon-fleece {
+  fill: #ffffff;
+  fill-opacity: 1;
+  stroke: #2f5a17;
 }
 
 .hex-tile--producing .hex-tile-face {
@@ -170,16 +189,17 @@
 }
 
 .number-token-face {
-  fill: #f8f0d8;
-  stroke: #c8b27a;
-  stroke-width: 1.5;
+  fill: #fbf4df;
+  stroke: #d6c18c;
+  stroke-width: 1.6;
 }
 
 .number-token text {
-  fill: #2c2a24;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 17px;
-  font-weight: 700;
+  fill: #2b2924;
+  font-family: var(--font);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .number-token-pip {
@@ -223,31 +243,6 @@
 
 .harbor-icon {
   pointer-events: none;
-}
-
-.robber path {
-  fill: #50545b;
-  stroke: #2f3237;
-  stroke-width: 1.5;
-}
-
-.robber-shadow {
-  fill: rgba(0, 0, 0, 0.28);
-}
-
-.robber {
-  animation: robberDrop 0.45s var(--ease-spring);
-}
-
-@keyframes robberDrop {
-  from {
-    opacity: 0;
-    transform: translateY(-14px);
-  }
-}
-
-.road line:last-child {
-  animation: pieceIn 0.35s var(--ease-out);
 }
 
 .building-shadow {
@@ -310,85 +305,513 @@
   }
 }
 
-/* Dark theme: a moonlit island with a faint neon edge. Glows are small and
-   low in opacity so the board stays calm. */
+/* Dark theme: the same island at dusk. The tiles keep their hues, a little
+   deeper, on a calm slate sea; no glows, so nothing strains the eyes. */
 
 [data-theme='dark'] .hex-board-sea {
-  stroke: rgba(57, 255, 136, 0.35);
+  stroke: rgba(255, 255, 255, 0.12);
   stroke-width: 2;
 }
 
-[data-theme='dark'] .hex-glow {
-  display: inline;
-  opacity: 0.75;
-}
-
 [data-theme='dark'] .hex-board-sand {
-  fill: #a8976a;
-  stroke: rgba(120, 230, 255, 0.45);
-  stroke-width: 2.5;
-  filter: none;
+  fill: #b8a678;
+  stroke: #9d8c60;
+  stroke-width: 2;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
 }
 
 [data-theme='dark'] .hex-board {
-  --terrain-hills: #b65a32;
-  --terrain-forest: #2f7038;
-  --terrain-mountains: #7a828c;
-  --terrain-fields: #d4a935;
-  --terrain-pasture: #86bd52;
-  --terrain-desert: #cdb683;
+  --terrain-hills: #c65f35;
+  --terrain-forest: #2b7136;
+  --terrain-mountains: #7d8896;
+  --terrain-fields: #dcac28;
+  --terrain-pasture: #80ba45;
+  --terrain-desert: #cdb886;
 }
 
 [data-theme='dark'] .hex-tile-face {
-  stroke: color-mix(in srgb, var(--glow) 55%, #c9ffe0);
-  stroke-width: 2.4;
-}
-
-[data-theme='dark'] .hex-tile-bevel {
-  stroke: color-mix(in srgb, var(--glow) 45%, rgba(255, 255, 255, 0.35));
-  stroke-opacity: 0.55;
+  stroke: #d9cfae;
+  stroke-width: 3.5;
 }
 
 [data-theme='dark'] .hex-tile--producing .hex-tile-face {
-  stroke: #eafff2;
-  stroke-width: 5;
-  filter: brightness(1.15);
+  stroke: #fff4c4;
+  stroke-width: 6;
+  filter: brightness(1.12);
+}
+
+[data-theme='dark'] .number-token-face {
+  fill: #f1e9d2;
 }
 
 [data-theme='dark'] .harbor circle {
-  stroke: rgba(120, 230, 255, 0.85);
-  stroke-width: 2.4;
+  fill: #efe4c6;
+  stroke: #8a6d3b;
 }
 
 [data-theme='dark'] .spot--vertex {
-  stroke: var(--neon);
+  stroke: #5fd394;
 }
 
 [data-theme='dark'] .spot--edge {
-  stroke: color-mix(in srgb, var(--neon) 70%, white);
+  stroke: rgba(255, 255, 255, 0.85);
 }
 
 [data-theme='dark'] .hex-tile--target .hex-tile-face {
-  stroke: var(--neon);
+  stroke: #ffffff;
 }
 
-[data-theme='dark'] .robber path {
-  fill: #6b7079;
-  stroke: rgba(255, 120, 120, 0.7);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .spot--vertex,
   .spot--edge,
   .hex-tile--target .hex-tile-face,
-  .building--upgradable path,
-  .robber {
+  .building--upgradable path {
     animation: none;
   }
 }
 
-[data-theme='dark'] .res-grain { color: #e8c04e; }
-[data-theme='dark'] .res-wool { color: #9fd36b; }
-[data-theme='dark'] .res-ore { color: #a9b1bc; }
-[data-theme='dark'] .res-brick { color: #e07a52; }
-[data-theme='dark'] .res-lumber { color: #5fb36b; }
+[data-theme='dark'] {
+  --res-grain: #eac04e;
+  --res-wool: #a5d66f;
+  --res-ore: #aab4c0;
+  --res-brick: #ea8059;
+  --res-lumber: #67bb72;
+}
+
+/* Resource symbols: the light parts and lines read on any background */
+.resource-icon-light {
+  fill: #ffffff;
+  fill-opacity: 0.5;
+}
+
+.resource-icon-line {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.55;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resource-icon-cut {
+  fill: #f6dfae;
+}
+
+.resource-icon-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-opacity: 0.7;
+  stroke-width: 0.9;
+}
+
+.resource-icon-stem {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.resource-icon-fleece {
+  fill-opacity: 0.55;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+
+/* Building on the board: everything you can afford shows softly; a first
+   tap picks a spot and shows the piece, a second tap builds it */
+
+.hex-board--browse .spot--vertex {
+  r: 7.5;
+  fill: rgba(255, 255, 255, 0.82);
+  stroke-width: 2.5;
+  animation: none;
+}
+
+.hex-board--browse .spot--edge {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-dasharray: 5 5;
+  stroke-width: 6;
+  animation: none;
+}
+
+.hex-board--browse .spot--edge:hover,
+.hex-board--browse .spot--edge:focus-visible {
+  stroke: #ffffff;
+  stroke-dasharray: none;
+}
+
+.hex-board--browse .building--upgradable {
+  animation: none;
+}
+
+.hex-board--browse .building--upgradable path:last-child {
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  stroke-dasharray: 3 2;
+}
+
+.spot--picked {
+  stroke: transparent !important;
+  stroke-width: 18;
+  animation: none;
+}
+
+.ghost {
+  pointer-events: none;
+  opacity: 0.85;
+  animation: ghostPulse 1.1s ease-in-out infinite alternate;
+}
+
+.spot--ghost {
+  cursor: pointer;
+  outline: none;
+  animation: ghostPulse 1.1s ease-in-out infinite alternate;
+}
+
+.spot-halo {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.building--picked {
+  animation: ghostPulse 1.1s ease-in-out infinite alternate !important;
+}
+
+.building--picked path:last-child {
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-dasharray: none;
+}
+
+.hex-tile--picked .hex-tile-face {
+  stroke: #ffffff;
+  stroke-dasharray: none;
+  stroke-width: 6;
+  filter: brightness(1.12);
+}
+
+.confirm-chip {
+  pointer-events: none;
+  animation: chipIn 0.22s var(--ease-out);
+}
+
+.confirm-chip rect {
+  fill: rgba(24, 28, 34, 0.9);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.2;
+}
+
+.confirm-chip text {
+  fill: #ffffff;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+@keyframes ghostPulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.6;
+  }
+}
+
+/* Opacity only: the chip's place is its SVG transform */
+@keyframes chipIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost,
+  .spot--ghost,
+  .building--picked,
+  .confirm-chip {
+    animation: none !important;
+  }
+}
+
+/* The robber: a small dragon, asleep on the hex it blocks */
+
+.dragon {
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dragon-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+}
+
+.dragon-skin,
+.dragon-tail-tip {
+  fill: #5b4a8b;
+  stroke: #33285a;
+  stroke-width: 1.2;
+}
+
+.dragon-tail {
+  fill: none;
+  stroke: #5b4a8b;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.dragon-belly {
+  fill: #d8c9f5;
+}
+
+.dragon-spikes,
+.dragon-horn {
+  fill: #f3e6c4;
+  stroke: #8d7a4c;
+  stroke-width: 0.6;
+}
+
+.dragon-wing {
+  fill: #8a72cf;
+  stroke: #33285a;
+  stroke-width: 1;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: 20% 100%;
+}
+
+.dragon-wing--back {
+  fill: #6f59b3;
+}
+
+.dragon-nostril {
+  fill: #241b40;
+}
+
+.dragon-eye {
+  fill: none;
+  stroke: #241b40;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.dragon-eye--open {
+  display: none;
+  fill: #ffe27a;
+  stroke-width: 0.8;
+}
+
+.dragon-zzz text {
+  fill: #ffffff;
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(40, 30, 70, 0.55);
+  stroke-width: 2.5px;
+}
+
+/* Asleep: wings folded, slow breathing, z's drifting up */
+.dragon--asleep .dragon-wing {
+  transform: scale(0.72, 0.6);
+}
+
+.dragon--asleep .dragon-body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: dragonBreathe 3.2s ease-in-out infinite;
+}
+
+.dragon-zzz text {
+  opacity: 0;
+  animation: dragonZ 3.6s ease-in-out infinite;
+}
+
+.dragon-zzz text:nth-child(2) {
+  animation-delay: 1.2s;
+}
+
+.dragon-zzz text:nth-child(3) {
+  animation-delay: 2.4s;
+}
+
+/* Flying: eyes open, wings beating, no z's */
+.dragon--flying .dragon-eye--shut,
+.dragon--flying .dragon-zzz {
+  display: none;
+}
+
+.dragon--flying .dragon-eye--open {
+  display: inline;
+}
+
+.dragon--flying .dragon-wing {
+  animation: dragonFlap 0.26s ease-in-out infinite alternate;
+}
+
+.dragon--flying .dragon-shadow {
+  opacity: 0.35;
+}
+
+@keyframes dragonBreathe {
+  50% {
+    transform: scale(1.03, 0.97);
+  }
+}
+
+@keyframes dragonFlap {
+  from {
+    transform: scale(1, 1.05);
+  }
+
+  to {
+    transform: scale(1, 0.25);
+  }
+}
+
+@keyframes dragonZ {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px);
+  }
+
+  25% {
+    opacity: 0.9;
+  }
+
+  70% {
+    opacity: 0;
+    transform: translate(4px, -6px);
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The token under a sleeping dragon fades: that hex produces nothing */
+.number-token--blocked .number-token-face {
+  fill: #d9d5ca;
+}
+
+.number-token--blocked text,
+.number-token--blocked .number-token-pip {
+  opacity: 0.45;
+}
+
+/* New pieces arrive cleanly: a road draws itself along its path, a
+   settlement drops into place with a puff of dust, a city rises out of the
+   settlement with a soft shine */
+
+.road--new line {
+  stroke-dasharray: 1 1;
+  animation: roadDraw 0.42s var(--ease-out) both;
+}
+
+.road--new line:last-child {
+  animation-delay: 0.04s;
+}
+
+@keyframes roadDraw {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.building-body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.building--new-settlement .building-body {
+  animation: pieceDrop 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.building--new-city .building-body {
+  animation: pieceRise 0.6s cubic-bezier(0.25, 1.3, 0.5, 1) both;
+}
+
+.building-dust {
+  fill: none;
+  stroke: rgba(255, 248, 220, 0.9);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pieceDust 0.6s 0.18s var(--ease-out) both;
+}
+
+.building-shine {
+  fill: #ffffff;
+  pointer-events: none;
+  animation: pieceShine 0.8s 0.2s var(--ease-out) both;
+}
+
+@keyframes pieceDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.9);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08, 0.9);
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes pieceRise {
+  0% {
+    transform: scale(0.75, 0.6);
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes pieceDust {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes pieceShine {
+  from {
+    opacity: 0.7;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dragon--asleep .dragon-body,
+  .dragon-zzz text,
+  .dragon--flying .dragon-wing,
+  .road--new line,
+  .building-body,
+  .building-dust,
+  .building-shine {
+    animation: none !important;
+  }
+
+  .building-dust,
+  .building-shine {
+    display: none;
+  }
+}

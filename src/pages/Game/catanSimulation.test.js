@@ -1,10 +1,10 @@
 // Long simulation: many whole games between computer seats (some played as
 // away people) with every reported state checked against the rules. Off by
 // default; run with SIM_GAMES=120 npm test -- catanSimulation.
-import { GEOMETRY, RESOURCES } from './catanBoard';
+import { RESOURCES, geometryOf } from './catanBoard';
 import GameEngine, { computeStandings } from './catanEngine';
 import {
-  BANK_SIZE, PIECE_LIMITS, longestRoadLength, totalPoints, publicPoints, redactFor, distanceRuleOk, handSize,
+  BANK_SIZES, DEV_DECKS, PIECE_LIMITS, longestRoadLength, totalPoints, publicPoints, redactFor, distanceRuleOk, handSize,
 } from './catanRules';
 
 const N = Number(process.env.SIM_GAMES || 0);
@@ -21,13 +21,14 @@ const check = (state, prev, problems) => {
   if (!PHASES.has(state.turnPhase)) p(`bad phase ${state.turnPhase}`);
   RESOURCES.forEach((r) => {
     const total = state.bank[r] + Object.values(state.hands).reduce((s, h) => s + h[r], 0);
-    if (total !== BANK_SIZE) p(`${r} total ${total}`);
+    if (total !== BANK_SIZES[geometryOf(state.board).layout]) p(`${r} total ${total}`);
     if (state.bank[r] < 0) p(`bank ${r} negative`);
   });
   Object.entries(state.hands).forEach(([id, h]) => RESOURCES.forEach((r) => (h[r] < 0 || !Number.isInteger(h[r])) && p(`${id} ${r}=${h[r]}`)));
   const held = Object.values(state.devCards).reduce((s, c) => s + c.length, 0);
   const played = Object.values(state.devCards).flat();
-  if (state.devDeck.length + held > 25) p('dev cards from nowhere');
+  const deckSize = Object.values(DEV_DECKS[geometryOf(state.board).layout]).reduce((sum, n) => sum + n, 0);
+  if (state.devDeck.length + held > deckSize) p('dev cards from nowhere');
   if (new Set(played.map((c) => c.id)).size !== played.length) p('duplicate dev card ids');
   Object.entries(state.buildings).forEach(([v, b]) => {
     if (!distanceRuleOk({ ...state, buildings: { ...state.buildings, [v]: undefined } }, Number(v))) p(`distance rule broken at ${v}`);
@@ -40,14 +41,14 @@ const check = (state, prev, problems) => {
     Object.entries(state.roads).forEach(([e, owner]) => {
       const reach = (from, seen) => {
         if (state.buildings[from]?.owner === owner) return true;
-        return GEOMETRY.vertices[from].edges.some((next) => {
+        return geometryOf(state.board).vertices[from].edges.some((next) => {
           if (seen.has(next) || state.roads[next] !== owner) return false;
           seen.add(next);
-          return GEOMETRY.edges[next].vertices.some((w) => w !== from && reach(w, seen));
+          return geometryOf(state.board).edges[next].vertices.some((w) => w !== from && reach(w, seen));
         });
       };
       const seen = new Set([Number(e)]);
-      if (!GEOMETRY.edges[e].vertices.some((v) => reach(v, seen))) p(`road ${e} not connected to a building`);
+      if (!geometryOf(state.board).edges[e].vertices.some((v) => reach(v, seen))) p(`road ${e} not connected to a building`);
     });
   }
   state.players.forEach(({ id }) => {
@@ -91,7 +92,7 @@ const play = ({ kinds, board, seed, away = [] }) =>
     let prev = null;
     let changes = 0;
     const engine = new GameEngine({
-      players: kinds.map((kind, i) => ({ id: `p${i + 1}`, name: `P${i + 1}`, pieceKey: ['red', 'blue', 'white', 'orange'][i], kind })),
+      players: kinds.map((kind, i) => ({ id: `p${i + 1}`, name: `P${i + 1}`, pieceKey: ['red', 'blue', 'white', 'orange', 'green', 'purple'][i], kind })),
       timing: FAST,
       options: { board },
       rollDie: () => 1 + Math.floor(random() * 6),
@@ -121,7 +122,8 @@ simulate('long simulation', async () => {
   const stats = { games: 0, turns: [], seatWins: {}, problems: [], reasons: {}, winnerVP: [], lr: 0, la: 0 };
   const jobs = [];
   for (let g = 0; g < N; g += 1) {
-    const size = g % 2 ? 4 : 3;
+    // Every table size from 2 to 6, on both kinds of board.
+    const size = 2 + (g % 5);
     const board = g % 3 ? 'random' : 'beginner';
     let kinds = Array(size).fill('bot');
     

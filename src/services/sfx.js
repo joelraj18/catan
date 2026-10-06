@@ -51,6 +51,27 @@ const noise = (ctx, out, { start = 0, length = 0.06, gain = 0.25, filter = 1800 
   source.start(ctx.currentTime + start);
 };
 
+// A soft note with a gentle attack and a long tail, for calm chords.
+const pad = (ctx, out, { freq, start = 0, length = 1.6, gain = 0.06, type = 'sine', attack = 0.08 }) => {
+  const osc = ctx.createOscillator();
+  const amp = ctx.createGain();
+  const at = ctx.currentTime + start;
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, at);
+  amp.gain.setValueAtTime(0.0001, at);
+  amp.gain.exponentialRampToValueAtTime(gain, at + attack);
+  amp.gain.exponentialRampToValueAtTime(0.0001, at + length);
+  osc.connect(amp).connect(out);
+  osc.start(at);
+  osc.stop(at + length + 0.05);
+};
+
+// A wooden knock: a short low thump with a little click on top.
+const knock = (ctx, out, { start = 0, freq = 180, gain = 0.35 }) => {
+  tone(ctx, out, { freq, start, length: 0.09, type: 'triangle', gain, slide: freq * 0.6 });
+  noise(ctx, out, { start, length: 0.025, gain: gain * 0.5, filter: 1400 });
+};
+
 const EFFECTS = {
   // Dice clattering on the table.
   dice: (ctx, out) => {
@@ -58,7 +79,7 @@ const EFFECTS = {
       noise(ctx, out, { start, length: 0.05, gain: 0.35 - i * 0.03, filter: 2200 + i * 300 }),
     );
   },
-  // A wooden piece set down.
+  // A wooden piece set down (kept for older snapshots).
   build: (ctx, out) => {
     tone(ctx, out, { freq: 220, length: 0.12, type: 'triangle', gain: 0.4, slide: 140 });
     noise(ctx, out, { length: 0.04, gain: 0.2, filter: 900 });
@@ -79,6 +100,44 @@ const EFFECTS = {
   card: (ctx, out) => {
     noise(ctx, out, { length: 0.08, gain: 0.25, filter: 4000 });
     tone(ctx, out, { freq: 880, start: 0.05, length: 0.14, gain: 0.12, slide: 1320 });
+  },
+  // A quiet clock tick for the last seconds of a move.
+  tick: (ctx, out) => {
+    tone(ctx, out, { freq: 1320, length: 0.045, gain: 0.07 });
+    noise(ctx, out, { length: 0.02, gain: 0.05, filter: 5200 });
+  },
+  // A road laid: two quick wooden knocks.
+  road: (ctx, out) => {
+    knock(ctx, out, { freq: 200, gain: 0.3 });
+    knock(ctx, out, { start: 0.09, freq: 240, gain: 0.22 });
+  },
+  // A settlement set down: a wood block, then a warm two-note answer.
+  settlement: (ctx, out) => {
+    knock(ctx, out, { freq: 170, gain: 0.34 });
+    tone(ctx, out, { freq: 523, start: 0.08, length: 0.22, gain: 0.1 });
+    tone(ctx, out, { freq: 784, start: 0.16, length: 0.3, gain: 0.08 });
+  },
+  // A city raised: a soft bell chord that rings out.
+  city: (ctx, out) => {
+    knock(ctx, out, { freq: 150, gain: 0.3 });
+    [523, 659, 784, 1047].forEach((freq, i) => pad(ctx, out, { freq, start: 0.06 + i * 0.05, length: 1.2, gain: 0.05 }));
+  },
+  // A card slipped away: a quick airy whoosh.
+  steal: (ctx, out) => {
+    noise(ctx, out, { length: 0.22, gain: 0.18, filter: 2600 });
+    tone(ctx, out, { freq: 660, start: 0.04, length: 0.2, gain: 0.06, slide: 330 });
+  },
+  // The robber's dragon: three soft wing beats.
+  dragon: (ctx, out) => {
+    [0, 0.16, 0.32].forEach((start, i) => noise(ctx, out, { start, length: 0.12, gain: 0.22 - i * 0.04, filter: 500 + i * 80 }));
+    tone(ctx, out, { freq: 140, start: 0.42, length: 0.35, type: 'triangle', gain: 0.08, slide: 110 });
+  },
+  // A win: a calm major chord that blooms, with a few music box notes.
+  win: (ctx, out) => {
+    [262, 330, 392, 523].forEach((freq, i) => pad(ctx, out, { freq, start: i * 0.04, length: 3.6, gain: 0.045, attack: 0.5 }));
+    [784, 988, 1175, 1568, 1319].forEach((freq, i) =>
+      pad(ctx, out, { freq, start: 0.45 + i * 0.32, length: 1.4, gain: 0.04, type: 'triangle', attack: 0.01 }),
+    );
   },
   // A soft chime when the turn passes on.
   turn: (ctx, out) => {

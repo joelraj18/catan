@@ -8,8 +8,9 @@
 // - Requests go straight from this browser to api.anthropic.com.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { GEOMETRY } from '../pages/Game/catanBoard';
-import { WINNING_POINTS, publicPoints, redactFor, visibleHandSize } from '../pages/Game/catanRules';
+import { geometryOf } from '../pages/Game/catanBoard';
+import { publicPoints, redactFor, visibleHandSize } from '../pages/Game/catanRules';
+import { settingsOf } from '../pages/Game/gameSettings';
 
 export const PREMIUM_MODEL = 'claude-opus-5-5';
 export const PREMIUM_PROVIDER = 'Anthropic Claude API';
@@ -97,8 +98,8 @@ const SYSTEM_PROMPT = `You are a shrewd but good natured opponent in Catan, the 
 Rules in brief
 - Hexes produce when their number is rolled: each adjacent settlement gets 1 card, each city 2. Hills give brick, forest lumber, mountains ore, fields grain, pasture wool, the desert nothing. The hex under the robber produces nothing.
 - Costs: road = brick + lumber. Settlement = brick + lumber + wool + grain, needs your road and no building on a neighbouring intersection. City = 3 ore + 2 grain, upgrades your settlement. Development card = ore + wool + grain.
-- Points: settlement 1, city 2, Longest Road (5+ connected roads) 2, Largest Army (3+ knights played) 2, victory point card 1. The first player to ${WINNING_POINTS} points on their own turn wins.
-- A 7 makes everyone with more than 7 cards discard half, then the roller moves the robber and steals a card.
+- Points: settlement 1, city 2, Longest Road (5+ connected roads) 2, Largest Army (3+ knights played) 2, victory point card 1. The first player to reach the table's target (given with the board) on their own turn wins.
+- A 7 makes everyone holding more cards than the table's hand limit (given with the board) discard half, then the roller moves the robber and steals a card.
 - Maritime trade is 4:1, 3:1 with a generic harbour, 2:1 with a matching special harbour.
 
 How to judge
@@ -134,12 +135,13 @@ const RES_CODE = { brick: 'B', lumber: 'L', ore: 'O', grain: 'G', wool: 'W' };
 const hexName = (hex) => `${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`;
 
 // The island as it stays for the whole game: cached after the first call.
-export const describeBoard = (board) => {
+export const describeBoard = (board, rules = settingsOf(null)) => {
   const hexes = board.hexes.map((hex) => `H${hex.id} ${hexName(hex)}`).join(', ');
   const harbours = board.harbors
     .map((harbor) => `${harbor.type === 'any' ? '3:1' : `2:1 ${harbor.type}`} at intersections ${harbor.vertices.join('+')}`)
     .join('; ');
-  return `Board, rows of 3-4-5-4-3 hexes from the top left: ${hexes}.\nHarbours: ${harbours}.`;
+  const rows = geometryOf(board).layout === 'large' ? '3-4-5-6-5-4-3 (the 5-6 player extension)' : '3-4-5-4-3';
+  return `Table rules: first to ${rules.victoryPoints} points wins; a 7 makes anyone holding more than ${rules.handLimit} cards discard half.\nBoard, rows of ${rows} hexes from the top left: ${hexes}.\nHarbours: ${harbours}.`;
 };
 
 const handCode = (hand) =>
@@ -154,7 +156,7 @@ export const describeTable = (playerId, state) => {
   const buildingsOf = (id) =>
     Object.entries(view.buildings)
       .filter(([, building]) => building.owner === id)
-      .map(([vertexId, building]) => `${building.type === 'city' ? 'C' : 'S'}${vertexId}(${GEOMETRY.vertices[vertexId].hexes.map((h) => `H${h}`).join('')})`)
+      .map(([vertexId, building]) => `${building.type === 'city' ? 'C' : 'S'}${vertexId}(${geometryOf(view.board).vertices[vertexId].hexes.map((h) => `H${h}`).join('')})`)
       .join(' ');
   const own = view.devCards[playerId] || [];
   const me = [
@@ -201,7 +203,7 @@ const record = (playerId, usage) => {
   return next;
 };
 
-const ask = async (playerId, board, instruction, context) => {
+const ask = async (playerId, board, rules, instruction, context) => {
   const response = await getClient().beta.messages.create({
     model: PREMIUM_MODEL,
     max_tokens: 2048,
@@ -212,7 +214,7 @@ const ask = async (playerId, board, instruction, context) => {
       { type: 'text', text: SYSTEM_PROMPT },
       // The rules and this game's board form one stable prefix, so every
       // call after the first reads them from the cache at a tenth of the price.
-      { type: 'text', text: describeBoard(board), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: describeBoard(board, rules), cache_control: { type: 'ephemeral' } },
     ],
     messages: [{ role: 'user', content: `${instruction}\n\n${context}` }],
   });
@@ -248,7 +250,7 @@ export const premiumAdvisor = async ({ kind, playerId, state, options }) => {
   }
 
   const context = `${describeTable(playerId, state)}\n\nOptions:\n${options.map((label, index) => `${index}. ${label}`).join('\n')}`;
-  const answer = await ask(playerId, state.board, INSTRUCTIONS[kind] || 'Choose one option number.', context);
+  const answer = await ask(playerId, state.board, settingsOf(state), INSTRUCTIONS[kind] || 'Choose one option number.', context);
 
   if (!answer) {
     return null;

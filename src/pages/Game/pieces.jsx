@@ -8,9 +8,12 @@ export const PIECES = {
   blue: { label: 'Blue', name: 'Blue', colour: '#2f5bea', fill: '#2f5bea', edge: '#1a3487' },
   white: { label: 'White', name: 'White', colour: '#8f8a7d', fill: '#f4f1e8', edge: '#6f6a5e' },
   orange: { label: 'Orange', name: 'Orange', colour: '#e07a1f', fill: '#ec8a2c', edge: '#8a4710' },
+  // The 5-6 player extension's colours.
+  green: { label: 'Green', name: 'Green', colour: '#178a55', fill: '#1f9d63', edge: '#0d5434' },
+  purple: { label: 'Purple', name: 'Purple', colour: '#7a4cc8', fill: '#8457d6', edge: '#4a2a86' },
 };
 
-export const PIECE_ORDER = ['red', 'blue', 'white', 'orange'];
+export const PIECE_ORDER = ['red', 'blue', 'white', 'orange', 'green', 'purple'];
 
 // A settlement (house) silhouette and a city (house with a tower).
 export const SETTLEMENT_PATH = 'M12 3 20 10v11H4V10z';
@@ -20,7 +23,7 @@ export const CITY_PATH = 'M3 21V11l5-5 5 5v2h8v8z';
  * Seats for one match: the host's chosen colour takes seat 1, the remaining
  * colours fill seats 2…n in PIECE_ORDER.
  * @param {string} hostPiece key from PIECES (e.g., 'red')
- * @param {number} playerCount number of players (3-4)
+ * @param {number} playerCount number of players (2-6)
  * @returns {string[]} array of colour keys for each seat index (0-based)
  */
 export const seatPieces = (hostPiece = 'red', playerCount = 3) => {
