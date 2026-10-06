@@ -29,7 +29,9 @@ describe('cards in flight', () => {
   test('production flies from the tile of that resource; bank trades go through the bank', () => {
     const hill = board.hexes.find((hex) => hex.terrain === 'hills');
     const produce = { type: 'produce', gains: { p1: { brick: 1 } }, hexes: [hill.id] };
-    expect(flightsFor(produce, 'p1', board)).toEqual([{ from: `hex-${hill.id}`, to: 'hand-brick', card: 'brick' }]);
+    expect(flightsFor(produce, 'p1', board)).toEqual([
+      { from: `hex-${hill.id}`, to: 'hand-brick', card: 'brick', rise: true, gain: { seat: 'seat-p1', total: 1 } },
+    ]);
 
     const maritime = { type: 'maritime', actor: 'p2', give: { grain: 4 }, get: { ore: 1 } };
     const trips = flightsFor(maritime, 'p1', board);

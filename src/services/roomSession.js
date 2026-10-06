@@ -8,6 +8,9 @@
 import { openGuestTransport, openHostTransport } from './roomTransport';
 import { PIECE_ORDER } from '../pages/Game/pieces.jsx';
 import { DEFAULT_SETTINGS, cleanSettings } from '../pages/Game/gameSettings';
+import { EMOTE_KEYS } from '../pages/Game/emotes.jsx';
+
+export const EMOTE_GAP_MS = 2500; // one reaction per player this often
 
 const CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_CHAT = 120;
@@ -377,6 +380,10 @@ export default class RoomSession {
         if (seat && this.started) {
           this.emit('intent', { clientId: peerId, action: message.action || {} });
         }
+        break;
+
+      case 'emote':
+        if (seat) this.relayEmote(peerId, message.key);
         break;
 
       case 'voice-join':
@@ -833,6 +840,10 @@ export default class RoomSession {
         this.handleClosed('The host closed the room');
         break;
 
+      case 'emote':
+        this.emit('emote', message);
+        break;
+
       case 'voice-roster':
         this.voiceRosterCache = message.roster;
         this.emit('voice-roster', message.roster);
@@ -853,6 +864,33 @@ export default class RoomSession {
     if (!this.isHost) {
       this.transport?.send({ t: 'intent', action });
     }
+  }
+
+  // ------------------------------------------------------------ emotes
+
+  // A reaction from someone at the table. The host checks it is one of the
+  // emotes and not too soon after that person's last, then shows it to
+  // everyone.
+  relayEmote(clientId, key) {
+    if (!this.started || !EMOTE_KEYS.includes(key)) return false;
+    const player =
+      clientId === this.myClientId
+        ? this.players?.find((entry) => entry.id === this.myPlayerId)
+        : this.players?.find((entry) => entry.clientId === clientId);
+    if (!player) return false;
+    this.emoteAt = this.emoteAt || new Map();
+    const now = Date.now();
+    if (now - (this.emoteAt.get(player.id) || 0) < EMOTE_GAP_MS) return false;
+    this.emoteAt.set(player.id, now);
+    const message = { t: 'emote', key, playerId: player.id, id: `${now.toString(36)}${player.id}` };
+    this.broadcast(message);
+    this.emit('emote', message);
+    return true;
+  }
+
+  sendEmote(key) {
+    if (this.isHost) this.relayEmote(this.myClientId, key);
+    else this.transport?.send({ t: 'emote', key });
   }
 
   // ------------------------------------------------------------- voice

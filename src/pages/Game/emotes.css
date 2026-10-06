@@ -1,0 +1,203 @@
+/* Emotes: the React button on the board, its picker, and speech bubbles */
+
+.emote-dock {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  /* Above the side notes while the picker is open */
+  z-index: 91;
+}
+
+.emote-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 4px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(20, 24, 30, 0.15);
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+.emote-button:hover {
+  transform: translateY(-2px);
+}
+
+.emote-picker {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: min(330px, calc(100vw - 48px));
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  box-shadow: var(--shadow-float);
+  animation: emotePickerIn 0.2s var(--ease-out);
+}
+
+.emote-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.emote-choice {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 2px;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.emote-choice:hover:not(:disabled),
+.emote-choice:focus-visible {
+  background: var(--sage-50);
+  outline: none;
+}
+
+.emote-choice:hover:not(:disabled) .emote-portrait {
+  transform: scale(1.1) rotate(-4deg);
+}
+
+.emote-choice:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.emote-portrait {
+  display: block;
+  flex: 0 0 auto;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+.emote-mute {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  color: var(--ink-tertiary);
+  font-size: 0.74rem;
+  border-top: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.emote-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 92;
+  pointer-events: none;
+}
+
+.emote-bubble {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 230px;
+  padding: 5px 14px 5px 5px;
+  color: var(--ink);
+  background: var(--surface);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px var(--hairline-strong),
+    0 10px 24px rgba(20, 24, 30, 0.22);
+  animation: emoteIn 2.6s cubic-bezier(0.3, 1.5, 0.5, 1) forwards;
+}
+
+.emote-bubble--above {
+  transform: translateY(-100%);
+}
+
+.emote-bubble span {
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.emote-bubble strong {
+  color: var(--ink-tertiary);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+/* A little tail toward the seat */
+.emote-bubble--side::before {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  box-shadow: -1px 1px 0 var(--hairline-strong);
+  content: '';
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.emote-bubble .emote-portrait {
+  animation: emoteWiggle 0.9s 0.25s ease-in-out 2;
+}
+
+@keyframes emoteIn {
+  0% {
+    opacity: 0;
+    scale: 0.4;
+  }
+
+  12% {
+    opacity: 1;
+    scale: 1;
+  }
+
+  85% {
+    opacity: 1;
+    scale: 1;
+  }
+
+  100% {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+@keyframes emoteWiggle {
+  25% {
+    transform: rotate(-8deg);
+  }
+
+  75% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes emotePickerIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emote-bubble,
+  .emote-bubble .emote-portrait,
+  .emote-picker {
+    animation: none;
+  }
+}

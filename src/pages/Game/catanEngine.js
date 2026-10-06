@@ -69,6 +69,7 @@ export const DEFAULT_TIMING = {
 
 const LOG_LIMIT = 50;
 const EVENT_LIMIT = 30;
+const EMOTE_TURNS = 3; // turns between one opponent's emotes
 const MAX_TRADES = 6;
 const BOT_TURN_STEPS = 24;
 // Most Claude calls one premium AI seat makes in a game; after that the
@@ -434,6 +435,22 @@ export default class GameEngine {
 
   // Sounds for the board to play. Several within one move travel together
   // (a robber landing, then a steal) and play one after the other.
+  // A computer or AI opponent reacts with an emote, now and then: at most
+  // once every few turns each, and only some of the times it could. The
+  // choice is a hash of the event count, so it never draws on the random
+  // numbers the game itself runs on.
+  botEmote(playerId, key, chance = 0.5) {
+    const player = this.player(playerId);
+    if (!player || (player.kind !== 'bot' && player.kind !== 'ai')) return;
+    this.emoteTurns = this.emoteTurns || {};
+    const last = this.emoteTurns[playerId];
+    if (last !== undefined && this.state.turnCount - last < EMOTE_TURNS && !this.state.gameOver) return;
+    const roll = (((this.state.eventCounter || 0) + 1) * 2654435761) % 1000;
+    if (roll >= chance * 1000) return;
+    this.emoteTurns[playerId] = this.state.turnCount;
+    this.event('emote', { actor: playerId, key });
+  }
+
   sound(key) {
     const sfx = this.state.sfx;
     if (this.emitQueued && sfx?.id === this.sfxCounter) {
@@ -1236,7 +1253,7 @@ export default class GameEngine {
           ? `A 7! ${discarders.map((id) => this.nameOf(id)).join(', ')} must discard half`
           : `A 7! ${this.nameOf(playerId)} moves the robber`,
       });
-      this.sound('robber');
+      this.sound('dragonWake');
     } else {
       this.produce(total);
       this.set({ turnPhase: 'actions', activity: `${this.nameOf(playerId)} rolled ${total}, trade and build` });
@@ -1264,6 +1281,7 @@ export default class GameEngine {
         .filter((hex) => hex.number === total && hex.id !== this.state.board.robber)
         .map((hex) => hex.id);
       this.event('produce', { gains, hexes, total });
+      Object.entries(gains).forEach(([id, bundle]) => handSize(bundle) >= 3 && this.botEmote(id, 'farmer', 0.5));
     }
 
     const lines = Object.entries(paid)
@@ -1309,6 +1327,13 @@ export default class GameEngine {
     const from = this.state.board.robber;
     this.set({ board: { ...this.state.board, robber: hexId } });
     this.event('robber', { actor: playerId, from, to: hexId });
+    // Sending the dragon onto the leader earns a growl.
+    const leader = this.state.players
+      .filter((entry) => entry.id !== playerId)
+      .sort((a, b) => publicPoints(this.state, b.id) - publicPoints(this.state, a.id))[0];
+    if (leader && geoOf(this.state).hexes[hexId].vertices.some((v) => this.state.buildings[v]?.owner === leader.id)) {
+      this.botEmote(playerId, 'dragon', 0.6);
+    }
     this.note(`${this.nameOf(playerId)} moved the robber to the ${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`, playerId);
     this.sound('dragon');
 
@@ -1345,6 +1370,7 @@ export default class GameEngine {
       this.note(`${this.nameOf(playerId)} stole a card from ${this.nameOf(victimId)}`, playerId);
       this.event('steal', { actor: playerId, victim: victimId, resource });
       this.sound('steal');
+      this.botEmote(victimId, 'lumberjack', 0.6);
     }
 
     this.set({ turnPhase: back, stealFrom: [], activity: this.phaseActivity(back) });
@@ -1390,7 +1416,7 @@ export default class GameEngine {
       devPlayedThisTurn: true,
       devCards: { ...this.state.devCards, [playerId]: cards.filter((entry) => entry.id !== card.id) },
     });
-    this.sound('card');
+    this.sound(type === 'knight' ? 'knight' : type === 'monopoly' ? 'monopoly' : 'card');
     this.event('playDev', { actor: playerId, card: type });
     const name = this.nameOf(playerId);
 
@@ -1612,6 +1638,7 @@ export default class GameEngine {
       from,
     );
     this.event('trade', { actor: from, partner: partnerId, give: trade.give, get: trade.get });
+    this.botEmote(partnerId, 'merchant', 0.3);
     this.sound('trade');
     this.afterAction(this.activePlayer.id);
     return true;
@@ -1638,7 +1665,7 @@ export default class GameEngine {
     this.set({ hands, bank });
     this.event('maritime', { actor: playerId, give: { [give]: rate }, get: { [get]: 1 } });
     this.note(`${this.nameOf(playerId)} traded ${rate} ${RESOURCE_LABELS[give].toLowerCase()} with the bank for 1 ${RESOURCE_LABELS[get].toLowerCase()}`, playerId);
-    this.sound('trade');
+    this.sound('maritime');
     this.afterAction(playerId);
     return true;
   }
@@ -1717,6 +1744,9 @@ export default class GameEngine {
         : `Game over, ${names} ${winners.length > 1 ? 'share the win' : 'wins'} with ${top} points`,
     );
     this.event('win', { winners, reason });
+    winners.forEach((id) => this.botEmote(id, 'knight', 1));
+    const gracious = this.state.players.find((entry) => !winners.includes(entry.id) && (entry.kind === 'bot' || entry.kind === 'ai'));
+    if (gracious) this.botEmote(gracious.id, 'builder', 1);
     this.sound('win');
   }
 

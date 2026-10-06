@@ -29,7 +29,10 @@ import {
 import CardFlights from './CardFlights.jsx';
 import Dice3D from './Dice3D.jsx';
 import { DevRow, ResourceRow } from './GameCards.jsx';
+import EmoteBar from './EmoteBar.jsx';
 import GameToasts from './GameToasts.jsx';
+import useFreshEvent from './useFreshEvent';
+import { affordableBuilds, firstMissing, listBuilds } from './buildHints';
 import { settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
 import {
@@ -471,6 +474,17 @@ export default function BoardGame({
   // -------------------------------------------------------------- sound
 
   const effectsOn = audioSettings.effectsOn && audioSettings.effectsVolume > 0;
+  // Each harvest card plays its resource's note as it lands, so a roll
+  // sounds like a little tune; notes closer than 70 ms are skipped.
+  const lastPluck = useRef(0);
+  const onCardLand = useCallback(
+    (trip) => {
+      if (!effectsOn || !trip.rise || Date.now() - lastPluck.current < 70) return;
+      lastPluck.current = Date.now();
+      playSfx(`pluck-${trip.card}`, audioSettings.effectsVolume * 0.8);
+    },
+    [effectsOn, audioSettings.effectsVolume],
+  );
   const tickSound = useMemo(
     () => (effectsOn ? () => playSfx('tick', audioSettings.effectsVolume) : null),
     [effectsOn, audioSettings.effectsVolume],
@@ -492,9 +506,13 @@ export default function BoardGame({
       return undefined;
     }
 
-    const keys = (sfx.keys || [sfx.key]).map((key) => (key === 'winner' ? 'win' : key));
+    // The start of your own turn gets its own call.
+    const mine = state.players[state.activeIndex]?.id === myPlayerId;
+    const keys = (sfx.keys || [sfx.key]).map((key) => (key === 'winner' ? 'win' : key === 'turn' && mine ? 'myTurn' : key));
     const timers = keys.map((key, index) => window.setTimeout(() => playSfx(key, audioSettings.effectsVolume), index * 260));
     return () => timers.slice(1).forEach((timer) => window.clearTimeout(timer));
+    // Only a new sound matters; who is active is read as it is now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.sfx, effectsOn, audioSettings.effectsVolume]);
 
   // ------------------------------------------------------------ keyboard
@@ -554,6 +572,31 @@ export default function BoardGame({
   const myPoints = me ? publicPoints(view, myPlayerId) + hiddenPoints(view, myPlayerId) : 0;
   const rules = settingsOf(view);
   const goal = rules.victoryPoints;
+
+  // What your cards pay for right now, on your turn, and what they would
+  // pay for on your next turn.
+  const canBuild = useMemo(() => (me && !over ? affordableBuilds(view, myPlayerId) : []), [view, me, over, myPlayerId]);
+  const buildNow = canBuildNow ? canBuild : [];
+  const buildKey = buildNow.join(',');
+  const [buildNotice, setBuildNotice] = useState(null);
+  const shownBuilds = useRef('');
+  useEffect(() => {
+    const before = new Set(shownBuilds.current.split(',').filter(Boolean));
+    shownBuilds.current = buildKey;
+    const fresh = buildKey.split(',').filter((kind) => kind && !before.has(kind));
+    if (!fresh.length) return;
+    const pieces = buildKey.split(',').filter((kind) => kind !== 'dev');
+    setBuildNotice({
+      id: `build-${view.turnCount}-${buildKey}`,
+      tone: 'gain',
+      title: `You can build ${listBuilds(buildKey.split(','))}`,
+      text: pieces.length ? 'The spots glow on the board: tap one, then tap again' : 'Tap the deck in your hand, then tap again',
+      ms: 5200,
+      action: pieces.length === 1 ? { label: 'Show me', run: () => setFocus(pieces[0]) } : null,
+    });
+    // Only a change in what can be built is news.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildKey]);
 
   // A first tap belongs to its moment: it is dropped whenever the phase,
   // the turn or the set-up step moves on.
@@ -660,6 +703,17 @@ export default function BoardGame({
   const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
   const rolledTotal = view.dice && !view.rolling ? view.dice[0] + view.dice[1] : null;
 
+  // The roll that just landed: its tiles glow, and the tile under the dragon
+  // shows that it is blocked.
+  const lastRoll = useFreshEvent(view.events, 'roll');
+  const harvest = useMemo(() => {
+    if (!lastRoll || lastRoll.turn !== view.turnCount) return null;
+    const total = lastRoll.dice[0] + lastRoll.dice[1];
+    if (total === 7) return null;
+    const hexes = view.board.hexes.filter((hex) => hex.number === total).map((hex) => hex.id);
+    return { key: lastRoll.id, hexes: hexes.filter((id) => id !== view.board.robber), blocked: hexes.filter((id) => id === view.board.robber) };
+  }, [lastRoll, view.turnCount, view.board]);
+
   const voters = players.filter((player) => player.kind === 'human' && !player.away);
   const endVote = view.endVote;
   const iAmVoter = voters.some((player) => player.id === myPlayerId);
@@ -729,9 +783,9 @@ export default function BoardGame({
     if (phase === 'steal') return 'Choose who to rob';
     if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}: tap a path, then tap it again`;
     if (pending && ['road', 'settlement', 'city'].includes(pending.kind)) return `Tap again to build the ${pending.kind}, or tap elsewhere to cancel`;
-    if ((highlight.edges || []).length || (highlight.vertices || []).length || (highlight.cities || []).length) {
-      return 'Tap a glowing spot to build, tap again to confirm';
-    }
+    const pieces = buildNow.filter((kind) => kind !== 'dev');
+    if (pieces.length) return `You have the cards for ${listBuilds(pieces)}: tap a glowing spot, then tap again`;
+    if (buildNow.includes('dev')) return 'You can buy a development card: tap the deck in your hand';
     return 'Trade, or end your turn';
   })();
 
@@ -1321,10 +1375,18 @@ export default function BoardGame({
         </div>
       )}
 
-      <CardFlights events={view.events} me={myPlayerId} board={view.board} />
+      <CardFlights events={view.events} me={myPlayerId} board={view.board} onLand={onCardLand} />
 
       {me && (
-        <GameToasts view={view} myPlayerId={myPlayerId} act={act} players={players} myHand={myHand} localTime={localTime} />
+        <GameToasts
+          view={view}
+          myPlayerId={myPlayerId}
+          act={act}
+          players={players}
+          myHand={myHand}
+          localTime={localTime}
+          notice={buildNotice}
+        />
       )}
 
       <section className="board-game-layout">
@@ -1500,7 +1562,19 @@ export default function BoardGame({
             selected={pending}
             myPiece={me?.pieceKey}
             rolled={phase === 'actions' && rolledTotal !== 7 ? rolledTotal : null}
+            harvest={harvest}
           />
+
+          {session && me && (
+            <EmoteBar
+              session={session}
+              events={view.events}
+              players={players}
+              myPlayerId={myPlayerId}
+              effectsOn={effectsOn}
+              volume={audioSettings.effectsVolume}
+            />
+          )}
 
           {renderDiscard()}
           {renderSteal()}
@@ -1660,6 +1734,11 @@ export default function BoardGame({
                 </span>
               </div>
               <ResourceRow hand={myHand} />
+              {!isMyTurn && canBuild.length > 0 && (
+                <p className="hand-hint">
+                  On your turn you can build {listBuilds(canBuild)}
+                </p>
+              )}
               <DevRow
                 cards={myDev}
                 turnCount={view.turnCount}
@@ -1668,11 +1747,22 @@ export default function BoardGame({
                 onPlay={(type) => choose('play', type, () => playDev(type))}
                 selected={pending?.kind === 'play' ? pending.id : null}
                 deck={
-                  canBuildNow
+                  !over
                     ? {
                         left: deckLeft,
-                        ready: hasResources(myHand, COSTS.dev) && deckLeft > 0,
+                        ready: canBuildNow && hasResources(myHand, COSTS.dev) && deckLeft > 0,
                         selected: pending?.kind === 'dev',
+                        cost: COSTS.dev,
+                        hand: myHand,
+                        note: !deckLeft
+                          ? 'Deck empty'
+                          : !isMyTurn
+                            ? 'Your turn'
+                            : firstMissing(myHand, COSTS.dev)
+                              ? `Need ${RESOURCE_LABELS[firstMissing(myHand, COSTS.dev)].toLowerCase()}`
+                              : phase !== 'actions'
+                                ? 'After roll'
+                                : null,
                         onBuy: () => choose('dev', 'deck', () => act({ type: 'buy-dev' })),
                       }
                     : null
@@ -1687,7 +1777,7 @@ export default function BoardGame({
           {canBuildNow && (
             <section className={`build-guide seat-${me.pieceKey}`} aria-label="Build">
               <div className="build-guide-head">
-                <p className="eyebrow">Build on the board</p>
+                <p className="eyebrow">{buildNow.some((kind) => kind !== 'dev') ? 'You can build now' : 'Build on the board'}</p>
                 <span>Tap a spot, tap again</span>
               </div>
               <ul>
@@ -1702,6 +1792,7 @@ export default function BoardGame({
                       <button
                         type="button"
                         className={`build-chip ${ready ? 'build-chip--ready' : ''} ${focus === key ? 'build-chip--focus' : ''}`}
+                        data-ready={ready ? 'Ready' : undefined}
                         disabled={!ready}
                         aria-pressed={focus === key}
                         onClick={() => setFocus((current) => (current === key ? null : key))}
