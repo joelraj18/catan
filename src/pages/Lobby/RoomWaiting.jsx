@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ApiKeyInfo from '../../components/ApiKeyInfo';
 import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
+import VoicePanel from '../../components/VoicePanel';
 import GoldButton from '../../components/GoldButton';
 import ThemeToggle from '../../components/ThemeToggle';
 import {
@@ -233,6 +234,7 @@ export default function RoomWaiting({ session, onLeave }) {
             </p>
           )}
 
+          <VoicePanel session={session} />
           <ChatPanel session={session} title="Room chat" />
         </div>
 

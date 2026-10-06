@@ -3501,3 +3501,15 @@
   transform: scale(0.85);
   transform-origin: right center;
 }
+
+/* A seat whose player is talking on voice */
+.seat-card--speaking .seat-avatar {
+  box-shadow: 0 0 0 3px var(--success);
+  transition: box-shadow 0.12s var(--ease);
+}
+
+@media (min-width: 1101px) {
+  .board-side .voice-panel {
+    flex: 0 0 auto;
+  }
+}

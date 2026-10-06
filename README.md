@@ -1,14 +1,17 @@
 # Catan
 
-Catan in the browser: settle the island, trade resources and build your way to 10 victory points. For 3 to 4 players, with friends, computer opponents or premium AI opponents. An unofficial fan edition following the 5th edition rules (Game Rules & Almanac, 2020).
+Catan in the browser: settle the island, trade resources and build your way to 10 victory points. For 2 to 6 players, with friends, computer opponents or premium AI opponents, and voice chat at the table. An unofficial fan edition following the 5th edition rules (Game Rules & Almanac, 2020).
 
 ## The game
 
+- **Table rules.** The host sets a move timer (15 s to 90 s, or none: roll within it or the dice roll themselves, and every move starts it again), the discard limit on a 7, the points to win (8 to 14), and on a random island whether 6 & 8 or 2 & 12 may sit side by side.
+- **2 to 6 players.** With 5 or 6 the island is the extension's 30 hexes (rows 3-4-5-6-5-4-3, two deserts, 28 tokens, 11 harbours) with 24 of each resource and a 34 card deck.
+- **Fair islands.** Every island gets a SHA-256 fingerprint shown under Fair play; tests check that 10,000 secure islands all differ.
 - **Boards.** The host picks the beginners' map from the rulebook (Illustration A, with every starting settlement and road placed and starting resources dealt), or a random island: shuffled terrain, number tokens with no two red numbers (6 and 8) side by side, shuffled harbours, and a two round snake set-up.
 - **A turn.** Roll for production (settlements 1 card, cities 2, nothing under the robber, the bank shortage rule applies), then trade and build in any order. A 7 makes everyone with more than 7 cards discard half (rounded down); the roller moves the robber and steals a random card.
 - **Trading.** Domestic trades only with the player whose turn it is (offers to one player or the whole table, counter offers from the others), no gifts and no like for like. Maritime trade at 4:1, 3:1 with a generic harbour or 2:1 with a special harbour.
 - **Building.** Road (brick, lumber), settlement (brick, lumber, wool, grain) with the Distance Rule, city (3 ore, 2 grain), development card (ore, wool, grain). Each player has 15 roads, 5 settlements and 4 cities.
-- **Development cards.** 14 knights, 2 Road Building, 2 Year of Plenty, 2 Monopoly and 5 victory points. One card per turn, never one bought that turn; victory point cards count straight away.
+- **Development cards.** 14 knights, 2 Road Building, 2 Year of Plenty, 2 Monopoly and 5 victory points. One card per turn, never one bought that turn, and before the roll only a Knight; victory point cards count straight away.
 - **Special cards.** Longest Road (5+ continuous roads, broken by an opponent's settlement, with the Almanac's tie rules) and Largest Army (3+ knights), 2 points each.
 - **Winning.** The first player with 10 or more points during their own turn wins.
 
@@ -25,12 +28,14 @@ Premium AI seats use the host's own Claude API key, held only in the tab's memor
 
 ## Code map
 
-- `src/pages/Game/catanBoard.js` hex geometry (19 hexes, 54 intersections, 72 paths), the beginners' map and the random map
+- `src/pages/Game/catanBoard.js` hex geometry for the classic island (19 hexes, 54 intersections, 72 paths) and the 5-6 player island (30 hexes), the beginners' map and the random map
+- `src/pages/Game/gameSettings.js` the host's table rules
 - `src/pages/Game/catanRules.js` the rules as pure functions, including what each seat may see
 - `src/pages/Game/catanEngine.js` the host's game engine: phases, turns, trades, timers, computer moves
 - `src/pages/Game/catanBot.js` computer opponents
 - `src/pages/Game/hexArt.jsx` the island drawn in SVG, `BoardGame.jsx` the game screen
 - `src/services/premiumAi.js` premium AI opponents with the player's own Claude API key
+- `src/services/voice/` voice chat: channels on the host (`roomSession.js`), WebRTC links and walkie-talkie fallback (`voiceClient.js`), TURN credentials (`voiceIce.js`), clip encryption (`voiceCrypto.js`)
 
 ## How players connect
 
@@ -52,6 +57,15 @@ In tests with relays capped at 20 events a minute, games stayed in sync at about
 
 The host listens on both routes at once. A guest in Auto mode tries Direct first, falls back to Relay when Direct is blocked or slow, and remembers which route worked. Under **Having trouble joining** in the lobby, players can pick a route by hand and run a connection check.
 
+## Voice chat
+
+Everyone at the table can join the **Table** channel, and any few players can open a **private channel** that only the people they pick can join.
+
+- **Audio goes browser to browser** over WebRTC, encrypted end to end. The room carries only the set-up messages, through the host, on whichever route each player joined by, Direct or Relay, so voice sets up on every network the game itself works on.
+- **Through college and office firewalls.** Voice adds free TURN relays that also answer on port 443 over TLS, which looks like ordinary HTTPS: Metered's Open Relay (time-limited credentials from its public static-auth secret, nothing to set up) and, optionally, Cloudflare Realtime TURN (see `workers/turn-credentials.js`, then set `REACT_APP_TURN_ENDPOINT`). TURN only ever relays encrypted audio.
+- **When nothing gets through,** a link that will not come up is tried once more through TURN only, then falls back to **walkie-talkie**: hold Talk, and the clip is sealed with AES-GCM under a key the two players agree with X25519, then sent through the room. Neither the host nor a relay can open it.
+- Each person shows Direct, Relay or Walkie-talkie, with a volume slider and a ring on their seat while they speak. Mute and deafen are one tap.
+
 ### Optional TURN server, recommended for college networks
 
 A TURN server on port 443 lets Direct work on networks that block WebRTC, so play stays as quick as on home wifi. To set one up:
@@ -66,7 +80,7 @@ REACT_APP_TURN_USERNAME=...
 REACT_APP_TURN_CREDENTIAL=...
 ```
 
-These are ICE relay credentials, not secrets, and they are served to every visitor. A provider that issues only short lived credentials, such as Cloudflare, needs a small backend to mint them and does not fit this static site.
+These are ICE relay credentials, not secrets, and they are served to every visitor. For Cloudflare, which issues only short lived credentials, deploy the free Worker in `workers/turn-credentials.js` and set `REACT_APP_TURN_ENDPOINT` to its URL; voice then uses it too.
 
 **Check connection** in the lobby shows whether the TURN route is open. It also lists every relay with its round trip time, so you can see what a given network allows.
 
@@ -76,6 +90,7 @@ These are ICE relay credentials, not secrets, and they are served to every visit
 - `?net=relay` forces Relay.
 - `?relay=wss://a,wss://b` replaces the relay list, for example with a local test relay.
 - `?join=CODE` opens the lobby with the room code filled in. Invite links use this.
+- `?voice=walkie` skips live audio and uses walkie-talkie clips, as on a network that blocks all WebRTC.
 
 ## Scripts
 

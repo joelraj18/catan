@@ -300,6 +300,8 @@ export default class RoomSession {
   publishLobby() {
     this.broadcast({ t: 'lobby', lobby: this.lobby });
     this.emit('lobby', this.lobby);
+    // Who can be invited to voice follows the seats.
+    this.publishVoice();
   }
 
   freePiece(preferred) {
@@ -359,6 +361,7 @@ export default class RoomSession {
 
         this.transport.send(peerId, { t: 'welcome', clientId: peerId, code: this.code });
         this.transport.send(peerId, { t: 'chat-log', chat: this.chat });
+        this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster() });
         this.publishLobby();
         this.postSystem(`${name} joined the table`);
         break;
@@ -374,6 +377,14 @@ export default class RoomSession {
         if (seat && this.started) {
           this.emit('intent', { clientId: peerId, action: message.action || {} });
         }
+        break;
+
+      case 'voice-join':
+      case 'voice-leave':
+      case 'voice-create':
+      case 'voice-signal':
+      case 'voice-clip':
+        if (seat) this.handleVoice(peerId, message);
         break;
 
       default:
@@ -413,6 +424,7 @@ export default class RoomSession {
 
     this.transport.send(peerId, { t: 'welcome', clientId: peerId, code: this.code });
     this.transport.send(peerId, { t: 'chat-log', chat: this.chat });
+    this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster() });
     this.transport.send(peerId, { t: 'start', players: this.playersFor(player.id), gameId: this.gameId, rejoin: true });
 
     if (this.lastGameState) {
@@ -423,6 +435,7 @@ export default class RoomSession {
   }
 
   handleGuestLeft(peerId) {
+    this.leaveVoice(peerId);
     const seat = this.lobby.seats.find((entry) => entry.clientId === peerId);
 
     if (!seat) {
@@ -820,6 +833,17 @@ export default class RoomSession {
         this.handleClosed('The host closed the room');
         break;
 
+      case 'voice-roster':
+        this.voiceRosterCache = message.roster;
+        this.emit('voice-roster', message.roster);
+        break;
+
+      case 'voice-signal':
+      case 'voice-clip':
+      case 'voice-invite':
+        this.emit(message.t, message);
+        break;
+
       default:
         break;
     }
@@ -829,6 +853,119 @@ export default class RoomSession {
     if (!this.isHost) {
       this.transport?.send({ t: 'intent', action });
     }
+  }
+
+  // ------------------------------------------------------------- voice
+
+  // Voice channels live on the host, who only ever passes a voice message
+  // between two people in the same channel. Everyone starts with the table
+  // channel; anyone can open a private channel and invite people, and only
+  // the people invited can join it. Members are client ids ('host' for the
+  // host); audio itself flows between the members' browsers.
+  voiceChannels() {
+    if (!this.voice) {
+      this.voice = { channels: [{ id: 'table', name: 'Table', owner: null, invited: null, members: [] }], keys: {}, counter: 0 };
+    }
+    return this.voice;
+  }
+
+  voicePerson(clientId) {
+    const seat = this.lobby.seats.find((entry) => entry.clientId === clientId);
+    return seat ? { name: seat.name, pieceKey: seat.pieceKey } : null;
+  }
+
+  voiceRoster() {
+    const voice = this.voiceChannels();
+    const people = {};
+    this.lobby.seats
+      .filter((seat) => seat.kind === 'human' && seat.clientId)
+      .forEach((seat) => {
+        people[seat.clientId] = { name: seat.name, pieceKey: seat.pieceKey, key: voice.keys[seat.clientId] || null };
+      });
+    return { channels: voice.channels.map((channel) => ({ ...channel, members: [...channel.members] })), people };
+  }
+
+  publishVoice() {
+    const roster = this.voiceRoster();
+    this.voiceRosterCache = roster;
+    this.broadcast({ t: 'voice-roster', roster });
+    this.emit('voice-roster', roster);
+  }
+
+  leaveVoice(clientId, { publish = true } = {}) {
+    const voice = this.voiceChannels();
+    let changed = false;
+    voice.channels.forEach((channel) => {
+      if (channel.members.includes(clientId)) {
+        channel.members = channel.members.filter((id) => id !== clientId);
+        changed = true;
+      }
+    });
+    // A private channel closes when its last member leaves.
+    const before = voice.channels.length;
+    voice.channels = voice.channels.filter((channel) => channel.id === 'table' || channel.members.length);
+    if ((changed || before !== voice.channels.length) && publish) this.publishVoice();
+  }
+
+  sameVoiceChannel(a, b) {
+    return this.voiceChannels().channels.some((channel) => channel.members.includes(a) && channel.members.includes(b));
+  }
+
+  deliverVoice(to, message) {
+    if (to === this.myClientId) this.emit(message.t, message);
+    else this.transport?.send(to, message);
+  }
+
+  handleVoice(from, message) {
+    const voice = this.voiceChannels();
+    switch (message.t) {
+      case 'voice-join': {
+        const channel = voice.channels.find((entry) => entry.id === message.channel);
+        if (!channel || (channel.invited && !channel.invited.includes(from))) return;
+        if (typeof message.key === 'string' && /^[0-9a-f]{64}$/.test(message.key)) voice.keys[from] = message.key;
+        this.leaveVoice(from, { publish: false });
+        // leaveVoice may have closed an empty channel; this one is still wanted.
+        if (!voice.channels.includes(channel)) voice.channels.push(channel);
+        channel.members.push(from);
+        this.publishVoice();
+        break;
+      }
+      case 'voice-leave':
+        this.leaveVoice(from);
+        break;
+      case 'voice-create': {
+        const humans = this.lobby.seats.filter((seat) => seat.kind === 'human' && seat.clientId).map((seat) => seat.clientId);
+        const invite = (Array.isArray(message.invite) ? message.invite : []).filter((id) => id !== from && humans.includes(id));
+        if (!invite.length) return;
+        voice.counter += 1;
+        const owner = this.voicePerson(from);
+        const channel = {
+          id: `private-${voice.counter}`,
+          name: cleanText(message.name).slice(0, 24) || `${owner?.name || 'Private'}'s channel`,
+          owner: from,
+          invited: [from, ...invite],
+          members: [],
+        };
+        voice.channels.push(channel);
+        this.handleVoice(from, { t: 'voice-join', channel: channel.id, key: message.key });
+        invite.forEach((id) => this.deliverVoice(id, { t: 'voice-invite', channel: channel.id, name: channel.name, from }));
+        break;
+      }
+      case 'voice-signal':
+      case 'voice-clip':
+        if (typeof message.to === 'string' && message.to !== from && this.sameVoiceChannel(from, message.to)) {
+          this.deliverVoice(message.to, { ...message, from });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Sends a voice message: the host handles its own directly.
+  sendVoice(message) {
+    if (this.isHost) this.handleVoice(this.myClientId, message);
+    else this.transport?.send(message);
   }
 
   // ------------------------------------------------------------- shared
@@ -874,6 +1011,8 @@ export default class RoomSession {
     // Give the goodbye a moment to leave before tearing the channel down.
     const transport = this.transport;
     setTimeout(() => transport?.close(), 150);
+    // Voice hangs up with the room: microphone off, links closed.
+    this.emit('voice-close');
     this.listeners.clear();
   }
 }

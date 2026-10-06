@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
 import SoundMixer from '../../components/SoundMixer';
+import VoicePanel, { useVoice } from '../../components/VoicePanel';
 import GoldButton from '../../components/GoldButton';
 import ThemeToggle from '../../components/ThemeToggle';
 import { premiumAdvisor } from '../../services/premiumAi';
@@ -341,6 +342,7 @@ export default function BoardGame({
   const [devPick, setDevPick] = useState(null); // { card, resources: [] , resource }
   const [showResults, setShowResults] = useState(true);
   const engineRef = useRef(null);
+  const voice = useVoice(session);
 
   // ------------------------------------------------------------- engine
 
@@ -1346,7 +1348,9 @@ export default function BoardGame({
                 const role = roleFor(player, myPlayerId);
                 return (
                   <article
-                    className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''}`}
+                    className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''} ${
+                      voice?.speaking(player.clientId || (player.id === 'p1' ? 'host' : null)) ? 'seat-card--speaking' : ''
+                    }`}
                     key={player.id}
                     data-anchor={`seat-${player.id}`}
                   >
@@ -1456,6 +1460,7 @@ export default function BoardGame({
             </div>
           </section>
 
+          {session && <VoicePanel session={session} compact />}
           {session && <ChatPanel session={session} compact />}
 
           <section className="activity-log" aria-label="Activity log">
