@@ -1,19 +1,21 @@
 /* Resource colours, used by the board, cards and the landing page */
 
 :root {
-  --res-brick: #b5532f;
-  --res-lumber: #2f7a3b;
-  --res-ore: #7d8590;
-  --res-grain: #e0b12f;
-  --res-wool: #8cc152;
-  --terrain-hills: #c4693f;
-  --terrain-forest: #3f7d43;
-  --terrain-mountains: #8e959e;
-  --terrain-fields: #e6be4a;
-  --terrain-pasture: #9fcf6a;
-  --terrain-desert: #e3cf9d;
-  --sea: #4a9cc9;
-  --sea-deep: #2f7fae;
+  /* Resource inks: icons and numbers on light surfaces */
+  --res-brick: #b8502a;
+  --res-lumber: #2c7a37;
+  --res-ore: #627080;
+  --res-grain: #b07f08;
+  --res-wool: #5a9726;
+  /* Terrain: flat, clearly different hues, so each tile reads at a glance */
+  --terrain-hills: #d6683a;
+  --terrain-forest: #2f7d3a;
+  --terrain-mountains: #8b97a5;
+  --terrain-fields: #f0bf2c;
+  --terrain-pasture: #94cf4e;
+  --terrain-desert: #e8d39e;
+  --sea: #2f86c6;
+  --sea-deep: #1f679f;
 }
 
 /* Seat colours tint every piece through currentColor, matching PIECES */

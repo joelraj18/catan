@@ -2531,10 +2531,16 @@
 [data-theme='dark'] .stat-tag--knights { background: rgba(226, 87, 76, 0.15); color: #ffb0a8; }
 [data-theme='dark'] .stat-tag--road { background: rgba(201, 160, 106, 0.15); color: #e6c9a0; }
 [data-theme='dark'] .bank-chip--dev { color: #d6c2fb; }
+/* Dark seats: a raised slate card with a faint tint of the seat colour,
+   the colour itself only in the stripe, the name and a soft ring */
+[data-theme='dark'] .seat-card {
+  background: color-mix(in srgb, var(--seat, transparent) 6%, #252c35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
 [data-theme='dark'] .seat-card--active {
-  box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--seat) 70%, transparent),
-    0 0 18px color-mix(in srgb, var(--seat) 22%, transparent);
+  background: color-mix(in srgb, var(--seat) 12%, #262e37);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--seat) 60%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2861,5 +2867,240 @@
   .turn-clock--urgent.turn-clock--mine strong,
   .seat-clock {
     animation: none;
+  }
+}
+
+/* Cards in the hand: upright, coloured like their terrain, with the symbol
+   on a white medallion and the count on a badge */
+
+.card-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px 7px;
+  margin: 0;
+  padding: 8px 6px 18px 0;
+  list-style: none;
+}
+
+.card-row--dev {
+  margin-top: 4px;
+  row-gap: 28px;
+  padding-bottom: 26px;
+}
+
+.game-card {
+  --card: var(--terrain-desert);
+  --card-ink: #3b3326;
+  --card-label: #3b3326;
+  position: relative;
+  aspect-ratio: 5 / 7;
+  min-width: 0;
+}
+
+.game-card--brick { --card: var(--terrain-hills); --card-ink: #7c2c0e; --card-label: #ffffff; }
+.game-card--lumber { --card: var(--terrain-forest); --card-ink: #173f1d; --card-label: #ffffff; }
+.game-card--ore { --card: var(--terrain-mountains); --card-ink: #39434f; --card-label: #ffffff; }
+.game-card--grain { --card: var(--terrain-fields); --card-ink: #7a5300; --card-label: #4d3500; }
+.game-card--wool { --card: var(--terrain-pasture); --card-ink: #2f5a17; --card-label: #22420f; }
+.game-card--knight { --card: #6b51b8; --card-ink: #3f2a85; --card-label: #ffffff; }
+.game-card--roadBuilding,
+.game-card--yearOfPlenty,
+.game-card--monopoly { --card: #2f8f75; --card-ink: #145745; --card-label: #ffffff; }
+.game-card--victoryPoint { --card: #d4a21f; --card-ink: #7a5300; --card-label: #4d3500; }
+
+.game-card-face {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+  color: var(--card-ink);
+  background: linear-gradient(
+    168deg,
+    color-mix(in srgb, var(--card) 78%, #ffffff) 0%,
+    var(--card) 55%,
+    color-mix(in srgb, var(--card) 86%, #000000) 100%
+  );
+  border-radius: 9px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.6),
+    0 2px 6px rgba(20, 24, 30, 0.2);
+  transition:
+    transform 0.25s var(--ease-out),
+    box-shadow 0.25s var(--ease),
+    opacity 0.25s var(--ease),
+    filter 0.25s var(--ease);
+}
+
+.game-card-art {
+  display: grid;
+  width: 76%;
+  aspect-ratio: 1;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.game-card-art svg {
+  width: 68%;
+  height: 68%;
+}
+
+.game-card-name {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -4px;
+  left: -4px;
+  overflow: hidden;
+  color: var(--ink-tertiary);
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-card--dev .game-card-name {
+  font-size: 0.6rem;
+  white-space: normal;
+}
+
+.game-card-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 2;
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  place-items: center;
+  color: var(--surface);
+  background: var(--ink);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--surface);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+/* More than one: a second card peeks out behind */
+.game-card--stack::before {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--card) 80%, #000000);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  content: '';
+  opacity: 0.7;
+  transform: translate(3px, -3px) rotate(4deg);
+}
+
+.game-card--empty .game-card-face {
+  opacity: 0.4;
+  filter: saturate(0.35);
+}
+
+.game-card--empty .game-card-count {
+  color: var(--ink-tertiary);
+  background: var(--sage-100);
+}
+
+/* Development cards are buttons: lift on hover, glow when chosen */
+.game-card-button {
+  width: 100%;
+  font: inherit;
+  border: 0;
+  cursor: pointer;
+}
+
+.game-card-button:disabled {
+  cursor: default;
+}
+
+.game-card-button:not(:disabled):hover,
+.game-card-button:not(:disabled):focus-visible {
+  transform: translateY(-4px);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.8),
+    0 8px 16px rgba(20, 24, 30, 0.25);
+  outline: none;
+}
+
+.game-card-button--selected {
+  transform: translateY(-8px);
+  box-shadow:
+    inset 0 0 0 2px #ffffff,
+    0 0 0 3px var(--accent),
+    0 10px 20px rgba(20, 24, 30, 0.28);
+}
+
+.game-card-note {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  z-index: 2;
+  padding: 1px 7px;
+  color: var(--ink-secondary);
+  background: var(--surface);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.game-card-button:not(:disabled) .game-card-note {
+  color: #ffffff;
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.game-card-button:disabled:not(.game-card-button--vp) .game-card-art {
+  opacity: 0.85;
+}
+
+.dev-road {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4.6;
+  stroke-linecap: round;
+}
+
+.dev-road-line {
+  fill: none;
+  stroke: #ffffff;
+  stroke-dasharray: 1.6 2.2;
+  stroke-linecap: round;
+  stroke-opacity: 0.9;
+  stroke-width: 1;
+}
+
+.resource-icon-line--bold {
+  stroke-width: 1.8;
+  stroke-opacity: 0.85;
+}
+
+[data-theme='dark'] .game-card-face {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='dark'] .game-card--empty .game-card-face {
+  opacity: 0.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-card-face {
+    transition: none;
   }
 }

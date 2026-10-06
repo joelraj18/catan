@@ -4,8 +4,8 @@
 .res-brick { color: var(--res-brick); }
 .res-lumber { color: var(--res-lumber); }
 .res-ore { color: var(--res-ore); }
-.res-grain { color: #b88a12; }
-.res-wool { color: #5e9a2c; }
+.res-grain { color: var(--res-grain); }
+.res-wool { color: var(--res-wool); }
 
 .hex-board {
   display: block;
@@ -18,11 +18,6 @@
   contain: paint;
 }
 
-/* The dark theme's neon edge: every tile outline, blurred once, in one layer */
-.hex-glow {
-  display: none;
-  pointer-events: none;
-}
 
 .hex-tile {
   --glow: var(--terrain-desert);
@@ -67,9 +62,33 @@
 }
 
 .hex-tile-face {
-  stroke: #f3e7bf;
-  stroke-width: 3;
+  stroke: #f7eccb;
+  stroke-width: 4;
   stroke-linejoin: round;
+}
+
+/* The tile's resource symbol, in a tone of the tile's own colour */
+.hex-tile-glyph {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.hex-tile--forest .hex-tile-glyph { color: #173f1d; }
+.hex-tile--hills .hex-tile-glyph { color: #7c2c0e; }
+.hex-tile--mountains .hex-tile-glyph { color: #39434f; }
+.hex-tile--fields .hex-tile-glyph { color: #8a5f00; }
+.hex-tile--pasture .hex-tile-glyph { color: #2f5a17; }
+
+.hex-tile--fields .resource-icon-light,
+.hex-tile--fields .resource-icon-line {
+  fill: #fff6d6;
+  stroke: #fff6d6;
+}
+
+.hex-tile--pasture .hex-tile-glyph .resource-icon-fleece {
+  fill: #ffffff;
+  fill-opacity: 1;
+  stroke: #2f5a17;
 }
 
 .hex-tile--producing .hex-tile-face {
@@ -170,16 +189,17 @@
 }
 
 .number-token-face {
-  fill: #f8f0d8;
-  stroke: #c8b27a;
-  stroke-width: 1.5;
+  fill: #fbf4df;
+  stroke: #d6c18c;
+  stroke-width: 1.6;
 }
 
 .number-token text {
-  fill: #2c2a24;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 17px;
-  font-weight: 700;
+  fill: #2b2924;
+  font-family: var(--font);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .number-token-pip {
@@ -310,71 +330,65 @@
   }
 }
 
-/* Dark theme: a moonlit island with a faint neon edge. Glows are small and
-   low in opacity so the board stays calm. */
+/* Dark theme: the same island at dusk. The tiles keep their hues, a little
+   deeper, on a calm slate sea; no glows, so nothing strains the eyes. */
 
 [data-theme='dark'] .hex-board-sea {
-  stroke: rgba(57, 255, 136, 0.35);
+  stroke: rgba(255, 255, 255, 0.12);
   stroke-width: 2;
 }
 
-[data-theme='dark'] .hex-glow {
-  display: inline;
-  opacity: 0.75;
-}
-
 [data-theme='dark'] .hex-board-sand {
-  fill: #a8976a;
-  stroke: rgba(120, 230, 255, 0.45);
-  stroke-width: 2.5;
-  filter: none;
+  fill: #b8a678;
+  stroke: #9d8c60;
+  stroke-width: 2;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
 }
 
 [data-theme='dark'] .hex-board {
-  --terrain-hills: #b65a32;
-  --terrain-forest: #2f7038;
-  --terrain-mountains: #7a828c;
-  --terrain-fields: #d4a935;
-  --terrain-pasture: #86bd52;
-  --terrain-desert: #cdb683;
+  --terrain-hills: #c65f35;
+  --terrain-forest: #2b7136;
+  --terrain-mountains: #7d8896;
+  --terrain-fields: #dcac28;
+  --terrain-pasture: #80ba45;
+  --terrain-desert: #cdb886;
 }
 
 [data-theme='dark'] .hex-tile-face {
-  stroke: color-mix(in srgb, var(--glow) 55%, #c9ffe0);
-  stroke-width: 2.4;
-}
-
-[data-theme='dark'] .hex-tile-bevel {
-  stroke: color-mix(in srgb, var(--glow) 45%, rgba(255, 255, 255, 0.35));
-  stroke-opacity: 0.55;
+  stroke: #d9cfae;
+  stroke-width: 3.5;
 }
 
 [data-theme='dark'] .hex-tile--producing .hex-tile-face {
-  stroke: #eafff2;
-  stroke-width: 5;
-  filter: brightness(1.15);
+  stroke: #fff4c4;
+  stroke-width: 6;
+  filter: brightness(1.12);
+}
+
+[data-theme='dark'] .number-token-face {
+  fill: #f1e9d2;
 }
 
 [data-theme='dark'] .harbor circle {
-  stroke: rgba(120, 230, 255, 0.85);
-  stroke-width: 2.4;
+  fill: #efe4c6;
+  stroke: #8a6d3b;
 }
 
 [data-theme='dark'] .spot--vertex {
-  stroke: var(--neon);
+  stroke: #5fd394;
 }
 
 [data-theme='dark'] .spot--edge {
-  stroke: color-mix(in srgb, var(--neon) 70%, white);
+  stroke: rgba(255, 255, 255, 0.85);
 }
 
 [data-theme='dark'] .hex-tile--target .hex-tile-face {
-  stroke: var(--neon);
+  stroke: #ffffff;
 }
 
 [data-theme='dark'] .robber path {
-  fill: #6b7079;
-  stroke: rgba(255, 120, 120, 0.7);
+  fill: #5c616a;
+  stroke: #2a2d32;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -387,8 +401,49 @@
   }
 }
 
-[data-theme='dark'] .res-grain { color: #e8c04e; }
-[data-theme='dark'] .res-wool { color: #9fd36b; }
-[data-theme='dark'] .res-ore { color: #a9b1bc; }
-[data-theme='dark'] .res-brick { color: #e07a52; }
-[data-theme='dark'] .res-lumber { color: #5fb36b; }
+[data-theme='dark'] {
+  --res-grain: #eac04e;
+  --res-wool: #a5d66f;
+  --res-ore: #aab4c0;
+  --res-brick: #ea8059;
+  --res-lumber: #67bb72;
+}
+
+/* Resource symbols: the light parts and lines read on any background */
+.resource-icon-light {
+  fill: #ffffff;
+  fill-opacity: 0.5;
+}
+
+.resource-icon-line {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.55;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resource-icon-cut {
+  fill: #f6dfae;
+}
+
+.resource-icon-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-opacity: 0.7;
+  stroke-width: 0.9;
+}
+
+.resource-icon-stem {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.resource-icon-fleece {
+  fill-opacity: 0.55;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}

@@ -5,36 +5,37 @@
    motion. Everything is keyed from <html data-theme="dark">. */
 
 :root[data-theme='dark'] {
-  /* Surfaces climb from near black; text steps turn into light greens */
-  --sage-25: #0f1411;
-  --sage-50: #141b16;
-  --sage-100: #1b241e;
-  --sage-200: #26332b;
-  --sage-300: #34463b;
-  --sage-400: #4d6a58;
-  --sage-500: #6d987c;
-  --sage-600: #8cc29c;
-  --sage-700: #a8dcb3;
-  --sage-800: #c8eed2;
-  --sage-900: #e6f8ea;
+  /* Slate surfaces, never pitch black: each layer a clear step lighter, so
+     panels stand off the page and colours sit on a calm mid-dark ground */
+  --sage-25: #181d23;
+  --sage-50: #1f252d;
+  --sage-100: #262d36;
+  --sage-200: #313a45;
+  --sage-300: #3f4a57;
+  --sage-400: #5a6878;
+  --sage-500: #7d8c9c;
+  --sage-600: #a2b1bf;
+  --sage-700: #c2cfda;
+  --sage-800: #dbe3eb;
+  --sage-900: #eef2f6;
 
-  --canvas: #0b0f0c;
-  --surface: #141a16;
-  --surface-muted: #101512;
+  --canvas: #15191f;
+  --surface: #1e242c;
+  --surface-muted: #1a1f26;
 
-  --ink: #f2f5f0;
-  --ink-secondary: #c9d1c7;
-  --ink-tertiary: #9aa597;
-  --ink-quaternary: #7d877b;
+  --ink: #e8ecf1;
+  --ink-secondary: #c3cbd5;
+  --ink-tertiary: #9aa4b1;
+  --ink-quaternary: #7f8996;
 
-  --accent: #1f9d55;
-  --accent-hover: #22b35f;
-  --accent-soft: rgba(57, 255, 136, 0.12);
-  --link: #5ef0a0;
+  --accent: #2f9e62;
+  --accent-hover: #36b06e;
+  --accent-soft: rgba(95, 211, 148, 0.12);
+  --link: #78d9a3;
 
-  --danger: #ff6b6b;
-  --success: #39ff88;
-  --neon: #39ff88;
+  --danger: #f07a72;
+  --success: #5fd394;
+  --neon: #5fd394;
 
   --hairline: rgba(255, 255, 255, 0.1);
   --hairline-strong: rgba(255, 255, 255, 0.18);
@@ -53,7 +54,7 @@
 }
 
 [data-theme='dark'] .gold-button:not([disabled]):hover {
-  box-shadow: 0 0 18px rgba(57, 255, 136, 0.35);
+  box-shadow: 0 0 18px rgba(95, 211, 148, 0.35);
 }
 
 /* White text on the green scale keeps a deep green behind it */
@@ -61,7 +62,7 @@
 [data-theme='dark'] .panel-number,
 [data-theme='dark'] .results-crown {
   background: linear-gradient(150deg, #1f9d55, #0b5e32);
-  box-shadow: 0 0 14px rgba(57, 255, 136, 0.3);
+  box-shadow: 0 0 14px rgba(95, 211, 148, 0.3);
 }
 
 [data-theme='dark'] .invite-code-card .invite-link-button,
@@ -72,7 +73,7 @@
 
 [data-theme='dark'] .invite-code-card .invite-link-button:hover {
   background: #22b35f;
-  box-shadow: 0 0 14px rgba(57, 255, 136, 0.4);
+  box-shadow: 0 0 14px rgba(95, 211, 148, 0.4);
 }
 
 /* Fixed light tints become deep versions of the same hue */
@@ -85,7 +86,7 @@
 [data-theme='dark'] .reconnect-banner,
 [data-theme='dark'] .trade-pending,
 [data-theme='dark'] .end-vote-status {
-  background: #2a2312;
+  background: #2c2a22;
 }
 
 [data-theme='dark'] .sound-mixer-panel,
@@ -94,15 +95,15 @@
 }
 
 [data-theme='dark'] .invite-code-card {
-  background: linear-gradient(150deg, #1b2a20, #0f1a13);
+  background: linear-gradient(150deg, #22302a, #1a2420);
   box-shadow:
-    inset 0 0 0 1px rgba(57, 255, 136, 0.25),
-    0 0 24px rgba(57, 255, 136, 0.08);
+    inset 0 0 0 1px rgba(95, 211, 148, 0.25),
+    0 0 24px rgba(95, 211, 148, 0.08);
 }
 
 [data-theme='dark'] .invite-code-card strong {
   color: var(--neon);
-  text-shadow: 0 0 12px rgba(57, 255, 136, 0.45);
+  text-shadow: 0 0 12px rgba(95, 211, 148, 0.45);
 }
 
 [data-theme='dark'] .route-mode--selected,
@@ -137,20 +138,37 @@
 }
 
 /* The white seat reads as near white on dark surfaces */
+/* Seat colours step down in saturation and up in lightness on dark
+   surfaces: still clearly red, blue, white and orange, never glaring */
+[data-theme='dark'] .seat-red {
+  --seat: #e2665b;
+  color: #e2665b;
+}
+
+[data-theme='dark'] .seat-blue {
+  --seat: #7096f2;
+  color: #7096f2;
+}
+
 [data-theme='dark'] .seat-white {
-  --seat: #e4e0d4;
-  color: #e4e0d4;
+  --seat: #dcd7ca;
+  color: #dcd7ca;
+}
+
+[data-theme='dark'] .seat-orange {
+  --seat: #eb9a4f;
+  color: #eb9a4f;
 }
 
 [data-theme='dark'] {
-  --sea: #1f5f86;
-  --sea-deep: #164a6a;
+  --sea: #24648f;
+  --sea-deep: #1a4b6e;
 }
 
 /* ---------------------------------------------------------- home page */
 
 [data-theme='dark'] .hero-title {
-  text-shadow: 0 0 40px rgba(57, 255, 136, 0.18);
+  text-shadow: 0 0 40px rgba(95, 211, 148, 0.18);
 }
 
 [data-theme='dark'] .game-player--active {
@@ -187,7 +205,7 @@
 }
 
 [data-theme='dark'] .dice-display--rolling .die-face {
-  filter: drop-shadow(0 0 12px rgba(57, 255, 136, 0.55));
+  filter: drop-shadow(0 0 12px rgba(95, 211, 148, 0.55));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -201,43 +219,43 @@
 [data-theme='dark'] .lobby-topbar,
 [data-theme='dark'] .waiting-topbar,
 [data-theme='dark'] .board-topbar {
-  background: rgba(11, 15, 12, 0.9);
+  background: rgba(21, 25, 31, 0.92);
   border-bottom-color: var(--hairline);
 }
 
 /* Sage glows become a faint green haze */
 [data-theme='dark'] .lobby-page {
   background:
-    radial-gradient(70% 50% at 85% 10%, rgba(57, 255, 136, 0.07), transparent 70%),
+    radial-gradient(70% 50% at 85% 10%, rgba(95, 211, 148, 0.07), transparent 70%),
     var(--canvas);
 }
 
 [data-theme='dark'] .waiting-room-page {
   background:
-    radial-gradient(70% 50% at 15% 10%, rgba(57, 255, 136, 0.07), transparent 70%),
+    radial-gradient(70% 50% at 15% 10%, rgba(95, 211, 148, 0.07), transparent 70%),
     var(--canvas);
 }
 
 [data-theme='dark'] .board-game-page {
   background:
-    radial-gradient(60% 45% at 50% 0%, rgba(57, 255, 136, 0.06), transparent 70%),
+    radial-gradient(60% 45% at 50% 0%, rgba(95, 211, 148, 0.06), transparent 70%),
     var(--canvas);
 }
 
 [data-theme='dark'] .closing-cta {
   background:
-    radial-gradient(60% 80% at 50% 100%, rgba(57, 255, 136, 0.1), transparent),
+    radial-gradient(60% 80% at 50% 100%, rgba(95, 211, 148, 0.1), transparent),
     var(--canvas);
 }
 
 [data-theme='dark'] .results-hero {
   background:
-    radial-gradient(70% 90% at 50% 0%, rgba(57, 255, 136, 0.14), transparent),
+    radial-gradient(70% 90% at 50% 0%, rgba(95, 211, 148, 0.14), transparent),
     var(--surface);
 }
 
 [data-theme='dark'] .sage-glow--one {
-  background: radial-gradient(closest-side, rgba(57, 255, 136, 0.12), transparent);
+  background: radial-gradient(closest-side, rgba(95, 211, 148, 0.12), transparent);
 }
 
 [data-theme='dark'] .sage-glow--two {
@@ -245,18 +263,18 @@
 }
 
 [data-theme='dark'] .hero-glow {
-  background: radial-gradient(closest-side, rgba(57, 255, 136, 0.18), transparent);
+  background: radial-gradient(closest-side, rgba(95, 211, 148, 0.18), transparent);
 }
 
 /* Emphasis words and the big titles glow green */
 [data-theme='dark'] .hero-title,
 [data-theme='dark'] .lobby-intro h1 em,
 [data-theme='dark'] .waiting-room-intro h1 em {
-  background: linear-gradient(180deg, #b9ffd6 5%, #39ff88 55%, #00c964 100%);
+  background: linear-gradient(180deg, #cdf3dd 5%, #5fd394 55%, #3fb87a 100%);
   background-clip: text;
   -webkit-background-clip: text;
   text-shadow: none;
-  filter: drop-shadow(0 0 18px rgba(57, 255, 136, 0.28));
+  filter: drop-shadow(0 0 18px rgba(95, 211, 148, 0.28));
 }
 
 [data-theme='dark'] .section-head h2 span {
@@ -265,9 +283,9 @@
 
 /* The hero board slab and its preview */
 [data-theme='dark'] .board-slab {
-  background: linear-gradient(150deg, #1d2a22 0%, #16211a 45%, #101813 100%);
+  background: linear-gradient(150deg, #242c35 0%, #1f262e 45%, #1a2027 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(57, 255, 136, 0.15),
+    inset 0 0 0 1px rgba(95, 211, 148, 0.15),
     0 30px 60px rgba(0, 0, 0, 0.6);
 }
 
@@ -279,28 +297,28 @@
   box-shadow:
     0 0 0 clamp(3px, 0.5vw, 5px) #0b5e32,
     0 0 0 clamp(5px, 0.8vw, 8px) #1f9d55,
-    0 0 18px rgba(57, 255, 136, 0.45);
+    0 0 18px rgba(95, 211, 148, 0.45);
 }
 
 [data-theme='dark'] .hero-dice {
-  background: linear-gradient(150deg, #1d2a22, #101813);
+  background: linear-gradient(150deg, #242c35, #1a2027);
   box-shadow:
-    inset 0 0 0 1px rgba(57, 255, 136, 0.2),
+    inset 0 0 0 1px rgba(95, 211, 148, 0.2),
     0 18px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* The board frame and the dice tray */
 [data-theme='dark'] .game-board-area {
-  background: linear-gradient(150deg, #1d2a22 0%, #16211a 45%, #101813 100%);
+  background: linear-gradient(150deg, #242c35 0%, #1f262e 45%, #1a2027 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(57, 255, 136, 0.15),
-    0 0 40px rgba(57, 255, 136, 0.06),
+    inset 0 0 0 1px rgba(95, 211, 148, 0.15),
+    0 0 40px rgba(95, 211, 148, 0.06),
     0 30px 60px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme='dark'] .dice-display {
-  background: linear-gradient(160deg, #1b241e, #101512);
-  box-shadow: inset 0 0 0 1px rgba(57, 255, 136, 0.15);
+  background: linear-gradient(160deg, #262e38, #1f252d);
+  box-shadow: inset 0 0 0 1px rgba(95, 211, 148, 0.15);
 }
 
 [data-theme='dark'] .dice-total {

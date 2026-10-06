@@ -25,6 +25,7 @@ import {
   tradeShapeProblem,
   visibleHandSize,
 } from './catanRules';
+import { DevRow, ResourceRow } from './GameCards.jsx';
 import GameToasts from './GameToasts.jsx';
 import { settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
@@ -1619,18 +1620,21 @@ export default function BoardGame({
               <div className="hand-head">
                 <p className="eyebrow">Your hand</p>
                 <span className="hand-points">
-                  {myPoints} VP{hiddenPoints(view, myPlayerId) ? ` (${hiddenPoints(view, myPlayerId)} hidden)` : ''}
+                  {bundleSize(myHand)} card{bundleSize(myHand) === 1 ? '' : 's'} · {myPoints} VP
+                  {hiddenPoints(view, myPlayerId) ? ` (${hiddenPoints(view, myPlayerId)} hidden)` : ''}
                 </span>
               </div>
-              <ul className="hand-cards">
-                {RESOURCES.map((resource) => (
-                  <li key={resource} className={`hand-card res-${resource} ${myHand[resource] ? '' : 'hand-card--empty'}`}>
-                    <ResourceIcon resource={resource} size={20} />
-                    <strong>{myHand[resource]}</strong>
-                    <span>{RESOURCE_LABELS[resource]}</span>
-                  </li>
-                ))}
-              </ul>
+              <ResourceRow hand={myHand} />
+              <DevRow
+                cards={myDev}
+                turnCount={view.turnCount}
+                canPlay={canPlayDev}
+                playable={playableDev}
+                onPlay={playDev}
+              />
+              {view.devPlayedThisTurn && isMyTurn && myDev.length > 0 && (
+                <p className="trade-note">One development card per turn, already played</p>
+              )}
             </section>
           )}
 
@@ -1678,44 +1682,6 @@ export default function BoardGame({
                 </span>
                 <CostChips cost={COSTS.dev} size={20} />
               </button>
-            </section>
-          )}
-
-          {myDev.length > 0 && (
-            <section className="dev-panel" aria-label="Your development cards">
-              <p className="eyebrow">Development cards</p>
-              <ul>
-                {myDev.map((card) => {
-                  const info = DEV_CARDS[card.type];
-                  const fresh = card.boughtTurn === view.turnCount;
-                  const playable = canPlayDev && playableDev.includes(card);
-                  const waitsForRoll = !fresh && phase === 'pre-roll' && card.type !== 'knight' && isMyTurn;
-                  return (
-                    <li key={card.id} className={`dev-card dev-card--${info?.kind}`}>
-                      <div>
-                        <strong>{info?.label}</strong>
-                        <span>{info?.text}</span>
-                      </div>
-                      {card.type === 'victoryPoint' ? (
-                        <em>Counts automatically</em>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-link"
-                          disabled={!playable}
-                          onClick={() => playDev(card.type)}
-                          aria-label={
-                            fresh ? `${info?.label}, playable next turn` : waitsForRoll ? `${info?.label}, playable after the roll` : `Play ${info?.label}`
-                          }
-                        >
-                          {fresh ? 'Next turn' : waitsForRoll ? 'After roll' : 'Play'}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-              {view.devPlayedThisTurn && isMyTurn && <p className="trade-note">One development card per turn, already played</p>}
             </section>
           )}
 
