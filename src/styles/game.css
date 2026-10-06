@@ -1005,8 +1005,6 @@
   transition:
     opacity 0.4s var(--ease),
     transform 0.4s var(--ease);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
 }
 
 .toast--visible {

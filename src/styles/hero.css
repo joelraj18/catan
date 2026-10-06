@@ -72,13 +72,6 @@
   animation-delay: 0.24s;
 }
 
-.hero-kicker {
-  margin-bottom: 6px;
-  color: var(--sage-600);
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
 .hero-title {
   padding-bottom: 0.06em;
   color: transparent;
@@ -121,6 +114,7 @@
 
 .hero-stage {
   position: relative;
+  contain: layout paint;
   display: grid;
   width: min(760px, calc(100% - 44px));
   margin: clamp(40px, 6vw, 72px) auto 0;
@@ -140,12 +134,12 @@
 .hero-visual {
   position: relative;
   width: 100%;
+  /* Follows the scroll frame by frame (no transition, so it never lags
+     behind and catches up) and keeps one scale, so the board is drawn once */
   transform:
     rotateX(calc(26deg - var(--scroll) * 26deg))
-    scale(calc(0.9 + var(--scroll) * 0.1))
     translateY(calc(var(--scroll) * -10px));
   transform-origin: 50% 70%;
-  transition: transform 0.12s linear;
   will-change: transform;
 }
 

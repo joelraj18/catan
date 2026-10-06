@@ -90,7 +90,7 @@
 
 [data-theme='dark'] .sound-mixer-panel,
 [data-theme='dark'] .property-card-header {
-  background: rgba(20, 26, 22, 0.94);
+  background: var(--surface);
 }
 
 [data-theme='dark'] .invite-code-card {
@@ -201,7 +201,7 @@
 [data-theme='dark'] .lobby-topbar,
 [data-theme='dark'] .waiting-topbar,
 [data-theme='dark'] .board-topbar {
-  background: rgba(11, 15, 12, 0.78);
+  background: rgba(11, 15, 12, 0.9);
   border-bottom-color: var(--hairline);
 }
 

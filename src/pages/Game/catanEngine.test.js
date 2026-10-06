@@ -1,5 +1,6 @@
 import { BEGINNER_SETTLEMENTS, GEOMETRY, RESOURCES } from './catanBoard';
-import GameEngine, { beginnerPositions, computeStandings } from './catanEngine';
+import { tradeValue } from './catanBot';
+import GameEngine, { AI_CALL_BUDGET, beginnerPositions, computeStandings } from './catanEngine';
 import {
   BANK_SIZE,
   PIECE_LIMITS,
@@ -436,6 +437,76 @@ describe('trading', () => {
   });
 });
 
+describe('audit regressions', () => {
+  test('an offer is withdrawn as soon as its maker can no longer pay', async () => {
+    const engine = track(engineWith());
+    const [me, x] = [0, 1].map((i) => engine.state.players[(engine.state.activeIndex + i) % 3].id);
+    await rollTo(engine, [1, 1]);
+    engine.state = { ...engine.state, hands: { ...engine.state.hands, [me]: hand({ brick: 1, lumber: 1, ore: 3 }) }, bank: { ...engine.state.bank } };
+    engine.state.bank = Object.fromEntries(RESOURCES.map((r) => [r, BANK_SIZE - Object.values(engine.state.hands).reduce((sum, h) => sum + h[r], 0)]));
+    expect(engine.proposeTrade(me, { give: { brick: 1 }, get: { ore: 1 }, to: x })).toBe(true);
+    // Spending the brick on a road withdraws the offer.
+    expect(engine.placeRoad(me, legalRoadSpots(engine.state, me)[0])).toBe(true);
+    expect(engine.state.trades).toHaveLength(0);
+  });
+
+  test('the trade and build clock is not restarted by a knight', async () => {
+    const random = seeded(9);
+    const engine = track(
+      new GameEngine({
+        players: seats(['human', 'human', 'human']),
+        timing: { ...CALM, turn: 60000, robber: 60000 },
+        options: { board: 'beginner' },
+        rollDie: () => 1,
+        pickIndex: (n) => Math.floor(random() * n),
+        random,
+      }),
+    );
+    engine.start();
+    const me = active(engine);
+    await engine.roll(me);
+    const first = engine.state.phaseEndsAt;
+    expect(first).toBeGreaterThan(Date.now());
+    engine.state = { ...engine.state, devCards: { ...engine.state.devCards, [me]: [{ id: 9, type: 'knight', boughtTurn: -1 }] } };
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(engine.playDev(me, 'knight')).toBe(true);
+    const empty = engine.state.board.hexes.find(
+      (hex) => hex.id !== engine.state.board.robber && GEOMETRY.hexes[hex.id].vertices.every((v) => !engine.state.buildings[v]),
+    );
+    expect(engine.moveRobber(me, empty.id)).toBe(true);
+    expect(engine.state.turnPhase).toBe('actions');
+    expect(engine.state.phaseEndsAt).toBe(first);
+  });
+
+  test('a game saved while people discard resumes in the discard phase', async () => {
+    const engine = track(engineWith());
+    const rich = engine.state.players.find((p) => p.id !== active(engine)).id;
+    give(engine, rich, { ore: 6, wool: 3 });
+    await rollTo(engine, [3, 4]);
+    expect(engine.state.turnPhase).toBe('discard');
+    const saved = JSON.parse(JSON.stringify(engine.state));
+    const resumed = track(new GameEngine({ players: saved.players, timing: CALM, initialState: saved }));
+    expect(resumed.state.turnPhase).toBe('discard');
+    const owed = resumed.state.pendingDiscards[rich];
+    expect(resumed.discard(rich, { ore: Math.min(6, owed), wool: Math.max(0, owed - 6) })).toBe(true);
+    expect(resumed.state.turnPhase).toBe('robber');
+  });
+
+  test('computer opponents judge trades by visible points only', () => {
+    const engine = track(engineWith({ kinds: ['human', 'bot', 'bot'] }));
+    const [me, bot] = engine.state.players.map((p) => p.id);
+    // Hidden victory point cards must not change the bot's answer.
+    const trade = { id: 1, from: me, to: bot, give: { ore: 1 }, get: { wool: 1 }, responses: {} };
+    const before = tradeValue(engine.state, bot, trade);
+    engine.state = {
+      ...engine.state,
+      devCards: { ...engine.state.devCards, [me]: Array.from({ length: 5 }, (_, i) => ({ id: i, type: 'victoryPoint', boughtTurn: 0 })) },
+    };
+    const after = tradeValue(engine.state, bot, trade);
+    expect(after).toEqual(before);
+  });
+});
+
 describe('seats and endings', () => {
   test('ending by agreement goes to the most points', () => {
     const engine = track(engineWith({ kinds: ['human', 'bot', 'bot'] }));
@@ -534,4 +605,82 @@ describe('rules audit: full computer games', () => {
     expect(state.players[state.activeIndex].id).toBe(winner);
     expect(computeStandings(state)[0].id).toBe(winner);
   }, 40000);
+});
+
+describe('premium AI seats', () => {
+  // A stand-in for Claude that records every question and follows the plan
+  // it is given: every option in order, ending the turn last.
+  const fakeClaude = (log) => async ({ kind, playerId, state, options }) => {
+    log.push({ kind, playerId, turn: state.turnCount, options });
+    const plan = options.map((_, index) => index);
+    return { plan, choice: 0, comment: '', usage: { calls: log.length, input: 100, output: 10, cached: 600 } };
+  };
+
+  const aiGame = (log, { board = 'random', seed = 5 } = {}) =>
+    new Promise((resolve, reject) => {
+      const random = seeded(seed);
+      let engine = null;
+      const advisor = fakeClaude(log);
+      engine = new GameEngine({
+        players: seats(['ai', 'bot', 'bot']),
+        timing: FAST,
+        options: { board },
+        advisor,
+        rollDie: () => 1 + Math.floor(random() * 6),
+        pickIndex: (n) => Math.floor(random() * n),
+        random,
+        onChange: (state) => {
+          if (state.gameOver) {
+            clearTimeout(guard);
+            engine.destroy();
+            resolve(state);
+          }
+        },
+      });
+      const guard = setTimeout(() => {
+        engine.destroy();
+        reject(new Error('no winner'));
+      }, 30000);
+      engine.start();
+    });
+
+  test('asks Claude at most once per turn, plus set-up and close calls, within budget', async () => {
+    const log = [];
+    const state = await aiGame(log);
+    const turnCalls = log.filter((entry) => entry.kind === 'turn');
+    const perTurn = {};
+    turnCalls.forEach((entry) => {
+      perTurn[entry.turn] = (perTurn[entry.turn] || 0) + 1;
+    });
+    expect(Math.max(0, ...Object.values(perTurn))).toBeLessThanOrEqual(1);
+    expect(log.filter((entry) => entry.kind === 'setup')).toHaveLength(2);
+    expect(log.every((entry) => entry.playerId === 'p1')).toBe(true);
+    expect(log.length).toBeLessThanOrEqual(AI_CALL_BUDGET);
+    // Every turn plan offers a way to end the turn, and only real choices are asked.
+    turnCalls.forEach((entry) => {
+      expect(entry.options[entry.options.length - 1]).toBe('End the turn');
+      expect(entry.options.length).toBeGreaterThanOrEqual(3);
+    });
+    expect(state.aiUsage.p1.calls).toBe(log.length);
+    expect(state.gameOver.reason).toBe('victory');
+  }, 40000);
+
+  test('after the budget the computer strategy plays the seat', async () => {
+    const log = [];
+    const engine = track(engineWith({ kinds: ['ai', 'human', 'human'] }));
+    engine.advisor = fakeClaude(log);
+    engine.state = { ...engine.state, aiUsage: { p1: { calls: AI_CALL_BUDGET, tokens: 0 } } };
+    const plan = await engine.consult('p1', 'turn', [{ label: 'a' }, { label: 'b' }]);
+    expect(plan).toBeNull();
+    expect(log).toHaveLength(0);
+  });
+
+  test('a failing Claude falls back without stalling', async () => {
+    const engine = track(engineWith({ kinds: ['ai', 'human', 'human'] }));
+    engine.advisor = async () => {
+      throw new Error('offline');
+    };
+    expect(await engine.choose('p1', 'setup', [{ label: 'a' }, { label: 'b' }])).toBe(0);
+    expect(engine.state.thinking).toBeNull();
+  });
 });

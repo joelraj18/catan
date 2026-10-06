@@ -8,7 +8,7 @@ import { premiumAdvisor } from '../../services/premiumAi';
 import { transportKind } from '../../services/roomTransport';
 import { playSfx } from '../../services/sfx';
 import { RESOURCES, RESOURCE_LABELS } from './catanBoard';
-import GameEngine, { DEFAULT_TIMING, createInitialState } from './catanEngine';
+import GameEngine, { AI_CALL_BUDGET, DEFAULT_TIMING, createInitialState } from './catanEngine';
 import {
   COSTS,
   DEV_CARDS,
@@ -27,6 +27,20 @@ import {
   visibleHandSize,
 } from './catanRules';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
+import {
+  ArmyIcon,
+  AwayIcon,
+  CardsIcon,
+  ComputerIcon,
+  KnightIcon,
+  LongestRoadIcon,
+  PersonIcon,
+  PieceIcon,
+  RoadIcon,
+  ScrollIcon,
+  SparkIcon,
+  SunIcon,
+} from './tableIcons.jsx';
 import { PieceMark } from './pieces.jsx';
 import './board-game.css';
 
@@ -98,6 +112,35 @@ function useCountdown(endsAt) {
 
   return endsAt ? Math.max(0, endsAt - Date.now()) : 0;
 }
+
+// A ticking number of seconds. Only this small element re-renders each
+// tick, never the board.
+function Countdown({ endsAt, render }) {
+  const left = useCountdown(endsAt);
+  return render(Math.ceil(left / 1000), left);
+}
+
+// The coloured role tag on a player's card.
+const roleFor = (player, myPlayerId) => {
+  if (player.away) return { key: 'away', label: 'Away', title: 'Disconnected, the computer is playing', icon: <AwayIcon size={13} /> };
+  if (player.kind === 'bot') return { key: 'bot', label: 'Computer', title: 'Computer opponent', icon: <ComputerIcon size={13} /> };
+  if (player.kind === 'ai') return { key: 'ai', label: 'AI · Claude', title: 'Premium AI opponent', icon: <SparkIcon size={13} /> };
+  return {
+    key: 'human',
+    label: player.id === 'p1' ? 'Host' : 'Player',
+    title: player.id === myPlayerId ? 'You' : 'A person at the table',
+    icon: <PersonIcon size={13} />,
+  };
+};
+
+// What the player is doing right now, shown as a status tag.
+const STATUS_LABELS = {
+  'pre-roll': 'Rolling',
+  actions: 'Trading & building',
+  robber: 'Moving the robber',
+  steal: 'Stealing',
+  'road-building': 'Free roads',
+};
 
 // Applies one player's action to the engine, whether it came from this
 // screen or from a friend's intent over the network.
@@ -468,24 +511,26 @@ export default function BoardGame({
     return {};
   }, [view, me, over, setupTurn, isMyTurn, phase, mode, myPlayerId]);
 
-  const onVertex = (vertexId) => {
-    if (mode === 'city') {
-      act({ type: 'build-city', vertexId });
-    } else {
-      act({ type: 'place-settlement', vertexId });
-    }
-    setMode(null);
-  };
+  const onVertex = useCallback(
+    (vertexId) => {
+      act({ type: mode === 'city' ? 'build-city' : 'place-settlement', vertexId });
+      setMode(null);
+    },
+    [act, mode],
+  );
 
-  const onEdge = (edgeId) => {
-    act({ type: 'place-road', edgeId });
-    if (mode === 'road') setMode(null);
-  };
+  const onEdge = useCallback(
+    (edgeId) => {
+      act({ type: 'place-road', edgeId });
+      setMode((current) => (current === 'road' ? null : current));
+    },
+    [act],
+  );
 
-  const onHex = (hexId) => act({ type: 'move-robber', hexId });
+  const onHex = useCallback((hexId) => act({ type: 'move-robber', hexId }), [act]);
 
   const localTime = (at) => (at ? at + (isHost ? 0 : clockOffset) : 0);
-  const phaseLeft = useCountdown(localTime(view.phaseEndsAt));
+  const phaseEndsAt = localTime(view.phaseEndsAt);
   const log = view.log || [];
   const myCode = me?.code;
   const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
@@ -574,7 +619,10 @@ export default function BoardGame({
               </GoldButton>
             </div>
             {view.phaseEndsAt && (
-              <p className="trade-note">The computer chooses for you in {Math.ceil(phaseLeft / 1000)} s</p>
+              <Countdown
+                endsAt={phaseEndsAt}
+                render={(seconds) => <p className="trade-note">The computer chooses for you in {seconds} s</p>}
+              />
             )}
           </div>
         </div>
@@ -870,7 +918,7 @@ export default function BoardGame({
               </svg>
             </span>
             <p className="property-card-kicker">
-              {result.reason === 'agreed' ? `Ended by agreement after ${result.turns} turns` : `Victory on turn ${result.turns}`}
+              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${WINNING_POINTS} or more points`}
             </p>
             <h3 id="results-title">{headline}</h3>
             <p className="results-sub">Every point counts, hidden victory point cards are now revealed</p>
@@ -1023,9 +1071,17 @@ export default function BoardGame({
 
   // ------------------------------------------------------------- render
 
+  const statusFor = (player, { active, placing }) => {
+    if (view.thinking === player.id) return { key: 'thinking', label: 'Asking Claude' };
+    if (placing) return { key: 'turn', label: 'Placing' };
+    if (phase === 'discard' && view.pendingDiscards?.[player.id]) return { key: 'alert', label: 'Discarding' };
+    if (active) return { key: 'turn', label: STATUS_LABELS[phase] || 'Taking a turn' };
+    return null;
+  };
+
   const steal = view.lastSteal;
   const stealNote =
-    steal && steal.resource && (steal.thief === myPlayerId || steal.victim === myPlayerId)
+    steal && steal.resource && steal.turn === view.turnCount && (steal.thief === myPlayerId || steal.victim === myPlayerId)
       ? steal.thief === myPlayerId
         ? `You stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from ${nameOf(steal.victim)}`
         : `${nameOf(steal.thief)} stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from you`
@@ -1039,9 +1095,16 @@ export default function BoardGame({
         </button>
 
         <div className="round-indicator">
-          <span>{phase === 'setup' ? 'Set-up' : 'Turn'}</span>
-          <strong>{phase === 'setup' ? `${view.setup.step + 1}/${view.setup.order.length}` : view.turnCount}</strong>
-          <span>first to {WINNING_POINTS}</span>
+          {phase === 'setup' && view.setup ? (
+            <>
+              <span>Set-up</span>
+              <strong>{`${view.setup.step + 1}/${view.setup.order.length}`}</strong>
+              <span>·</span>
+            </>
+          ) : null}
+          <span>First to</span>
+          <strong>{WINNING_POINTS}</strong>
+          <span>victory points wins</span>
           <button
             type="button"
             className="match-info-button"
@@ -1097,77 +1160,119 @@ export default function BoardGame({
       <section className="board-game-layout">
         <aside className="board-side">
           <section className="player-panel" aria-label="Players">
-            <p className="eyebrow">The table</p>
+            <div className="player-panel-head">
+              <p className="eyebrow">The table</p>
+              <span className="player-panel-goal">
+                <SunIcon size={14} /> {WINNING_POINTS} to win
+              </span>
+            </div>
 
             <div className="player-list">
               {players.map((player, index) => {
                 const active = index === view.activeIndex && !over && phase !== 'setup';
-                const points = publicPoints(view, player.id) + (player.id === myPlayerId ? hiddenPoints(view, player.id) : 0);
+                const placing = phase === 'setup' && view.setup && players[view.setup.order[view.setup.step]]?.id === player.id;
+                const hidden = player.id === myPlayerId ? hiddenPoints(view, player.id) : 0;
+                const points = publicPoints(view, player.id) + hidden;
+                const left = piecesLeft(view, player.id);
+                const status = statusFor(player, { active, placing });
+                const role = roleFor(player, myPlayerId);
                 return (
                   <article
-                    className={`game-player catan-player seat-${player.pieceKey} ${active ? 'game-player--active' : ''} ${player.away ? 'game-player--away' : ''}`}
+                    className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''}`}
                     key={player.id}
                   >
-                    <span className="game-player-token">
-                      <PieceMark piece={player.pieceKey} variant="token" title={player.name} />
-                    </span>
+                    <div className="seat-card-head">
+                      <span className="seat-avatar">
+                        <PieceMark piece={player.pieceKey} variant="token" title={player.name} />
+                      </span>
 
-                    <div>
-                      <strong>
-                        {player.name}
-                        {player.id === myPlayerId && <em className="you-chip">You</em>}
-                      </strong>
-                      <span>{view.thinking === player.id ? 'Thinking' : active ? 'Taking a turn' : kindLabel(player)}</span>
+                      <div className="seat-card-name">
+                        <strong>{player.name}</strong>
+                        <div className="seat-tags">
+                          {player.id === myPlayerId && <span className="seat-tag seat-tag--you">You</span>}
+                          <span className={`seat-tag seat-tag--${role.key}`} title={role.title}>
+                            {role.icon}
+                            {role.label}
+                          </span>
+                          {status && <span className={`seat-tag seat-tag--status seat-tag--${status.key}`}>{status.label}</span>}
+                        </div>
+                      </div>
+
+                      <span
+                        className="vp-medal"
+                        style={{ '--vp': Math.min(1, points / WINNING_POINTS) }}
+                        title={`${points} of ${WINNING_POINTS} victory points${hidden ? `, ${hidden} hidden from the others` : ''}`}
+                      >
+                        <svg viewBox="0 0 40 40" aria-hidden="true">
+                          <circle className="vp-medal-track" cx="20" cy="20" r="17" />
+                          <circle className="vp-medal-fill" cx="20" cy="20" r="17" pathLength="100" />
+                        </svg>
+                        <strong>{points}</strong>
+                        <span>VP</span>
+                      </span>
                     </div>
 
-                    <span className="catan-player-points" title="Victory points">
-                      <strong>{points}</strong>
-                      <span>VP</span>
-                    </span>
-
-                    <ul className="catan-player-stats">
-                      <li title="Resource cards">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <rect x="5" y="3" width="12" height="17" rx="2" />
-                          <path d="M9 21h10a2 2 0 0 0 0 0V6" />
-                        </svg>
-                        {visibleHandSize(view.hands[player.id])}
+                    <ul className="stat-tags">
+                      <li className="stat-tag stat-tag--cards" title="Resource cards in hand">
+                        <CardsIcon /> {visibleHandSize(view.hands[player.id])}
+                        <em>cards</em>
                       </li>
-                      <li title="Development cards">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <circle cx="12" cy="12" r="8" />
-                          <path d="M4 12h16" />
-                        </svg>
-                        {(view.devCards[player.id] || []).length}
+                      <li className="stat-tag stat-tag--dev" title="Development cards in hand">
+                        <ScrollIcon /> {(view.devCards[player.id] || []).length}
+                        <em>dev</em>
                       </li>
-                      <li title="Knights played">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z" />
-                        </svg>
-                        {view.knights[player.id] || 0}
+                      <li className="stat-tag stat-tag--knights" title="Knights played">
+                        <KnightIcon /> {view.knights[player.id] || 0}
+                        <em>knights</em>
                       </li>
-                      <li title="Longest road">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 20 10 4M20 20 14 4M12 6v2m0 4v2m0 4v2" />
-                        </svg>
-                        {view.longestRoad.lengths[player.id] || 0}
+                      <li className="stat-tag stat-tag--road" title="Longest continuous road">
+                        <RoadIcon /> {view.longestRoad.lengths[player.id] || 0}
+                        <em>road</em>
                       </li>
                     </ul>
 
-                    {(view.longestRoad.holder === player.id || view.largestArmy === player.id) && (
-                      <div className="catan-badges">
-                        {view.longestRoad.holder === player.id && <span className="catan-badge">Longest Road +2</span>}
-                        {view.largestArmy === player.id && <span className="catan-badge">Largest Army +2</span>}
-                      </div>
+                    <div className="seat-card-foot">
+                      <span className="pieces-left" title="Pieces left to build: settlements, cities, roads">
+                        <span><PieceIcon kind="settlement" size={12} />{left.settlement}</span>
+                        <span><PieceIcon kind="city" size={12} />{left.city}</span>
+                        <span><PieceIcon kind="road" size={12} />{left.road}</span>
+                      </span>
+                      {view.longestRoad.holder === player.id && (
+                        <span className="award-pill" title="Longest Road, 2 victory points">
+                          <LongestRoadIcon size={16} /> Longest Road
+                        </span>
+                      )}
+                      {view.largestArmy === player.id && (
+                        <span className="award-pill" title="Largest Army, 2 victory points">
+                          <ArmyIcon size={16} /> Largest Army
+                        </span>
+                      )}
+                    </div>
+
+                    {player.kind === 'ai' && view.aiUsage?.[player.id] && (
+                      <p className="ai-usage" title="Claude calls and tokens this game">
+                        Claude {Math.min(view.aiUsage[player.id].calls, AI_CALL_BUDGET)}/{AI_CALL_BUDGET} calls ·{' '}
+                        {Math.round((view.aiUsage[player.id].tokens || 0) / 100) / 10}k tokens
+                      </p>
                     )}
                   </article>
                 );
               })}
             </div>
-            <p className="bank-line">
-              Bank {RESOURCES.map((resource) => `${RESOURCE_LABELS[resource].slice(0, 2)} ${view.bank[resource]}`).join(' · ')} ·
-              Dev {deckLeft}
-            </p>
+
+            <div className="bank-row" aria-label="The bank">
+              <span className="bank-row-label">Bank</span>
+              {RESOURCES.map((resource) => (
+                <span key={resource} className={`bank-chip res-${resource}`} title={`${view.bank[resource]} ${RESOURCE_LABELS[resource]} left`}>
+                  <ResourceIcon resource={resource} size={14} />
+                  {view.bank[resource]}
+                </span>
+              ))}
+              <span className="bank-chip bank-chip--dev" title={`${deckLeft} development cards left`}>
+                <ScrollIcon size={14} />
+                {deckLeft}
+              </span>
+            </div>
           </section>
 
           {session && <ChatPanel session={session} compact />}
@@ -1313,9 +1418,14 @@ export default function BoardGame({
           </div>
 
           {view.phaseEndsAt && !over && (
-            <p className={`phase-timer ${phaseLeft < 15000 ? 'phase-timer--urgent' : ''}`} aria-live="off">
-              {Math.ceil(phaseLeft / 1000)} s left for this move
-            </p>
+            <Countdown
+              endsAt={phaseEndsAt}
+              render={(seconds, left) => (
+                <p className={`phase-timer ${left < 15000 ? 'phase-timer--urgent' : ''}`} aria-live="off">
+                  {seconds} s left for this move
+                </p>
+              )}
+            />
           )}
 
           {isMyTurn && phase === 'pre-roll' && !over ? (
