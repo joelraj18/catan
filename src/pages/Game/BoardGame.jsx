@@ -25,6 +25,8 @@ import {
   tradeShapeProblem,
   visibleHandSize,
 } from './catanRules';
+import CardFlights from './CardFlights.jsx';
+import Dice3D from './Dice3D.jsx';
 import { DevRow, ResourceRow } from './GameCards.jsx';
 import GameToasts from './GameToasts.jsx';
 import { settingsOf, timerLabel } from './gameSettings';
@@ -45,8 +47,6 @@ import {
 } from './tableIcons.jsx';
 import { PieceMark } from './pieces.jsx';
 import './board-game.css';
-
-import winnerSound from '../../assets/sounds/Winner.mp3';
 
 const PIP_LAYOUT = {
   1: [[50, 50]],
@@ -473,40 +473,26 @@ export default function BoardGame({
     () => (effectsOn ? () => playSfx('tick', audioSettings.effectsVolume) : null),
     [effectsOn, audioSettings.effectsVolume],
   );
-  const winnerRef = useRef(null);
-
-  if (!winnerRef.current && typeof Audio !== 'undefined') {
-    winnerRef.current = new Audio(winnerSound);
-    winnerRef.current.preload = 'auto';
-  }
-
-  useEffect(() => {
-    const winner = winnerRef.current;
-    return () => winner?.pause();
-  }, []);
-
   const lastSfx = useRef(state.sfx?.id ?? 0);
 
+  // Every sound is made on the spot, the win included: a calm chord rather
+  // than a recording. Sounds of one move play a moment apart.
   useEffect(() => {
     const sfx = state.sfx;
 
     if (!sfx || sfx.id === lastSfx.current) {
-      return;
+      return undefined;
     }
 
     lastSfx.current = sfx.id;
 
     if (!effectsOn) {
-      return;
+      return undefined;
     }
 
-    if (sfx.key === 'winner' && winnerRef.current) {
-      winnerRef.current.volume = Math.min(1, Math.max(0, audioSettings.effectsVolume));
-      winnerRef.current.currentTime = 0;
-      winnerRef.current.play().catch(() => {});
-    } else {
-      playSfx(sfx.key, audioSettings.effectsVolume);
-    }
+    const keys = (sfx.keys || [sfx.key]).map((key) => (key === 'winner' ? 'win' : key));
+    const timers = keys.map((key, index) => window.setTimeout(() => playSfx(key, audioSettings.effectsVolume), index * 260));
+    return () => timers.slice(1).forEach((timer) => window.clearTimeout(timer));
   }, [state.sfx, effectsOn, audioSettings.effectsVolume]);
 
   // ------------------------------------------------------------ keyboard
@@ -1333,6 +1319,8 @@ export default function BoardGame({
         </div>
       )}
 
+      <CardFlights events={view.events} me={myPlayerId} board={view.board} />
+
       {me && (
         <GameToasts view={view} myPlayerId={myPlayerId} act={act} players={players} myHand={myHand} localTime={localTime} />
       )}
@@ -1360,6 +1348,7 @@ export default function BoardGame({
                   <article
                     className={`seat-card seat-${player.pieceKey} ${active || placing ? 'seat-card--active' : ''} ${player.away ? 'seat-card--away' : ''}`}
                     key={player.id}
+                    data-anchor={`seat-${player.id}`}
                   >
                     <div className="seat-card-head">
                       <span className="seat-avatar">
@@ -1452,7 +1441,7 @@ export default function BoardGame({
               })}
             </div>
 
-            <div className="bank-row" aria-label="The bank">
+            <div className="bank-row" aria-label="The bank" data-anchor="bank">
               <span className="bank-row-label">Bank</span>
               {RESOURCES.map((resource) => (
                 <span key={resource} className={`bank-chip res-${resource}`} title={`${view.bank[resource]} ${RESOURCE_LABELS[resource]} left`}>
@@ -1603,12 +1592,17 @@ export default function BoardGame({
             aria-live="polite"
             aria-label={view.dice ? `Rolled ${view.dice[0]} and ${view.dice[1]}` : 'Dice ready'}
           >
-            <div className="dice-pair">
-              <DieFace value={view.dice?.[0]} />
-              <DieFace value={view.dice?.[1]} />
-            </div>
+            <Dice3D dice={view.dice} rolling={view.rolling} rollKey={view.dice ? `${view.turnCount}:${view.dice.join('-')}` : null} />
             <span className="dice-total">
-              {view.dice ? `Total ${view.dice[0] + view.dice[1]}` : view.rolling ? 'Rolling' : 'Ready to roll'}
+              {view.dice && !view.rolling ? (
+                <span key={`${view.turnCount}:${view.dice.join('-')}`} className="dice-total-badge">
+                  Total {view.dice[0] + view.dice[1]}
+                </span>
+              ) : view.rolling ? (
+                'Rolling'
+              ) : (
+                'Ready to roll'
+              )}
             </span>
           </div>
 
@@ -1652,7 +1646,7 @@ export default function BoardGame({
           )}
 
           {me && (
-            <section className="hand-panel" aria-label="Your cards">
+            <section className="hand-panel" aria-label="Your cards" data-anchor="hand">
               <div className="hand-head">
                 <p className="eyebrow">Your hand</p>
                 <span className="hand-points">

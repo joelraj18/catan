@@ -245,31 +245,6 @@
   pointer-events: none;
 }
 
-.robber path {
-  fill: #50545b;
-  stroke: #2f3237;
-  stroke-width: 1.5;
-}
-
-.robber-shadow {
-  fill: rgba(0, 0, 0, 0.28);
-}
-
-.robber {
-  animation: robberDrop 0.45s var(--ease-spring);
-}
-
-@keyframes robberDrop {
-  from {
-    opacity: 0;
-    transform: translateY(-14px);
-  }
-}
-
-.road line:last-child {
-  animation: pieceIn 0.35s var(--ease-out);
-}
-
 .building-shadow {
   fill: rgba(0, 0, 0, 0.28);
 }
@@ -386,17 +361,12 @@
   stroke: #ffffff;
 }
 
-[data-theme='dark'] .robber path {
-  fill: #5c616a;
-  stroke: #2a2d32;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .spot--vertex,
   .spot--edge,
   .hex-tile--target .hex-tile-face,
-  .building--upgradable path,
-  .robber {
+  .building--upgradable path {
     animation: none;
   }
 }
@@ -563,5 +533,285 @@
   .building--picked,
   .confirm-chip {
     animation: none !important;
+  }
+}
+
+/* The robber: a small dragon, asleep on the hex it blocks */
+
+.dragon {
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dragon-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+}
+
+.dragon-skin,
+.dragon-tail-tip {
+  fill: #5b4a8b;
+  stroke: #33285a;
+  stroke-width: 1.2;
+}
+
+.dragon-tail {
+  fill: none;
+  stroke: #5b4a8b;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.dragon-belly {
+  fill: #d8c9f5;
+}
+
+.dragon-spikes,
+.dragon-horn {
+  fill: #f3e6c4;
+  stroke: #8d7a4c;
+  stroke-width: 0.6;
+}
+
+.dragon-wing {
+  fill: #8a72cf;
+  stroke: #33285a;
+  stroke-width: 1;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: 20% 100%;
+}
+
+.dragon-wing--back {
+  fill: #6f59b3;
+}
+
+.dragon-nostril {
+  fill: #241b40;
+}
+
+.dragon-eye {
+  fill: none;
+  stroke: #241b40;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.dragon-eye--open {
+  display: none;
+  fill: #ffe27a;
+  stroke-width: 0.8;
+}
+
+.dragon-zzz text {
+  fill: #ffffff;
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(40, 30, 70, 0.55);
+  stroke-width: 2.5px;
+}
+
+/* Asleep: wings folded, slow breathing, z's drifting up */
+.dragon--asleep .dragon-wing {
+  transform: scale(0.72, 0.6);
+}
+
+.dragon--asleep .dragon-body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: dragonBreathe 3.2s ease-in-out infinite;
+}
+
+.dragon-zzz text {
+  opacity: 0;
+  animation: dragonZ 3.6s ease-in-out infinite;
+}
+
+.dragon-zzz text:nth-child(2) {
+  animation-delay: 1.2s;
+}
+
+.dragon-zzz text:nth-child(3) {
+  animation-delay: 2.4s;
+}
+
+/* Flying: eyes open, wings beating, no z's */
+.dragon--flying .dragon-eye--shut,
+.dragon--flying .dragon-zzz {
+  display: none;
+}
+
+.dragon--flying .dragon-eye--open {
+  display: inline;
+}
+
+.dragon--flying .dragon-wing {
+  animation: dragonFlap 0.26s ease-in-out infinite alternate;
+}
+
+.dragon--flying .dragon-shadow {
+  opacity: 0.35;
+}
+
+@keyframes dragonBreathe {
+  50% {
+    transform: scale(1.03, 0.97);
+  }
+}
+
+@keyframes dragonFlap {
+  from {
+    transform: scale(1, 1.05);
+  }
+
+  to {
+    transform: scale(1, 0.25);
+  }
+}
+
+@keyframes dragonZ {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px);
+  }
+
+  25% {
+    opacity: 0.9;
+  }
+
+  70% {
+    opacity: 0;
+    transform: translate(4px, -6px);
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The token under a sleeping dragon fades: that hex produces nothing */
+.number-token--blocked .number-token-face {
+  fill: #d9d5ca;
+}
+
+.number-token--blocked text,
+.number-token--blocked .number-token-pip {
+  opacity: 0.45;
+}
+
+/* New pieces arrive cleanly: a road draws itself along its path, a
+   settlement drops into place with a puff of dust, a city rises out of the
+   settlement with a soft shine */
+
+.road--new line {
+  stroke-dasharray: 1 1;
+  animation: roadDraw 0.42s var(--ease-out) both;
+}
+
+.road--new line:last-child {
+  animation-delay: 0.04s;
+}
+
+@keyframes roadDraw {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.building-body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.building--new-settlement .building-body {
+  animation: pieceDrop 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.building--new-city .building-body {
+  animation: pieceRise 0.6s cubic-bezier(0.25, 1.3, 0.5, 1) both;
+}
+
+.building-dust {
+  fill: none;
+  stroke: rgba(255, 248, 220, 0.9);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pieceDust 0.6s 0.18s var(--ease-out) both;
+}
+
+.building-shine {
+  fill: #ffffff;
+  pointer-events: none;
+  animation: pieceShine 0.8s 0.2s var(--ease-out) both;
+}
+
+@keyframes pieceDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.9);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08, 0.9);
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes pieceRise {
+  0% {
+    transform: scale(0.75, 0.6);
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes pieceDust {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes pieceShine {
+  from {
+    opacity: 0.7;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dragon--asleep .dragon-body,
+  .dragon-zzz text,
+  .dragon--flying .dragon-wing,
+  .road--new line,
+  .building-body,
+  .building-dust,
+  .building-shine {
+    animation: none !important;
+  }
+
+  .building-dust,
+  .building-shine {
+    display: none;
   }
 }

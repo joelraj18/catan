@@ -423,9 +423,16 @@ export default class GameEngine {
     this.set({ events: [...(this.state.events || []), entry].slice(-EVENT_LIMIT), eventCounter });
   }
 
+  // Sounds for the board to play. Several within one move travel together
+  // (a robber landing, then a steal) and play one after the other.
   sound(key) {
+    const sfx = this.state.sfx;
+    if (this.emitQueued && sfx?.id === this.sfxCounter) {
+      this.set({ sfx: { ...sfx, keys: [...(sfx.keys || [sfx.key]), key] } });
+      return;
+    }
     this.sfxCounter += 1;
-    this.set({ sfx: { key, id: this.sfxCounter } });
+    this.set({ sfx: { key, keys: [key], id: this.sfxCounter } });
   }
 
   chat(text, playerId = null) {
@@ -1022,7 +1029,7 @@ export default class GameEngine {
       }
     }
 
-    this.sound('build');
+    this.sound('settlement');
     this.afterAction(playerId);
     return true;
   }
@@ -1055,7 +1062,7 @@ export default class GameEngine {
       });
     }
 
-    this.sound('build');
+    this.sound('road');
     this.afterAction(playerId);
     return true;
   }
@@ -1077,7 +1084,7 @@ export default class GameEngine {
       playerId,
     );
     this.event('build', { actor: playerId, piece: 'settlement', at: vertexId, paid: COSTS.settlement });
-    this.sound('build');
+    this.sound('settlement');
     this.afterAction(playerId);
     return true;
   }
@@ -1097,7 +1104,7 @@ export default class GameEngine {
         playerId,
       );
       this.event('build', { actor: playerId, piece: 'road', at: edgeId, free: true });
-      this.sound('build');
+      this.sound('road');
       if (remaining <= 0 || !legalRoadSpots(this.state, playerId).length) this.finishRoadBuilding();
       this.afterAction(playerId);
       return true;
@@ -1110,7 +1117,7 @@ export default class GameEngine {
     this.pay(playerId, COSTS.road);
     this.setBoard({ roads: { ...this.state.roads, [edgeId]: playerId } }, `${this.nameOf(playerId)} built a road`, playerId);
     this.event('build', { actor: playerId, piece: 'road', at: edgeId, paid: COSTS.road });
-    this.sound('build');
+    this.sound('road');
     this.afterAction(playerId);
     return true;
   }
@@ -1129,7 +1136,7 @@ export default class GameEngine {
     this.set({ buildings: { ...this.state.buildings, [vertexId]: { owner: playerId, type: 'city' } } });
     this.note(`${this.nameOf(playerId)} upgraded a settlement to a city`, playerId);
     this.event('build', { actor: playerId, piece: 'city', at: vertexId, paid: COSTS.city });
-    this.sound('build');
+    this.sound('city');
     this.afterAction(playerId);
     return true;
   }
@@ -1294,7 +1301,7 @@ export default class GameEngine {
     this.set({ board: { ...this.state.board, robber: hexId } });
     this.event('robber', { actor: playerId, from, to: hexId });
     this.note(`${this.nameOf(playerId)} moved the robber to the ${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`, playerId);
-    this.sound('robber');
+    this.sound('dragon');
 
     const victims = robberVictims(this.state, hexId, playerId);
     if (victims.length === 1) {
@@ -1328,6 +1335,7 @@ export default class GameEngine {
       this.set({ lastSteal: { id: this.state.logCounter + 1, turn: this.state.turnCount, thief: playerId, victim: victimId, resource } });
       this.note(`${this.nameOf(playerId)} stole a card from ${this.nameOf(victimId)}`, playerId);
       this.event('steal', { actor: playerId, victim: victimId, resource });
+      this.sound('steal');
     }
 
     this.set({ turnPhase: back, stealFrom: [], activity: this.phaseActivity(back) });
@@ -1700,7 +1708,7 @@ export default class GameEngine {
         : `Game over, ${names} ${winners.length > 1 ? 'share the win' : 'wins'} with ${top} points`,
     );
     this.event('win', { winners, reason });
-    this.sound('winner');
+    this.sound('win');
   }
 
   // ------------------------------------------------------------ end vote

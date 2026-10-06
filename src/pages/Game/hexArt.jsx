@@ -1,4 +1,4 @@
-import React, { memo, useId } from 'react';
+import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GEOMETRY, PIPS, RESOURCE_LABELS, TERRAINS } from './catanBoard';
 import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
 import './hex-board.css';
@@ -184,10 +184,10 @@ export function ResourceIcon({ resource, size = 18, className = '' }) {
   );
 }
 
-function NumberToken({ number, x, y, hot }) {
+function NumberToken({ number, x, y, hot, blocked = false }) {
   const pips = PIPS[number] || 0;
   return (
-    <g className={`number-token ${hot ? 'number-token--hot' : ''}`} transform={`translate(${x} ${y})`}>
+    <g className={`number-token ${hot ? 'number-token--hot' : ''} ${blocked ? 'number-token--blocked' : ''}`} transform={`translate(${x} ${y})`}>
       <circle r="19.5" cy="2" className="number-token-shadow" />
       <circle r="19.5" className="number-token-face" />
       <text y="-1" textAnchor="middle" dominantBaseline="middle">
@@ -211,13 +211,110 @@ function TileArt({ terrain }) {
   );
 }
 
-function Robber({ x, y }) {
+// The robber is a small dragon. It sleeps curled up on the hex it blocks;
+// when it is sent somewhere new it wakes, flies there in an arc with its
+// wings beating, lands and settles back to sleep.
+const robberSpot = (hexId) => {
+  const hex = GEOMETRY.hexes[hexId];
+  // Over the tile's symbol, clear of the number token below it.
+  return { x: px(hex.x) + 2, y: px(hex.y) - 10 };
+};
+
+const reducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function Dragon({ hexId }) {
+  const ref = useRef(null);
+  const last = useRef(hexId);
+  const [flying, setFlying] = useState(false);
+  const { x, y } = robberSpot(hexId);
+
+  useLayoutEffect(() => {
+    const from = last.current;
+    last.current = hexId;
+    const node = ref.current;
+    if (from === hexId || from === null || from === undefined || !node?.animate || reducedMotion()) return undefined;
+    const a = robberSpot(from);
+    const lift = Math.min(90, 40 + Math.hypot(x - a.x, y - a.y) * 0.25);
+    const midX = (a.x + x) / 2;
+    const midY = Math.min(a.y, y) - lift;
+    setFlying(true);
+    const flight = node.animate(
+      [
+        { transform: `translate(${a.x}px, ${a.y}px) scale(1)` },
+        { transform: `translate(${a.x}px, ${a.y - 18}px) scale(1.12)`, offset: 0.15 },
+        { transform: `translate(${midX}px, ${midY}px) scale(1.22)`, offset: 0.55 },
+        { transform: `translate(${x}px, ${y - 10}px) scale(1.08)`, offset: 0.88 },
+        { transform: `translate(${x}px, ${y}px) scale(1)` },
+      ],
+      { duration: 1050, easing: 'cubic-bezier(0.45, 0, 0.3, 1)' },
+    );
+    flight.onfinish = () => setFlying(false);
+    return () => {
+      flight.onfinish = null;
+      flight.cancel();
+      setFlying(false);
+    };
+  }, [hexId, x, y]);
+
   return (
-    <g className="robber" transform={`translate(${x} ${y})`} aria-label="Robber">
-      <ellipse cx="0" cy="16" rx="11" ry="4" className="robber-shadow" />
-      <path d="M-9 15c0-10 3-15 5-17a7 7 0 1 1 8 0c2 2 5 7 5 17z" />
+    <g
+      ref={ref}
+      className={`dragon ${flying ? 'dragon--flying' : 'dragon--asleep'}`}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      aria-label="The robber, a sleeping dragon"
+      role="img"
+    >
+      <g transform="scale(1.3)">
+      <ellipse className="dragon-shadow" cx="0" cy="3" rx="19" ry="4.5" />
+      <g className="dragon-body">
+        <path className="dragon-tail" d="M12 -4c9 1 14-4 11-10" />
+        <path className="dragon-tail-tip" d="m21.5 -16 4.5 -2 -1 4.6z" />
+        <path className="dragon-wing dragon-wing--back" d="M-1 -15 8 -33l3 9 6-6 1 10 5-3-4 10z" />
+        <ellipse className="dragon-skin" cx="2" cy="-8" rx="15" ry="9.5" />
+        <ellipse className="dragon-belly" cx="-1" cy="-5" rx="9.5" ry="5" />
+        <path className="dragon-spikes" d="M-4 -17l2-4.5 2 4zM2 -17.5l2-4.5 2 4zM8 -16.5l2.2-4 1.6 4.2z" />
+        <path className="dragon-wing dragon-wing--front" d="M3 -13 13 -29l2 9 6-4-1 9 5-1-6 7z" />
+        <circle className="dragon-skin" cx="-13" cy="-12" r="7.4" />
+        <ellipse className="dragon-skin" cx="-19.5" cy="-9.5" rx="5.4" ry="3.8" />
+        <path className="dragon-horn" d="M-14 -18.5l-3.4-5 4.8 2.6zM-9 -18.2l.6-5.4 2.6 4.4z" />
+        <circle className="dragon-nostril" cx="-23" cy="-10.5" r="0.9" />
+        <path className="dragon-eye dragon-eye--shut" d="M-16 -13.4q2 1.8 4 0" />
+        <circle className="dragon-eye dragon-eye--open" cx="-14" cy="-13.6" r="1.7" />
+        <ellipse className="dragon-skin" cx="-6" cy="0" rx="3.2" ry="2" />
+        <ellipse className="dragon-skin" cx="8" cy="0" rx="3.2" ry="2" />
+      </g>
+      <g className="dragon-zzz" aria-hidden="true">
+        <text x="-6" y="-24">z</text>
+        <text x="-1" y="-31">z</text>
+        <text x="5" y="-38">z</text>
+      </g>
+      </g>
     </g>
   );
+}
+
+// Pieces placed since the board first drew, with the moment they appeared,
+// so only new pieces play their arrival and a redraw never restarts it.
+const ARRIVAL_MS = 900;
+
+function useArrivals(roads, buildings) {
+  const seen = useRef(null);
+  const born = useRef(new Map());
+  return useMemo(() => {
+    const keys = [
+      ...Object.keys(roads).map((id) => `r${id}`),
+      ...Object.entries(buildings).map(([id, building]) => `b${id}:${building.type}`),
+    ];
+    const now = Date.now();
+    if (seen.current) keys.forEach((key) => !seen.current.has(key) && born.current.set(key, now));
+    seen.current = new Set(keys);
+    born.current.forEach((at, key) => now - at > ARRIVAL_MS && born.current.delete(key));
+    return (key) => {
+      const at = born.current.get(key);
+      return at !== undefined && Date.now() - at < ARRIVAL_MS;
+    };
+  }, [roads, buildings]);
 }
 
 /**
@@ -252,6 +349,7 @@ function HexBoard({
   const citySet = new Set(highlight.cities || []);
   const mine = PIECES[myPiece] || PIECES.red;
   const isPicked = (kind, id) => selected?.kind === kind && selected.id === id;
+  const isNew = useArrivals(roads, buildings);
   const width = px(5.55);
   const height = px(4.85);
 
@@ -323,6 +421,7 @@ function HexBoard({
           <g
             key={tile.id}
             className={`hex-tile hex-tile--${tile.terrain} ${producing ? 'hex-tile--producing' : ''} ${target ? 'hex-tile--target' : ''} ${picked ? 'hex-tile--picked' : ''}`}
+            data-anchor={`hex-${tile.id}`}
             onClick={target && onHex ? () => onHex(tile.id) : undefined}
             role={target ? 'button' : undefined}
             tabIndex={target ? 0 : undefined}
@@ -334,7 +433,15 @@ function HexBoard({
             <g transform={`translate(${px(hex.x)} ${px(hex.y) + (tile.number ? -25 : 0)})`}>
               <TileArt terrain={tile.terrain} />
             </g>
-            {tile.number && <NumberToken number={tile.number} x={px(hex.x)} y={px(hex.y) + 13} hot={tile.number === 6 || tile.number === 8} />}
+            {tile.number && (
+              <NumberToken
+                number={tile.number}
+                x={px(hex.x)}
+                y={px(hex.y) + 13}
+                hot={tile.number === 6 || tile.number === 8}
+                blocked={board.robber === tile.id}
+              />
+            )}
           </g>
         );
       })}
@@ -349,9 +456,9 @@ function HexBoard({
         const x2 = b.x + (a.x - b.x) * shrink;
         const y2 = b.y + (a.y - b.y) * shrink;
         return (
-          <g key={`road-${edgeId}`} className="road">
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.edge} strokeWidth="11" strokeLinecap="round" />
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.5" strokeLinecap="round" />
+          <g key={`road-${edgeId}`} className={`road ${isNew(`r${edgeId}`) ? 'road--new' : ''}`}>
+            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.edge} strokeWidth="11" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.5" strokeLinecap="round" pathLength="1" />
           </g>
         );
       })}
@@ -386,9 +493,7 @@ function HexBoard({
       })}
 
       {/* Robber */}
-      {board.robber !== null && board.robber !== undefined && (
-        <Robber x={px(GEOMETRY.hexes[board.robber].x) + (board.hexes[board.robber].number ? 24 : 0)} y={px(GEOMETRY.hexes[board.robber].y) - 6} />
-      )}
+      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} />}
 
       {/* Settlements and cities */}
       {Object.entries(buildings).map(([vertexId, building]) => {
@@ -397,10 +502,11 @@ function HexBoard({
         const city = building.type === 'city';
         const upgradable = citySet.has(Number(vertexId));
         const picked = upgradable && isPicked('city', Number(vertexId));
+        const arriving = isNew(`b${vertexId}:${building.type}`);
         return (
           <g
             key={`b-${vertexId}`}
-            className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''} ${picked ? 'building--picked' : ''}`}
+            className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''} ${picked ? 'building--picked' : ''} ${arriving ? `building--new-${building.type}` : ''}`}
             transform={`translate(${px(v.x) - (city ? 14 : 12)} ${px(v.y) - (city ? 15 : 13)}) scale(${city ? 1.15 : 1})`}
             onClick={upgradable && onVertex ? () => onVertex(Number(vertexId)) : undefined}
             role={upgradable ? 'button' : undefined}
@@ -408,8 +514,12 @@ function HexBoard({
             aria-label={upgradable ? `Upgrade to a city by ${placeOf(board, v.hexes)}` : undefined}
             onKeyDown={upgradable && onVertex ? onPress(() => onVertex(Number(vertexId))) : undefined}
           >
-            <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
-            <path d={picked ? CITY_PATH : city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
+            {arriving && <ellipse className="building-dust" cx="12" cy="22" rx="10" ry="3" />}
+            <g className="building-body">
+              <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
+              <path d={picked ? CITY_PATH : city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
+              {arriving && city && <path d={CITY_PATH} className="building-shine" />}
+            </g>
           </g>
         );
       })}

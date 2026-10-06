@@ -3272,3 +3272,203 @@
   color: var(--accent);
   font-weight: 650;
 }
+
+/* Real dice: two cubes that tumble toward the rolled faces */
+
+.dice3d {
+  --die: 58px;
+  --die-half: 29px;
+  display: flex;
+  gap: 26px;
+  justify-content: center;
+  padding: 6px 0 4px;
+  perspective: 600px;
+}
+
+.die3d {
+  position: relative;
+  width: var(--die);
+  height: var(--die);
+}
+
+.die3d-cube {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 1s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.die3d-face {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: linear-gradient(150deg, #ffffff, #eef0ea);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.06);
+  backface-visibility: hidden;
+}
+
+.die3d-face svg {
+  width: 100%;
+  height: 100%;
+}
+
+.die3d-face circle {
+  fill: #2b3140;
+}
+
+.die3d--idle .die3d-face {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.die3d--idle .die3d-face circle {
+  fill: transparent;
+}
+
+.die3d-shadow {
+  position: absolute;
+  right: 6px;
+  bottom: -10px;
+  left: 6px;
+  height: 8px;
+  background: radial-gradient(closest-side, rgba(20, 30, 20, 0.28), transparent);
+  border-radius: 50%;
+  transition: transform 0.5s var(--ease-out), opacity 0.5s var(--ease-out);
+}
+
+.dice3d--rolling .die3d {
+  animation: dieHop 1s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+.dice3d--rolling .die3d:last-child {
+  animation-delay: 90ms;
+}
+
+.dice3d--rolling .die3d-shadow {
+  animation: dieShadow 1s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+@keyframes dieHop {
+  0% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-26px);
+  }
+
+  62% {
+    transform: translateY(0);
+  }
+
+  76% {
+    transform: translateY(-6px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dieShadow {
+  30% {
+    opacity: 0.4;
+    transform: scale(0.6);
+  }
+}
+
+.dice-total-badge {
+  display: inline-block;
+  animation: totalPop 0.45s var(--ease-spring);
+}
+
+@keyframes totalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+[data-theme='dark'] .die3d-face {
+  background: linear-gradient(150deg, #f4f6f8, #dfe4ea);
+}
+
+[data-theme='dark'] .die3d--idle .die3d-face {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die3d-cube {
+    transition: none;
+  }
+
+  .dice3d--rolling .die3d,
+  .dice3d--rolling .die3d-shadow,
+  .dice-total-badge {
+    animation: none;
+  }
+}
+
+/* A tile pays out: one gentle pulse when its number comes up */
+.hex-tile--producing .hex-tile-face {
+  animation: tilePay 0.9s var(--ease-out);
+}
+
+@keyframes tilePay {
+  40% {
+    filter: brightness(1.35);
+  }
+}
+
+/* Cards in flight between tiles, players and the bank */
+
+.flight-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flight-templates {
+  display: none;
+}
+
+.flight-card {
+  --card: var(--terrain-desert);
+  position: fixed;
+  display: grid;
+  width: 26px;
+  height: 36px;
+  place-items: center;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--card) 75%, #ffffff), var(--card));
+  border-radius: 5px;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.7),
+    0 6px 14px rgba(20, 24, 30, 0.3);
+  will-change: transform, opacity;
+}
+
+.flight-card-art {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: var(--card-ink, #333);
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+}
+
+.flight-card--back {
+  --card: #46546a;
+  --card-ink: #2b3646;
+}
+
+.flight-card--dev {
+  --card: #6b51b8;
+  --card-ink: #3f2a85;
+}
