@@ -1,4 +1,4 @@
-name: Deploy Manapally to GitHub Pages
+name: Deploy Catan to GitHub Pages
 
 on:
   push:

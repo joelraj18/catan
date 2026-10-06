@@ -31,14 +31,14 @@ export default function ApiKeyInfo({ onClose }) {
           and is never stored, cached or sent anywhere other than the official API provider
         </p>
 
-        <h4>How Manapally keeps that promise</h4>
+        <h4>How Catan keeps that promise</h4>
         <ul>
           <li>The key lives in one in memory variable inside this tab, never in localStorage, sessionStorage, IndexedDB, cookies or the address bar</li>
-          <li>It is never sent to other players or to the room service, and Manapally has no server of its own to send it to</li>
+          <li>It is never sent to other players or to the room service, and Catan has no server of its own to send it to</li>
           <li>Requests go over HTTPS from your browser straight to api.anthropic.com, the official {PREMIUM_PROVIDER}, using {PREMIUM_MODEL_LABEL}</li>
           <li>The field is masked and cleared the moment you press Use key</li>
           <li>The key is gone when you press Forget key, leave the room, reload or close the tab</li>
-          <li>The code is open, see src/services/premiumAi.js in the Manapally repository to check every line</li>
+          <li>The code is open, see src/services/premiumAi.js in the Catan repository to check every line</li>
         </ul>
 
         <h4>Good habits for any key</h4>

@@ -1,6 +1,6 @@
 {
-  "name": "manapally",
-  "homepage": "https://joelraj18.github.io/manapally/",
+  "name": "catan",
+  "homepage": "https://joelraj18.github.io/catan/",
   "version": "0.1.0",
   "private": true,
   "dependencies": {

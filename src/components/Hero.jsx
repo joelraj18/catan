@@ -1,17 +1,16 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import useScrollProgress from '../hooks/useScrollProgress';
-import { BOARD_GRID, BOARD_SPACES } from '../pages/Game/boardData';
-import { PieceMark } from '../pages/Game/pieces.jsx';
-import { BrandMark } from './BrandLogo';
+import { beginnerBoard } from '../pages/Game/catanBoard';
+import { beginnerPieces } from '../pages/Game/catanEngine';
+import HexBoard from '../pages/Game/hexArt.jsx';
 import GoldButton from './GoldButton';
 
-// Where the showcase tokens rest on the preview board.
-const showcaseTokens = [
-  { piece: 'lamp', space: 0 },
-  { piece: 'temple', space: 13 },
-  { piece: 'elephant', space: 24 },
-  { piece: 'bell', space: 37 },
-];
+// The beginners' island from the rulebook, with all four colours set up.
+const PREVIEW_PLAYERS = ['red', 'blue', 'white', 'orange'].map((pieceKey, index) => ({
+  id: `p${index + 1}`,
+  name: pieceKey,
+  pieceKey,
+}));
 
 const DIE_PIPS = {
   5: [
@@ -40,45 +39,22 @@ function Die({ value }) {
 }
 
 function BoardPreview() {
+  const preview = useMemo(() => {
+    const board = beginnerBoard();
+    return { board, ...beginnerPieces(PREVIEW_PLAYERS, board) };
+  }, []);
+
   return (
-    <div className="board-slab">
+    <div className="board-slab board-slab--hex">
       <div className="board-slab-sheen" aria-hidden="true" />
-
-      <div className="preview-board">
-        {BOARD_SPACES.map((space) => {
-          const [column, row] = BOARD_GRID[space.id];
-          const token = showcaseTokens.find((entry) => entry.space === space.id);
-          const isCorner = space.id % 10 === 0;
-
-          return (
-            <span
-              key={space.id}
-              className={`preview-tile preview-tile--${space.type} ${
-                isCorner ? 'preview-tile--corner' : ''
-              }`}
-              style={{
-                gridColumn: column,
-                gridRow: row,
-                '--tile-colour': space.colorGroup
-                  ? `var(--color-${space.colorGroup})`
-                  : 'transparent',
-              }}
-            >
-              {token && (
-                <span className={`preview-token seat-${token.piece}`}>
-                  <PieceMark piece={token.piece} variant="token" />
-                </span>
-              )}
-            </span>
-          );
-        })}
-
-        <div className="preview-centre">
-          <BrandMark size={58} />
-          <strong>Manapally</strong>
-          <span>40 spaces of South Indian legend</span>
-        </div>
-      </div>
+      <HexBoard
+        board={preview.board}
+        buildings={preview.buildings}
+        roads={preview.roads}
+        players={PREVIEW_PLAYERS}
+        compact
+        label="The beginners' island of Catan with four colours set up"
+      />
     </div>
   );
 }
@@ -91,17 +67,17 @@ export default function Hero({ onCreateRoom, onExplore }) {
   return (
     <section className="hero" id="top" ref={heroRef} aria-labelledby="hero-heading">
       <div className="hero-copy">
-        <p className="hero-kicker">New season</p>
+        <p className="hero-kicker">3 to 4 players</p>
 
         <h1 id="hero-heading" className="hero-title">
-          Manapally
+          Catan
         </h1>
 
-        <p className="hero-subtitle">Premium South Indian Strategy Board Game</p>
+        <p className="hero-subtitle">Settle the island, trade and build</p>
 
         <p className="hero-description">
-          Collect the cities of Andhra Pradesh and Telangana from Koti to Jubilee, ride
-          the express stations and outplay your circle in one beautifully paced match
+          Gather brick, lumber, ore, grain and wool, trade with your friends and race to 10 victory points with roads,
+          settlements and cities
         </p>
 
         <div className="hero-actions">
@@ -113,7 +89,7 @@ export default function Hero({ onCreateRoom, onExplore }) {
         </div>
       </div>
 
-      <div className="hero-stage" role="img" aria-label="A preview of the Manapally game board in sage green">
+      <div className="hero-stage">
         <div className="hero-glow" aria-hidden="true" />
 
         <div className="hero-visual">

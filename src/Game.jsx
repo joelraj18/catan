@@ -8,7 +8,7 @@ import LoadingScreen from './components/LoadingScreen';
 import Navbar from './components/Navbar';
 import useReveal from './hooks/useReveal';
 import BoardGuide from './pages/Home/BoardGuide';
-import DistrictFamilies from './pages/Home/DistrictFamilies';
+import DevelopmentCards from './pages/Home/DevelopmentCards';
 import FairPlay from './pages/Home/FairPlay';
 import Faq from './pages/Home/Faq';
 import Highlights from './pages/Home/Highlights';
@@ -32,7 +32,7 @@ const clearPremiumKey = () =>
 // Music and sound effects are separate channels. Volumes and the effects
 // switch are remembered on this device; music always starts off because
 // browsers block sound that plays before the first tap.
-const AUDIO_KEY = 'manapally-audio';
+const AUDIO_KEY = 'catan-audio';
 const DEFAULT_AUDIO = { musicOn: false, musicVolume: 0.5, effectsOn: true, effectsVolume: 0.8 };
 
 const loadAudio = () => {
@@ -73,7 +73,7 @@ export default function Game() {
   const [audio, setAudio] = useState(loadAudio);
   const [invite] = useState(inviteCode);
   const [currentView, setCurrentView] = useState(() => (invite ? 'lobby' : 'home'));
-  const [lobbyPiece, setLobbyPiece] = useState('lamp');
+  const [lobbyPiece, setLobbyPiece] = useState('red');
   const [session, setSession] = useState(null);
   const [match, setMatch] = useState(null);
   const [notice, setNotice] = useState('');
@@ -161,8 +161,8 @@ export default function Game() {
     });
   };
 
-  const openLobby = (piece = 'lamp') => {
-    setLobbyPiece(typeof piece === 'string' ? piece : 'lamp');
+  const openLobby = (piece = 'red') => {
+    setLobbyPiece(typeof piece === 'string' ? piece : 'red');
     setCurrentView('lobby');
   };
 
@@ -197,6 +197,7 @@ export default function Game() {
         players={match.players}
         myPlayerId={match.myPlayerId}
         resume={match.resume}
+        boardMode={match.options?.board || match.resume?.options?.board || 'beginner'}
         session={session}
         audio={audio}
         onAudio={updateAudio}
@@ -260,7 +261,7 @@ export default function Game() {
       <PieceShelf onPlay={openLobby} />
       <HowToPlay onPlay={() => openLobby()} />
       <BoardGuide />
-      <DistrictFamilies />
+      <DevelopmentCards />
       <FairPlay />
       <Tips />
       <Faq />
@@ -268,7 +269,7 @@ export default function Game() {
       <section className="closing-cta" aria-labelledby="closing-heading">
         <div className="section-inner section-head--center reveal">
           <h2 id="closing-heading">Your table is ready</h2>
-          <p className="section-lede">Pick a piece, open a private room and make the first move</p>
+          <p className="section-lede">Pick a colour, open a private room and settle the island</p>
           <div className="closing-actions">
             <GoldButton onClick={() => openLobby()}>Start game</GoldButton>
             <button type="button" className="text-link text-link--large" onClick={() => scrollToSection('how-to-play')}>

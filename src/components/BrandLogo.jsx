@@ -1,8 +1,8 @@
 import { useId } from 'react';
 
-// The Manapally mark: a sage squircle finished like the back of a green
-// iPhone, carrying an M beneath a Deepam lamp flame. Gradient ids are scoped
-// with useId so the mark can appear several times on one page.
+// The Catan mark: a sage squircle finished like the back of a green
+// iPhone, carrying a hex tile with a settlement on it. Gradient ids are
+// scoped with useId so the mark can appear several times on one page.
 export function BrandMark({ size = 28, className = '' }) {
   const id = useId().replace(/:/g, '');
   const bg = `brand-bg-${id}`;
@@ -41,17 +41,13 @@ export function BrandMark({ size = 28, className = '' }) {
         strokeWidth="1.5"
       />
       <path
-        d="M32 9.5c2.6 3 4.4 5.6 4.4 8 0 2.5-2 4.4-4.4 4.4s-4.4-1.9-4.4-4.4c0-2.4 1.8-5 4.4-8z"
-        fill={`url(#${ink})`}
-      />
-      <path
-        d="M17 47V27.2c0-1.4 1.7-2.1 2.7-1.1L32 38.4l12.3-12.3c1-1 2.7-.3 2.7 1.1V47"
+        d="M32 9 51.9 20.5v23L32 55 12.1 43.5v-23z"
         fill="none"
         stroke={`url(#${ink})`}
-        strokeWidth="5.4"
-        strokeLinecap="round"
+        strokeWidth="4.6"
         strokeLinejoin="round"
       />
+      <path d="M32 22.5 41.5 30.5v12.5h-19V30.5z" fill={`url(#${ink})`} />
     </svg>
   );
 }
@@ -61,7 +57,7 @@ export default function BrandLogo({ size = 26, showWordmark = true, className = 
   return (
     <span className={`brand-logo ${className}`.trim()}>
       <BrandMark size={size} />
-      {showWordmark && <span className="brand-logo-word">Manapally</span>}
+      {showWordmark && <span className="brand-logo-word">Catan</span>}
     </span>
   );
 }

@@ -110,7 +110,7 @@ export const checkVerdict = ({ service, direct, relay }) => {
   }
 
   if (relay === 'ok') {
-    return 'Your network blocks direct links, Manapally switches to Relay by itself so you can still play';
+    return 'Your network blocks direct links, Catan switches to Relay by itself so you can still play';
   }
 
   return 'This network blocks every game route, switch to mobile data or a hotspot, turn off any VPN or ad blocking DNS and try again';

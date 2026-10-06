@@ -11,7 +11,7 @@ import {
   setPremiumKey,
   verifyPremiumKey,
 } from '../../services/premiumAi';
-import { TOTAL_MATCH_TURNS } from '../Game/matchRules';
+import { MAX_PLAYERS, MIN_PLAYERS } from '../../services/roomSession';
 import { PIECES, PieceMark } from '../Game/pieces.jsx';
 import '../Game/board-game.css';
 import './lobby.css';
@@ -101,7 +101,7 @@ export default function RoomWaiting({ session, onLeave }) {
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Manapally', text: `Join my Manapally table, room code ${session.code}`, url: link });
+        await navigator.share({ title: 'Catan', text: `Join my Catan table, room code ${session.code}`, url: link });
         return;
       } catch (error) {
         if (error?.name === 'AbortError') return;
@@ -177,7 +177,7 @@ export default function RoomWaiting({ session, onLeave }) {
           <p className="eyebrow">The private table</p>
 
           <h1>
-            The Courts
+            The Island
             <br />
             <em>Awaits</em>
           </h1>
@@ -245,7 +245,7 @@ export default function RoomWaiting({ session, onLeave }) {
             <div className="seat-count-section">
               <span className="field-label">Table size</span>
               <div className="seat-count-picker">
-                {[2, 3, 4].map((count) => (
+                {[3, 4].map((count) => (
                   <button
                     key={count}
                     type="button"
@@ -260,6 +260,37 @@ export default function RoomWaiting({ session, onLeave }) {
               </div>
             </div>
           )}
+
+          <div className="seat-count-section">
+            <span className="field-label">Board</span>
+            {isHost ? (
+              <div className="seat-count-picker">
+                {[
+                  ['beginner', 'Beginners\u2019 map'],
+                  ['random', 'Random island'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`seat-count-btn ${(lobby.board || 'beginner') === key ? 'seat-count-btn--selected' : ''}`}
+                    onClick={() => session.setBoard(key)}
+                    aria-pressed={(lobby.board || 'beginner') === key}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="board-choice-note">
+                {(lobby.board || 'beginner') === 'random' ? 'Random island' : 'Beginners\u2019 map'}
+              </p>
+            )}
+            <p className="board-choice-note">
+              {(lobby.board || 'beginner') === 'random'
+                ? 'Shuffled terrain, numbers and harbours. Everyone places 2 settlements and 2 roads in turn to begin'
+                : 'The balanced map from the rulebook, with every starting settlement and road already placed'}
+            </p>
+          </div>
 
           <div className="player-seat-list">
             {seats.map((seat, index) => {
@@ -368,7 +399,7 @@ export default function RoomWaiting({ session, onLeave }) {
               <div className="premium-ai-head">
                 <div>
                   <p className="eyebrow">Premium AI opponents</p>
-                  <span>Opponents that reason about every purchase and bid with Claude, using your own API key</span>
+                  <span>Opponents that reason about placements, the robber and trades with Claude, using your own API key</span>
                 </div>
                 <button
                   type="button"
@@ -432,15 +463,15 @@ export default function RoomWaiting({ session, onLeave }) {
               <p className="eyebrow">{isHost ? 'Host controls' : 'Getting ready'}</p>
               <span>
                 {isHost
-                  ? seats.length < 2
-                    ? 'Wait for a friend or add an opponent to an open seat, you need at least 2 players'
-                    : `Start with ${seats.length} players, the match runs for ${TOTAL_MATCH_TURNS} turns or until one player is left standing`
+                  ? seats.length < MIN_PLAYERS
+                    ? `Wait for friends or add opponents to the open seats, Catan needs ${MIN_PLAYERS} to ${MAX_PLAYERS} players`
+                    : `Start with ${seats.length} players, the first to 10 victory points on their turn wins`
                   : 'Waiting for the host to start the game'}
               </span>
             </div>
 
             {isHost && (
-              <GoldButton onClick={() => session.startGame()} disabled={seats.length < 2}>
+              <GoldButton onClick={() => session.startGame()} disabled={seats.length < MIN_PLAYERS}>
                 Start game
               </GoldButton>
             )}

@@ -526,44 +526,49 @@
   overflow: hidden;
 }
 
-.guide-card--district {
-  --tone: #8e3a57;
-  --tone-soft: #f5e8ee;
+.guide-card--hills {
+  --tone: #a9532f;
+  --tone-soft: #f6e4da;
 }
 
-.guide-card--route {
-  --tone: #2f6170;
-  --tone-soft: #e5eff1;
+.guide-card--forest {
+  --tone: #2f7a3b;
+  --tone-soft: #e2f0e2;
 }
 
-.guide-card--utility {
-  --tone: #a46f17;
-  --tone-soft: #f8eedb;
+.guide-card--mountains {
+  --tone: #5d6570;
+  --tone-soft: #eaecef;
 }
 
-.guide-card--order {
-  --tone: #7a2f45;
-  --tone-soft: #f4e4ea;
+.guide-card--fields {
+  --tone: #a77c0e;
+  --tone-soft: #f8efd4;
 }
 
-.guide-card--hundi {
-  --tone: #9a5a1c;
-  --tone-soft: #f6ead9;
+.guide-card--pasture {
+  --tone: #4f8a26;
+  --tone-soft: #ebf5df;
 }
 
-.guide-card--fort {
-  --tone: #5c5446;
-  --tone-soft: #eeebe4;
+.guide-card--desert {
+  --tone: #9a7a3c;
+  --tone-soft: #f6eedb;
 }
 
-.guide-card--tax {
-  --tone: #8a5a12;
-  --tone-soft: #f8efdc;
+.guide-card--robber {
+  --tone: #474b52;
+  --tone-soft: #e8e9eb;
 }
 
-.guide-card--rest {
-  --tone: #3f7a5a;
-  --tone-soft: #e4f0e8;
+.guide-card--harbor {
+  --tone: #2f6f96;
+  --tone-soft: #e2eef5;
+}
+
+.guide-card--numbers {
+  --tone: #b23a2c;
+  --tone-soft: #f7e3df;
 }
 
 .guide-card-icon {
@@ -1117,4 +1122,100 @@
   .footer-directory {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Development cards on the home page */
+
+.dev-family {
+  --family: var(--accent);
+}
+
+.dev-family--knight {
+  --family: #7b4dbf;
+}
+
+.dev-family--progress {
+  --family: #3f8a5f;
+}
+
+.dev-family--victory {
+  --family: #d08a17;
+}
+
+.dev-family--special {
+  --family: #b23a2c;
+}
+
+.dev-family-icon {
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+}
+
+.dev-family-text {
+  margin: 10px 0 0;
+  color: var(--ink-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.dev-family-note {
+  max-width: 720px;
+  margin: 28px auto 0;
+  color: var(--ink-tertiary);
+  text-align: center;
+}
+
+/* Building costs card in the colour shelf */
+
+.cost-card-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.cost-card-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+
+.cost-card-list li > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cost-card-list strong {
+  font-size: 0.92rem;
+}
+
+.cost-card-list li > div span {
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.cost-card-list p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.cost-card-list .cost-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.cost-card-list .cost-chip {
+  display: inline-flex;
+  padding: 3px;
+  background: color-mix(in srgb, currentColor 12%, var(--surface));
+  border-radius: 7px;
 }

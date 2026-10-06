@@ -1,0 +1,304 @@
+/* The island: terrain, number tokens, harbours, pieces and the spots a
+   player can click. Shared by the game and the landing page preview. */
+
+.res-brick { color: var(--res-brick); }
+.res-lumber { color: var(--res-lumber); }
+.res-ore { color: var(--res-ore); }
+.res-grain { color: #b88a12; }
+.res-wool { color: #5e9a2c; }
+
+.hex-board {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hex-board-sea {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 3;
+}
+
+.hex-board-sand {
+  fill: #ead9a6;
+  stroke: #d8c287;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.hex-tile-face {
+  stroke: #f3e7bf;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  transition: filter 0.3s var(--ease);
+}
+
+.hex-tile--producing .hex-tile-face {
+  stroke: #fff6c9;
+  stroke-width: 5;
+  filter: brightness(1.12) drop-shadow(0 0 10px rgba(255, 236, 150, 0.9));
+}
+
+.hex-tile--target {
+  cursor: pointer;
+  outline: none;
+}
+
+.hex-tile--target .hex-tile-face {
+  stroke: #ffffff;
+  stroke-dasharray: 10 6;
+  stroke-width: 4;
+  animation: targetDash 1.2s linear infinite;
+}
+
+.hex-tile--target:hover .hex-tile-face,
+.hex-tile--target:focus-visible .hex-tile-face {
+  filter: brightness(1.15);
+  stroke: var(--accent);
+}
+
+@keyframes targetDash {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+/* Terrain motifs: drawn quietly, so numbers stay the loudest thing */
+.motif path,
+.motif rect,
+.motif ellipse,
+.motif circle {
+  pointer-events: none;
+}
+
+.motif--forest path {
+  fill: #2e6334;
+  stroke: #24502a;
+  stroke-width: 1;
+}
+
+.motif--hills path {
+  fill: none;
+  stroke: rgba(110, 48, 22, 0.5);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.motif--hills rect {
+  fill: #9d4224;
+  stroke: #7a3018;
+  stroke-width: 1;
+}
+
+.motif--mountains path {
+  fill: #6c737c;
+  stroke: #575d65;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.motif--mountains .motif-snow {
+  fill: #f5f7f9;
+  stroke: none;
+}
+
+.motif--fields path {
+  fill: none;
+  stroke: #b8891b;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.motif--pasture path {
+  fill: none;
+  stroke: #5c9a35;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.motif--pasture .sheep {
+  fill: #fbfaf4;
+  stroke: #c9c6b8;
+  stroke-width: 1;
+}
+
+.motif--pasture .sheep-head {
+  fill: #3f3a33;
+}
+
+.motif--desert path {
+  fill: none;
+  stroke: rgba(160, 120, 60, 0.45);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.number-token circle:first-child {
+  fill: #f8f0d8;
+  stroke: #c8b27a;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
+}
+
+.number-token text {
+  fill: #2c2a24;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.number-token-pip {
+  fill: #2c2a24;
+}
+
+.number-token--hot text,
+.number-token--hot .number-token-pip {
+  fill: #c0392b;
+}
+
+.harbor circle {
+  fill: #f6ecd0;
+  stroke: #8a6d3b;
+  stroke-width: 2;
+}
+
+.harbor-pier {
+  fill: none;
+  stroke: #a5814e;
+  stroke-width: 3;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+}
+
+.harbor text {
+  fill: #5b4523;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.harbor .harbor-rate {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.harbor .harbor-rate--any {
+  font-size: 12px;
+}
+
+.harbor-icon {
+  pointer-events: none;
+}
+
+.robber path {
+  fill: #50545b;
+  stroke: #2f3237;
+  stroke-width: 1.5;
+}
+
+.robber-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+}
+
+.robber {
+  animation: robberDrop 0.45s var(--ease-spring);
+}
+
+@keyframes robberDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+.road line:last-child {
+  animation: pieceIn 0.35s var(--ease-out);
+}
+
+.building path {
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+}
+
+.building--upgradable {
+  cursor: pointer;
+}
+
+.building--upgradable path {
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  animation: upgradePulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes upgradePulse {
+  to {
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.95));
+  }
+}
+
+@keyframes pieceIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.spot {
+  cursor: pointer;
+  outline: none;
+}
+
+.spot--vertex {
+  fill: rgba(255, 255, 255, 0.9);
+  stroke: var(--accent);
+  stroke-width: 3;
+  animation: spotPulse 1s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.spot--edge {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 9;
+  stroke-linecap: round;
+  animation: spotFade 1s ease-in-out infinite alternate;
+}
+
+.spot--vertex:hover,
+.spot--vertex:focus-visible {
+  fill: var(--accent);
+  stroke: #ffffff;
+}
+
+.spot--edge:hover,
+.spot--edge:focus-visible {
+  stroke: var(--accent);
+}
+
+@keyframes spotPulse {
+  to {
+    transform: scale(1.25);
+  }
+}
+
+@keyframes spotFade {
+  to {
+    stroke-opacity: 0.55;
+  }
+}
+
+/* Dark theme: a moonlit island */
+
+[data-theme='dark'] .hex-board-sand {
+  fill: #b8a678;
+  stroke: #9a8a5f;
+}
+
+[data-theme='dark'] .hex-tile-face {
+  stroke: #c9bb8e;
+  filter: brightness(0.86);
+}
+
+[data-theme='dark'] .res-grain { color: #e8c04e; }
+[data-theme='dark'] .res-wool { color: #9fd36b; }
+[data-theme='dark'] .res-ore { color: #a9b1bc; }
+[data-theme='dark'] .res-brick { color: #e07a52; }
+[data-theme='dark'] .res-lumber { color: #5fb36b; }

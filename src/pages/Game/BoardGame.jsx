@@ -1,59 +1,36 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import AnimatedBalance from '../../components/AnimatedBalance';
-import BrandLogo, { BrandMark } from '../../components/BrandLogo';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
 import SoundMixer from '../../components/SoundMixer';
 import GoldButton from '../../components/GoldButton';
-import { premiumAdvisor } from '../../services/premiumAi';
-import { BOARD_GRID, BOARD_SPACES } from './boardData';
-import * as Estate from './estate';
-import { transportKind } from '../../services/roomTransport';
-import GameEngine, {
-  AUCTION_INCREMENT,
-  AUCTION_MIN_BID,
-  DEFAULT_TIMING,
-  DETENTION_FINE,
-  DETENTION_MAX_ATTEMPTS,
-  TAXES,
-  createInitialState,
-  familyHasBuildings,
-  liftCost,
-  mortgageFee,
-  tradeProblem,
-} from './gameEngine';
-import { START_REWARD, TOTAL_MATCH_TURNS } from './matchRules';
-import { PIECES, PieceMark } from './pieces.jsx';
 import ThemeToggle from '../../components/ThemeToggle';
-import TileArt from './tileArt.jsx';
+import { premiumAdvisor } from '../../services/premiumAi';
+import { transportKind } from '../../services/roomTransport';
+import { playSfx } from '../../services/sfx';
+import { RESOURCES, RESOURCE_LABELS } from './catanBoard';
+import GameEngine, { DEFAULT_TIMING, createInitialState } from './catanEngine';
+import {
+  COSTS,
+  DEV_CARDS,
+  WINNING_POINTS,
+  bundleSize,
+  hasResources,
+  hiddenPoints,
+  legalCitySpots,
+  legalRoadSpots,
+  legalSettlementSpots,
+  maritimeRates,
+  piecesLeft,
+  publicPoints,
+  redactFor,
+  tradeShapeProblem,
+  visibleHandSize,
+} from './catanRules';
+import HexBoard, { ResourceIcon } from './hexArt.jsx';
+import { PieceMark } from './pieces.jsx';
 import './board-game.css';
 
-import coronationSound from '../../assets/sounds/coronation.mp3';
-import pallavanExpressSound from '../../assets/sounds/Pallavan Superfast Express.mp3';
-import propertyBoughtSound from '../../assets/sounds/property bought.mp3';
-import farakkaExpressSound from '../../assets/sounds/The Farakka Express.mp3';
-import utilitySound from '../../assets/sounds/utility.mp3';
 import winnerSound from '../../assets/sounds/Winner.mp3';
-
-// Kept for the landing page, which draws its preview from the board data.
-export { BOARD_SPACES, BOARD_GRID };
-export { STARTING_BALANCE } from './boardData';
-
-const SOUND_FILES = {
-  coronation: coronationSound,
-  pallavanExpress: pallavanExpressSound,
-  farakkaExpress: farakkaExpressSound,
-  propertyBought: propertyBoughtSound,
-  utility: utilitySound,
-  winner: winnerSound,
-};
-
-const { routeDetails, utilityDetails, propertyDetails } = Estate;
-
-const getSpaceClass = (space) =>
-  `board-space--${space.type} ${space.colorGroup ? `board-space--${space.colorGroup}` : ''}`;
-
-const formatCurrency = (amount) => `₹${Math.round(amount / 1000).toLocaleString('en-IN')}K`;
-const formatRupees = (amount) => `₹${Math.round(amount).toLocaleString('en-IN')}`;
 
 const PIP_LAYOUT = {
   1: [[50, 50]],
@@ -64,7 +41,7 @@ const PIP_LAYOUT = {
   6: [[28, 26], [72, 26], [28, 50], [72, 50], [28, 74], [72, 74]],
 };
 
-function DieFace({ value }) {
+export function DieFace({ value }) {
   return (
     <svg className={`die-face ${value ? '' : 'die-face--idle'}`} viewBox="0 0 100 100" aria-hidden="true">
       <rect x="3" y="3" width="94" height="94" rx="22" />
@@ -81,9 +58,7 @@ const testTiming = () => {
     return {};
   }
 
-  return Object.fromEntries(
-    Object.entries(DEFAULT_TIMING).map(([key, value]) => [key, key === 'auction' ? 1500 : Math.round(value * 0.04)]),
-  );
+  return Object.fromEntries(Object.entries(DEFAULT_TIMING).map(([key, value]) => [key, Math.round(value * 0.05)]));
 };
 
 const kindLabel = (player) => {
@@ -93,20 +68,7 @@ const kindLabel = (player) => {
   return player.id === 'p1' ? 'Host' : 'Player';
 };
 
-// Long city names on the narrow top and bottom row tiles get a smaller type
-// size so they never break in the middle of a word.
-const nameFit = (space) => {
-  const narrow = space.id % 20 !== 0 && space.id % 20 < 10;
-  const longest = Math.max(...space.name.split(' ').map((word) => word.length));
-
-  if (!narrow) return '';
-  if (longest >= 11) return 'space-name--xlong';
-  if (longest >= 9) return 'space-name--long';
-  return longest >= 7 ? 'space-name--mid' : '';
-};
-
-const spaceAccent = (space) =>
-  space.colorGroup ? `var(--color-${space.colorGroup})` : space.type === 'route' ? '#2f6170' : '#a46f17';
+const emptyBundle = () => ({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
 
 // The fullscreen API is missing or blocked in some browsers and frames.
 const toggleFullscreen = () => {
@@ -121,9 +83,7 @@ const toggleFullscreen = () => {
   }
 };
 
-// Time left on an engine clock (auction, pop up or building window),
-// ticking locally between snapshots. Read against the current time on every
-// render, so a clock that has just started never shows a stale value.
+// Time left on an engine clock, ticking locally between snapshots.
 function useCountdown(endsAt) {
   const [, setTick] = useState(0);
 
@@ -132,135 +92,117 @@ function useCountdown(endsAt) {
       return undefined;
     }
 
-    const timer = setInterval(() => setTick((tick) => tick + 1), 100);
+    const timer = setInterval(() => setTick((tick) => tick + 1), 250);
     return () => clearInterval(timer);
   }, [endsAt]);
 
   return endsAt ? Math.max(0, endsAt - Date.now()) : 0;
 }
 
-// A small ring that empties as a pop up's time runs out. The browser
-// animates it, so it moves smoothly; the time already gone is read once when
-// it appears, so a ring that mounts late (a rejoin) starts at the right point.
-function RadialDial({ endsAt, length, className = '' }) {
-  const [elapsed] = useState(() => Math.max(0, Math.min(length, length - (endsAt - Date.now()))));
-
-  if (!length) {
-    return null;
+// Applies one player's action to the engine, whether it came from this
+// screen or from a friend's intent over the network.
+export const runAction = (engine, playerId, action) => {
+  switch (action?.type) {
+    case 'roll':
+      return engine.roll(playerId);
+    case 'place-settlement':
+      return engine.placeSettlement(playerId, Number(action.vertexId));
+    case 'place-road':
+      return engine.placeRoad(playerId, Number(action.edgeId));
+    case 'build-city':
+      return engine.buildCity(playerId, Number(action.vertexId));
+    case 'buy-dev':
+      return engine.buyDev(playerId);
+    case 'play-dev':
+      return engine.playDev(playerId, action.card, { resources: action.resources, resource: action.resource });
+    case 'discard':
+      return engine.discard(playerId, action.cards);
+    case 'move-robber':
+      return engine.moveRobber(playerId, Number(action.hexId));
+    case 'steal':
+      return engine.steal(playerId, action.victimId);
+    case 'trade-propose':
+      return engine.proposeTrade(playerId, { give: action.give, get: action.get, to: action.to || null });
+    case 'trade-respond':
+      return engine.respondTrade(playerId, action.tradeId, Boolean(action.accept));
+    case 'trade-complete':
+      return engine.completeTrade(playerId, action.tradeId, action.partnerId);
+    case 'trade-cancel':
+      return engine.cancelTrade(playerId, action.tradeId);
+    case 'maritime':
+      return engine.maritime(playerId, action.give, action.get);
+    case 'end-turn':
+      return engine.endTurn(playerId);
+    case 'end-propose':
+      return engine.proposeEnd(playerId);
+    case 'end-vote':
+      return engine.voteEnd(playerId, Boolean(action.agree));
+    default:
+      return false;
   }
+};
 
+function CostChips({ cost }) {
   return (
-    <svg className={`radial-dial ${className}`.trim()} viewBox="0 0 36 36" aria-hidden="true" focusable="false">
-      <circle className="radial-dial-track" cx="18" cy="18" r="15" />
-      <circle
-        className="radial-dial-arc"
-        cx="18"
-        cy="18"
-        r="15"
-        style={{ animationDuration: `${length}ms`, animationDelay: `-${elapsed}ms` }}
-      />
-    </svg>
+    <span className="cost-chips">
+      {Object.entries(cost).map(([resource, count]) => (
+        <span key={resource} className={`cost-chip res-${resource}`} title={`${count} ${RESOURCE_LABELS[resource]}`}>
+          {Array.from({ length: count }, (_, i) => (
+            <ResourceIcon key={i} resource={resource} size={13} />
+          ))}
+        </span>
+      ))}
+    </span>
   );
 }
 
-// Where each token is drawn. It follows the real board position one tile at
-// a time, so a token always walks the track, even when a snapshot from the
-// host skips tiles (Relay sends the board a few times a second). Short moves
-// forward or back are walked; anything longer, like Go to Jail, glides there.
-const TRACK = 40;
-
-function useWalkingPositions(positions, stepMs) {
-  const [shown, setShown] = useState(positions);
-  const lastMove = useRef(0);
-
-  useEffect(() => {
-    const next = { ...shown };
-    let changed = false;
-    let behind = 0;
-
-    Object.keys(positions).forEach((id) => {
-      const from = shown[id] ?? positions[id];
-      const to = positions[id];
-
-      if (from === to) {
-        return;
-      }
-
-      const ahead = (to - from + TRACK) % TRACK;
-      const back = (from - to + TRACK) % TRACK;
-
-      if (ahead <= 12) {
-        next[id] = (from + 1) % TRACK;
-        behind = Math.max(behind, ahead);
-      } else if (back <= 3) {
-        next[id] = (from - 1 + TRACK) % TRACK;
-        behind = Math.max(behind, back);
-      } else {
-        next[id] = to;
-      }
-
-      changed = true;
-    });
-
-    if (!changed) {
-      return undefined;
-    }
-
-    // A little quicker than the host's own step, so it never falls behind,
-    // and quicker still when it has a lot of catching up to do.
-    const gap = behind > 6 ? Math.min(300, stepMs) : stepMs * 0.9;
-    const wait = Math.max(0, gap - (Date.now() - lastMove.current));
-    const timer = setTimeout(() => {
-      lastMove.current = Date.now();
-      setShown(next);
-    }, wait);
-
-    return () => clearTimeout(timer);
-  }, [positions, shown, stepMs]);
-
-  return shown;
+function BundleLine({ bundle }) {
+  const entries = Object.entries(bundle || {}).filter(([, count]) => count > 0);
+  if (!entries.length) return <span className="bundle-line bundle-line--empty">nothing</span>;
+  return (
+    <span className="bundle-line">
+      {entries.map(([resource, count]) => (
+        <span key={resource} className={`bundle-item res-${resource}`}>
+          <ResourceIcon resource={resource} size={14} />
+          {count}
+        </span>
+      ))}
+    </span>
+  );
 }
 
-// Tile centres inside the board, measured without transforms so a tile that
-// lifts on hover never moves the tokens. Measured again whenever the board
-// changes size.
-function useTileCentres(boardRef, tileRefs) {
-  const [centres, setCentres] = useState({});
-
-  useLayoutEffect(() => {
-    const board = boardRef.current;
-
-    if (!board) {
-      return undefined;
-    }
-
-    const measure = () => {
-      const next = {};
-      Object.entries(tileRefs.current).forEach(([id, tile]) => {
-        if (tile) {
-          next[id] = {
-            x: tile.offsetLeft + tile.offsetWidth / 2,
-            y: tile.offsetTop + tile.offsetHeight * 0.66,
-            w: tile.offsetWidth,
-          };
-        }
-      });
-      setCentres(next);
-    };
-
-    measure();
-
-    if (typeof ResizeObserver !== 'function') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
-    }
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(board);
-    return () => observer.disconnect();
-  }, [boardRef, tileRefs]);
-
-  return centres;
+// +/- pickers for one resource bundle.
+function BundlePicker({ value, onChange, limits = null, label }) {
+  return (
+    <div className="bundle-picker" role="group" aria-label={label}>
+      {RESOURCES.map((resource) => {
+        const max = limits ? limits[resource] : 19;
+        return (
+          <div key={resource} className={`bundle-picker-row res-${resource}`}>
+            <ResourceIcon resource={resource} size={18} />
+            <span className="bundle-picker-name">{RESOURCE_LABELS[resource]}</span>
+            <button
+              type="button"
+              aria-label={`One less ${RESOURCE_LABELS[resource]}`}
+              disabled={!value[resource]}
+              onClick={() => onChange({ ...value, [resource]: value[resource] - 1 })}
+            >
+              −
+            </button>
+            <strong>{value[resource]}</strong>
+            <button
+              type="button"
+              aria-label={`One more ${RESOURCE_LABELS[resource]}`}
+              disabled={value[resource] >= max}
+              onClick={() => onChange({ ...value, [resource]: value[resource] + 1 })}
+            >
+              +
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function BoardGame({
@@ -272,27 +214,24 @@ export default function BoardGame({
   onExit,
   onRestart,
   resume = null,
+  boardMode = 'beginner',
 }) {
   const isHost = !session || session.isHost;
   const [state, setState] = useState(() => {
     const cached = !isHost && session?.lastGame;
-    return cached ? cached.state : resume || createInitialState(seatPlayers);
+    return cached ? cached.state : resume || createInitialState(seatPlayers, { board: boardMode });
   });
   const [connection, setConnection] = useState('online');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [clockOffset, setClockOffset] = useState(0);
-  const [selectedProperty, setSelectedProperty] = useState(null);
-  const [sheet, setSheet] = useState(null); // 'dice' | 'match' | 'end' | 'cards' | null
-  const [cardsFor, setCardsFor] = useState(null);
-  const [tradeDraft, setTradeDraft] = useState(null); // the offer being composed
-  const [confirmBankrupt, setConfirmBankrupt] = useState(false);
-  const [tradeChoices, setTradeChoices] = useState({}); // mortgage choices on an incoming offer
-  const [hiddenTrades, setHiddenTrades] = useState([]); // incoming offers put aside for later
+  const [sheet, setSheet] = useState(null); // 'rules' | 'costs' | 'dice' | 'end' | 'trade' | 'dev' | null
+  const [mode, setMode] = useState(null); // 'road' | 'settlement' | 'city' while placing
+  const [tradeDraft, setTradeDraft] = useState(null); // { give, get, to }
+  const [bankDraft, setBankDraft] = useState({ give: null, get: null });
+  const [discardDraft, setDiscardDraft] = useState(emptyBundle);
+  const [devPick, setDevPick] = useState(null); // { card, resources: [] , resource }
   const [showResults, setShowResults] = useState(true);
-  const [goFlash, setGoFlash] = useState(false);
-  const lastPositions = useRef(null);
-  const goFlashTimer = useRef(null);
   const engineRef = useRef(null);
 
   // ------------------------------------------------------------- engine
@@ -307,12 +246,14 @@ export default function BoardGame({
       advisor: premiumAdvisor,
       timing: testTiming(),
       initialState: resume,
+      options: { board: boardMode },
       onChange: (next) => {
         setState(next);
-        session?.broadcastGame(next);
+        session?.broadcastGame(next, redactFor);
 
-        // Saved between rolls, so a host who reloads can reopen the room.
-        if ((!next.busy && next.turnPhase === 'pre-roll') || next.gameOver) {
+        // Saved whenever nothing is in motion, so a host who reloads can
+        // reopen the room where it was.
+        if (!next.busy || next.gameOver) {
           session?.saveHostGame(next);
         }
       },
@@ -342,49 +283,8 @@ export default function BoardGame({
     const offIntent = session?.on('intent', ({ clientId, action }) => {
       const player = engine.state.players.find((entry) => entry.clientId === clientId);
 
-      if (!player) {
-        return;
-      }
-
-      switch (action.type) {
-        case 'roll':
-          engine.playTurn(player.id, { release: action.release });
-          break;
-        case 'purchase':
-          engine.resolvePurchase(player.id, action.accept);
-          break;
-        case 'bid':
-          engine.placeBid(player.id, action.amount);
-          break;
-        case 'manage':
-          engine.manageProperty(player.id, Number(action.spaceId), action.action);
-          break;
-        case 'end-propose':
-          engine.proposeEnd(player.id);
-          break;
-        case 'end-vote':
-          engine.voteEnd(player.id, Boolean(action.agree));
-          break;
-        case 'end-turn':
-          engine.endTurnEarly(player.id);
-          break;
-        case 'dismiss':
-          engine.dismiss(player.id);
-          break;
-        case 'trade-propose':
-          engine.proposeTrade(player.id, action.offer);
-          break;
-        case 'trade-respond':
-          engine.respondTrade(player.id, action.tradeId, Boolean(action.accept), action.mortgageChoice);
-          break;
-        case 'trade-cancel':
-          engine.cancelTrade(player.id, action.tradeId);
-          break;
-        case 'debt-bankrupt':
-          engine.giveUpDebt(player.id);
-          break;
-        default:
-          break;
+      if (player) {
+        runAction(engine, player.id, action);
       }
     });
 
@@ -400,7 +300,7 @@ export default function BoardGame({
 
     const offBack = session?.on('peer-rejoined', ({ clientId, playerId }) => {
       engine.setAway(playerId, false, clientId);
-      session.broadcastGame(engine.state);
+      session.broadcastGame(engine.state, redactFor);
     });
 
     return () => {
@@ -446,54 +346,13 @@ export default function BoardGame({
   // One way to act, whether the rules run here or on the host.
   const act = useCallback(
     (action) => {
-      const engine = engineRef.current;
-
       if (!isHost) {
         session?.sendIntent(action);
         return;
       }
 
-      if (!engine) return;
-
-      switch (action.type) {
-        case 'roll':
-          engine.playTurn(myPlayerId, { release: action.release });
-          break;
-        case 'purchase':
-          engine.resolvePurchase(myPlayerId, action.accept);
-          break;
-        case 'bid':
-          engine.placeBid(myPlayerId, action.amount);
-          break;
-        case 'manage':
-          engine.manageProperty(myPlayerId, action.spaceId, action.action);
-          break;
-        case 'end-propose':
-          engine.proposeEnd(myPlayerId);
-          break;
-        case 'end-vote':
-          engine.voteEnd(myPlayerId, Boolean(action.agree));
-          break;
-        case 'end-turn':
-          engine.endTurnEarly(myPlayerId);
-          break;
-        case 'dismiss':
-          engine.dismiss(myPlayerId);
-          break;
-        case 'trade-propose':
-          engine.proposeTrade(myPlayerId, action.offer);
-          break;
-        case 'trade-respond':
-          engine.respondTrade(myPlayerId, action.tradeId, Boolean(action.accept), action.mortgageChoice);
-          break;
-        case 'trade-cancel':
-          engine.cancelTrade(myPlayerId, action.tradeId);
-          break;
-        case 'debt-bankrupt':
-          engine.giveUpDebt(myPlayerId);
-          break;
-        default:
-          break;
+      if (engineRef.current) {
+        runAction(engineRef.current, myPlayerId, action);
       }
     },
     [isHost, myPlayerId, session],
@@ -501,40 +360,17 @@ export default function BoardGame({
 
   // -------------------------------------------------------------- sound
 
-  // Every effect sound goes through this gate, so the sound effects switch
-  // silences buying, express, coronation and winner sounds while the music
-  // keeps its own switch.
   const effectsOn = audioSettings.effectsOn && audioSettings.effectsVolume > 0;
-  const soundOnRef = useRef(effectsOn);
-  const audioRef = useRef(null);
+  const winnerRef = useRef(null);
 
-  if (!audioRef.current) {
-    audioRef.current = Object.fromEntries(
-      Object.entries(SOUND_FILES).map(([key, file]) => {
-        const audio = new Audio(file);
-        audio.preload = 'auto';
-        return [key, audio];
-      }),
-    );
+  if (!winnerRef.current && typeof Audio !== 'undefined') {
+    winnerRef.current = new Audio(winnerSound);
+    winnerRef.current.preload = 'auto';
   }
 
   useEffect(() => {
-    Object.values(audioRef.current).forEach((audio) => {
-      audio.volume = Math.min(1, Math.max(0, audioSettings.effectsVolume));
-    });
-  }, [audioSettings.effectsVolume]);
-
-  useEffect(() => {
-    soundOnRef.current = effectsOn;
-
-    if (!effectsOn) {
-      Object.values(audioRef.current).forEach((audio) => audio.pause());
-    }
-  }, [effectsOn]);
-
-  useEffect(() => {
-    const audios = audioRef.current;
-    return () => Object.values(audios).forEach((audio) => audio.pause());
+    const winner = winnerRef.current;
+    return () => winner?.pause();
   }, []);
 
   const lastSfx = useRef(state.sfx?.id ?? 0);
@@ -548,26 +384,28 @@ export default function BoardGame({
 
     lastSfx.current = sfx.id;
 
-    if (!soundOnRef.current) {
+    if (!effectsOn) {
       return;
     }
 
-    const audio = audioRef.current[sfx.key];
-
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
+    if (sfx.key === 'winner' && winnerRef.current) {
+      winnerRef.current.volume = Math.min(1, Math.max(0, audioSettings.effectsVolume));
+      winnerRef.current.currentTime = 0;
+      winnerRef.current.play().catch(() => {});
+    } else {
+      playSfx(sfx.key, audioSettings.effectsVolume);
     }
-  }, [state.sfx]);
+  }, [state.sfx, effectsOn, audioSettings.effectsVolume]);
 
   // ------------------------------------------------------------ keyboard
 
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') {
-        setSelectedProperty(null);
         setSheet(null);
+        setMode(null);
         setTradeDraft(null);
+        setDevPick(null);
       }
     };
 
@@ -577,455 +415,450 @@ export default function BoardGame({
 
   // ------------------------------------------------------------ derived
 
-  const players = state.players;
-  const stepMs = testTiming().step || DEFAULT_TIMING.step;
-  const shownPositions = useWalkingPositions(state.positions, stepMs);
-  const boardRef = useRef(null);
-  const tileRefs = useRef({});
-  const tileCentres = useTileCentres(boardRef, tileRefs);
-
-  // A token that wraps from the top row back past Go lights the Go tile up
-  // for a moment. Going to Jail also moves a token back, so Jail is skipped.
-  useEffect(() => {
-    const before = lastPositions.current;
-    lastPositions.current = shownPositions;
-
-    const passed =
-      before &&
-      Object.keys(shownPositions).some(
-        (id) => before[id] >= 28 && shownPositions[id] <= 11 && shownPositions[id] !== 10,
-      );
-
-    if (passed) {
-      setGoFlash(true);
-      clearTimeout(goFlashTimer.current);
-      goFlashTimer.current = setTimeout(() => setGoFlash(false), 1400);
-    }
-  }, [shownPositions]);
-
-  useEffect(() => () => clearTimeout(goFlashTimer.current), []);
-
-  // Each new debt starts without the bankruptcy confirm open.
-  useEffect(() => setConfirmBankrupt(false), [state.debt?.endsAt]);
-
-  const activePlayer = players[state.activeIndex];
+  // Everyone, the host included, sees only their own cards.
+  const view = useMemo(() => (state.redacted ? state : redactFor(state, myPlayerId)), [state, myPlayerId]);
+  const players = view.players;
+  const activePlayer = players[view.activeIndex];
   const me = players.find((player) => player.id === myPlayerId);
-  const amAlive = me && !state.bankrupt[me.id];
   const isMyTurn = activePlayer?.id === myPlayerId;
-  const canRoll = isMyTurn && amAlive && !state.busy && !state.gameOver && state.turnPhase !== 'actions';
-  const inActionWindow = isMyTurn && state.turnPhase === 'actions' && !state.gameOver;
-  const rollAgain = isMyTurn && (state.doubles?.[myPlayerId] || 0) > 0 && !state.busy;
-  // Ending by agreement: every person still playing votes, computers follow.
-  const voters = players.filter((player) => player.kind === 'human' && !state.bankrupt[player.id]);
-  const endVote = state.endVote;
-  const iAmVoter = voters.some((player) => player.id === myPlayerId);
-  const canProposeEnd = iAmVoter && !state.gameOver && !endVote;
-  const waitingOn = endVote ? voters.filter((player) => !endVote.agreed.includes(player.id)) : [];
-  const mustVote = endVote && !endVote.passed && iAmVoter && !endVote.agreed.includes(myPlayerId);
-  const detainedFor = (id) => state.detained?.[id];
-  const isDetained = (id) => detainedFor(id) !== null && detainedFor(id) !== undefined;
-  const myDetention = isDetained(myPlayerId);
-
-  // Districts where you could build right now, grouped by colour family.
-  const buildable = useMemo(() => {
-    if (!myPlayerId || state.gameOver) return [];
-    const families = new Map();
-
-    Object.keys(state.deeds).forEach((id) => {
-      const space = BOARD_SPACES[id];
-      if (
-        state.deeds[id].owner === myPlayerId &&
-        space.type === 'property' &&
-        Estate.canBuild(state.deeds, id, BOARD_SPACES) &&
-        !families.has(space.colorGroup)
-      ) {
-        families.set(space.colorGroup, Number(id));
-      }
-    });
-
-    return [...families.entries()];
-  }, [state.deeds, state.gameOver, myPlayerId]);
-
-  const netWorths = useMemo(
-    () =>
-      Object.fromEntries(
-        players.map((player) => [
-          player.id,
-          state.bankrupt[player.id] ? 0 : Estate.netWorth(player.id, state.balances, state.deeds, BOARD_SPACES),
-        ]),
-      ),
-    [players, state.balances, state.deeds, state.bankrupt],
+  const phase = view.turnPhase;
+  const over = Boolean(view.gameOver);
+  const myHand = (me && view.hands[myPlayerId]) || emptyBundle();
+  const myDev = (me && view.devCards[myPlayerId]) || [];
+  const setupTurn = phase === 'setup' && view.setup && players[view.setup.order[view.setup.step]]?.id === myPlayerId;
+  const iOweDiscard = phase === 'discard' && view.pendingDiscards?.[myPlayerId];
+  const canBuildNow = isMyTurn && phase === 'actions' && !view.busy && !over;
+  const deckLeft = typeof view.devDeck === 'number' ? view.devDeck : view.devDeck?.length || 0;
+  const left = me ? piecesLeft(view, myPlayerId) : { road: 0, settlement: 0, city: 0 };
+  const rates = me ? maritimeRates(view, myPlayerId) : {};
+  const playableDev = myDev.filter(
+    (card) => card.type && card.type !== 'victoryPoint' && card.boughtTurn !== view.turnCount,
   );
+  const canPlayDev = isMyTurn && !view.busy && !over && !view.devPlayedThisTurn && (phase === 'pre-roll' || phase === 'actions');
+  const myPoints = me ? publicPoints(view, myPlayerId) + hiddenPoints(view, myPlayerId) : 0;
+
+  // Placement mode is cleared whenever the phase moves on.
+  useEffect(() => {
+    if (!canBuildNow) setMode(null);
+  }, [canBuildNow]);
+
+  useEffect(() => {
+    setDiscardDraft(emptyBundle());
+  }, [iOweDiscard]);
+
+  useEffect(() => {
+    if (over) setShowResults(true);
+  }, [over]);
+
+  // What may be clicked on the board right now.
+  const highlight = useMemo(() => {
+    if (!me || over || view.busy) return {};
+    if (setupTurn) {
+      return view.setup.expect === 'settlement'
+        ? { vertices: legalSettlementSpots(view, myPlayerId, { setup: true }) }
+        : { edges: legalRoadSpots(view, myPlayerId, { fromVertex: view.setup.vertexId }) };
+    }
+    if (!isMyTurn) return {};
+    if (phase === 'road-building') return { edges: legalRoadSpots(view, myPlayerId) };
+    if (phase === 'robber') return { hexes: view.board.hexes.filter((hex) => hex.id !== view.board.robber).map((hex) => hex.id) };
+    if (phase !== 'actions') return {};
+    if (mode === 'road') return { edges: legalRoadSpots(view, myPlayerId) };
+    if (mode === 'settlement') return { vertices: legalSettlementSpots(view, myPlayerId) };
+    if (mode === 'city') return { cities: legalCitySpots(view, myPlayerId) };
+    return {};
+  }, [view, me, over, setupTurn, isMyTurn, phase, mode, myPlayerId]);
+
+  const onVertex = (vertexId) => {
+    if (mode === 'city') {
+      act({ type: 'build-city', vertexId });
+    } else {
+      act({ type: 'place-settlement', vertexId });
+    }
+    setMode(null);
+  };
+
+  const onEdge = (edgeId) => {
+    act({ type: 'place-road', edgeId });
+    if (mode === 'road') setMode(null);
+  };
+
+  const onHex = (hexId) => act({ type: 'move-robber', hexId });
 
   const localTime = (at) => (at ? at + (isHost ? 0 : clockOffset) : 0);
-  const auctionLeft = useCountdown(localTime(state.auction?.endsAt));
-  const actionLeft = useCountdown(localTime(state.turnPhase === 'actions' ? state.actionEndsAt : 0));
-  const log = state.log || [];
+  const phaseLeft = useCountdown(localTime(view.phaseEndsAt));
+  const log = view.log || [];
   const myCode = me?.code;
-  const canDevelopNow =
-    isMyTurn && amAlive && !state.gameOver && ((state.turnPhase === 'pre-roll' && !state.busy) || state.turnPhase === 'actions');
+  const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
+  const rolledTotal = view.dice && !view.rolling ? view.dice[0] + view.dice[1] : null;
 
-  useEffect(() => {
-    if (state.gameOver) {
-      setShowResults(true);
+  const voters = players.filter((player) => player.kind === 'human' && !player.away);
+  const endVote = view.endVote;
+  const iAmVoter = voters.some((player) => player.id === myPlayerId);
+  const canProposeEnd = iAmVoter && !over && !endVote;
+  const waitingOnVote = endVote ? voters.filter((player) => !endVote.agreed.includes(player.id)) : [];
+  const mustVote = endVote && !endVote.passed && iAmVoter && !endVote.agreed.includes(myPlayerId);
+
+  // Offers this player should see.
+  const trades = (view.trades || []).filter(
+    (trade) => trade.from === myPlayerId || trade.to === myPlayerId || (!trade.to && trade.from !== myPlayerId),
+  );
+  const canTrade = me && phase === 'actions' && !over && !view.busy;
+
+  const copyMyId = async () => {
+    try {
+      await navigator.clipboard.writeText(myCode);
+      setCopiedId(true);
+      window.setTimeout(() => setCopiedId(false), 2000);
+    } catch {
+      setCopiedId(false);
     }
-  }, [state.gameOver]);
-
-  const ownerOf = (spaceId) => {
-    const deed = state.deeds[spaceId];
-    return deed ? players.find((player) => player.id === deed.owner) : null;
   };
 
-  // --------------------------------------------------------------- render
+  const openTrade = () => {
+    setTradeDraft({ give: emptyBundle(), get: emptyBundle(), to: null });
+    setBankDraft({ give: null, get: null });
+    setSheet('trade');
+  };
 
-  const renderPurchaseOffer = () => {
-    const offer = state.purchaseOffer;
+  // ------------------------------------------------------------ prompts
 
-    if (!offer || offer.playerId !== myPlayerId) {
-      return null;
+  const prompt = (() => {
+    if (over) return 'The game is over';
+    if (phase === 'setup') {
+      const placer = players[view.setup.order[view.setup.step]];
+      const round = view.setup.step < players.length ? 'first' : 'second';
+      if (placer.id !== myPlayerId) return `${placer.name} is placing their ${round} ${view.setup.expect}`;
+      return view.setup.expect === 'settlement'
+        ? `Place your ${round} settlement on a highlighted intersection`
+        : 'Place a road next to the settlement you just built';
     }
+    if (phase === 'discard') {
+      if (iOweDiscard) return `A 7 was rolled, discard ${iOweDiscard} cards`;
+      return `Waiting for ${Object.keys(view.pendingDiscards).map(nameOf).join(', ')} to discard`;
+    }
+    if (!isMyTurn) {
+      if (view.thinking) return `${nameOf(view.thinking)} is thinking`;
+      return activePlayer.away ? 'Away, the computer is playing' : `${kindLabel(activePlayer)} is playing`;
+    }
+    if (view.rolling) return 'Rolling';
+    if (phase === 'pre-roll') return 'Roll the dice, or play a development card first';
+    if (phase === 'robber') return 'Move the robber: click any other hex';
+    if (phase === 'steal') return 'Choose who to rob';
+    if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}`;
+    if (mode === 'road') return 'Click a highlighted path to build a road';
+    if (mode === 'settlement') return 'Click a highlighted intersection to build a settlement';
+    if (mode === 'city') return 'Click one of your settlements to upgrade it';
+    return 'Trade and build, then end your turn';
+  })();
 
-    const space = BOARD_SPACES[offer.spaceId];
-    const balance = state.balances[myPlayerId];
-    const canAfford = balance >= space.price;
-    const accent = spaceAccent(space);
+  // ------------------------------------------------------------- sheets
 
+  const renderDiscard = () => {
+    if (!iOweDiscard) return null;
+    const chosen = bundleSize(discardDraft);
     return (
-      <div className="drawn-card-overlay">
-        <div className="property-card purchase-offer" role="dialog" aria-labelledby="purchase-offer-title">
+      <div className="property-card-overlay end-overlay">
+        <div className="property-card discard-sheet" role="dialog" aria-labelledby="discard-title">
           <header className="property-card-header">
-            <div className="property-card-color-bar" style={{ background: accent }} />
-            <p className="property-card-kicker">For sale</p>
-            <h3 id="purchase-offer-title">{space.name}</h3>
+            <p className="property-card-kicker">The robber strikes</p>
+            <h3 id="discard-title">Discard {iOweDiscard} cards</h3>
           </header>
-
           <div className="property-card-body">
-            <div className="property-card-row">
-              <span>Price</span>
-              <strong className={canAfford ? 'amount-positive' : 'amount-negative'}>{formatRupees(space.price)}</strong>
-            </div>
-            <div className="property-card-row">
-              <span>Your balance</span>
-              <span>{formatRupees(balance)}</span>
-            </div>
-            <div className="property-card-row">
-              <span>{canAfford ? 'Balance after buying' : 'Shortfall'}</span>
-              <span className={canAfford ? '' : 'amount-negative'}>{formatRupees(Math.abs(balance - space.price))}</span>
-            </div>
-
-            <p className="property-card-note">
-              If you decline, {space.name} goes to auction and every player, you included, can bid for it
+            <p className="end-sheet-text">
+              You hold more than 7 resource cards, so half of them (rounded down) go back to the bank
             </p>
-
+            <BundlePicker value={discardDraft} onChange={setDiscardDraft} limits={myHand} label="Cards to discard" />
             <div className="purchase-offer-actions">
-              <GoldButton onClick={() => act({ type: 'purchase', accept: true })} disabled={!canAfford}>
-                Buy property
-              </GoldButton>
-              <GoldButton variant="ghost" onClick={() => act({ type: 'purchase', accept: false })}>
-                Decline
+              <GoldButton disabled={chosen !== iOweDiscard} onClick={() => act({ type: 'discard', cards: discardDraft })}>
+                Discard {chosen} of {iOweDiscard}
               </GoldButton>
             </div>
+            {view.phaseEndsAt && (
+              <p className="trade-note">The computer chooses for you in {Math.ceil(phaseLeft / 1000)} s</p>
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  const renderAuction = () => {
-    const auction = state.auction;
-
-    if (!auction) {
-      return null;
-    }
-
-    const space = BOARD_SPACES[auction.spaceId];
-    const leader = players.find((player) => player.id === auction.highBidder);
-    const myBalance = state.balances[myPlayerId] ?? 0;
-    const minimum = auction.highBid === 0 ? AUCTION_MIN_BID : auction.highBid + AUCTION_INCREMENT;
-    const iLead = auction.highBidder === myPlayerId;
-    const seconds = Math.ceil(auctionLeft / 1000);
-    const steps = [
-      { label: `Bid ${formatCurrency(minimum)}`, amount: minimum },
-      { label: '+ ₹50K', amount: Math.max(minimum, auction.highBid + 50000) },
-      { label: '+ ₹1L', amount: Math.max(minimum, auction.highBid + 100000) },
-    ];
-    const accent = spaceAccent(space);
-
+  const renderSteal = () => {
+    if (!isMyTurn || phase !== 'steal' || over) return null;
     return (
-      <div className="drawn-card-overlay auction-overlay">
-        <div className="property-card auction-sheet" role="dialog" aria-labelledby="auction-title">
+      <div className="property-card-overlay end-overlay">
+        <div className="property-card steal-sheet" role="dialog" aria-labelledby="steal-title">
           <header className="property-card-header">
-            <div className="property-card-color-bar" style={{ background: accent }} />
-            <p className="property-card-kicker">Auction · listed at {formatRupees(space.price)}</p>
-            <h3 id="auction-title">{space.name}</h3>
-            <span className={`auction-clock ${seconds <= 3 ? 'auction-clock--urgent' : ''}`} aria-live="polite">
-              {seconds}s
-            </span>
+            <p className="property-card-kicker">The robber</p>
+            <h3 id="steal-title">Steal a card from</h3>
           </header>
-
-          <RadialDial
-            key={auction.endsAt}
-            className="pop-dial"
-            endsAt={localTime(auction.endsAt)}
-            length={Math.max(1, localTime(auction.endsAt) - Date.now())}
-          />
-
           <div className="property-card-body">
-            <div className="auction-lead">
-              <span>Highest bid</span>
-              <strong key={auction.highBid} className="auction-amount">
-                {auction.highBid ? formatRupees(auction.highBid) : 'No bids yet'}
-              </strong>
-              <span className="auction-leader">
-                {leader ? `${leader.id === myPlayerId ? 'You lead' : `${leader.name} leads`}` : `Opening bid ${formatRupees(AUCTION_MIN_BID)}`}
-              </span>
-            </div>
-
-            {auction.bids.length > 0 && (
-              <ol className="auction-bids">
-                {[...auction.bids].reverse().map((bid, index) => {
-                  const bidder = players.find((player) => player.id === bid.playerId);
-                  return (
-                    <li key={`${bid.playerId}-${bid.amount}-${index}`}>
-                      <span style={{ color: PIECES[bidder?.pieceKey]?.colour }}>{bidder?.name}</span>
-                      <span>{formatRupees(bid.amount)}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-
-            {amAlive ? (
-              <div className="auction-actions">
-                {steps.map((step) => (
+            <div className="steal-options">
+              {view.stealFrom.map((id) => {
+                const player = players.find((entry) => entry.id === id);
+                return (
                   <button
-                    key={step.label}
+                    key={id}
                     type="button"
-                    className="auction-bid-button"
-                    disabled={iLead || step.amount > myBalance || auctionLeft <= 0}
-                    onClick={() => act({ type: 'bid', amount: step.amount })}
+                    className={`steal-option seat-${player.pieceKey}`}
+                    onClick={() => act({ type: 'steal', victimId: id })}
                   >
-                    {step.label}
+                    <PieceMark piece={player.pieceKey} variant="token" />
+                    <strong>{player.name}</strong>
+                    <span>{visibleHandSize(view.hands[id])} cards</span>
                   </button>
-                ))}
-              </div>
-            ) : (
-              <p className="property-card-note">You are watching this auction</p>
-            )}
-
-            <p className="auction-hint">
-              {iLead
-                ? 'You hold the top bid, hold your nerve'
-                : `Your cash ${formatRupees(myBalance)} · late bids add a few seconds`}
-            </p>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
-  const renderPropertyCard = () => {
-    if (selectedProperty === null) {
-      return null;
-    }
+  const renderDevPick = () => {
+    if (!devPick) return null;
+    const close = () => setDevPick(null);
+    const isPlenty = devPick.card === 'yearOfPlenty';
+    const ready = isPlenty ? devPick.resources.length === 2 : Boolean(devPick.resource);
+    return (
+      <div className="property-card-overlay" onClick={close}>
+        <div className="property-card dev-pick-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="dev-pick-title">
+          <header className="property-card-header">
+            <p className="property-card-kicker">Progress card</p>
+            <h3 id="dev-pick-title">{DEV_CARDS[devPick.card].label}</h3>
+            <button type="button" className="property-card-close" onClick={close} aria-label="Close">
+              ✕
+            </button>
+          </header>
+          <div className="property-card-body">
+            <p className="end-sheet-text">{DEV_CARDS[devPick.card].text}</p>
+            <div className="resource-choice">
+              {RESOURCES.map((resource) => {
+                const picked = isPlenty
+                  ? devPick.resources.filter((entry) => entry === resource).length
+                  : devPick.resource === resource
+                    ? 1
+                    : 0;
+                const bankOut = isPlenty && view.bank[resource] <= picked;
+                return (
+                  <button
+                    key={resource}
+                    type="button"
+                    className={`resource-choice-btn res-${resource} ${picked ? 'is-picked' : ''}`}
+                    disabled={bankOut && !picked}
+                    onClick={() =>
+                      setDevPick((current) =>
+                        isPlenty
+                          ? { ...current, resources: [...current.resources, resource].slice(-2) }
+                          : { ...current, resource },
+                      )
+                    }
+                  >
+                    <ResourceIcon resource={resource} size={22} />
+                    <span>{RESOURCE_LABELS[resource]}</span>
+                    {picked > 0 && <em>×{picked}</em>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="purchase-offer-actions">
+              <GoldButton
+                disabled={!ready}
+                onClick={() => {
+                  act({ type: 'play-dev', card: devPick.card, resources: devPick.resources, resource: devPick.resource });
+                  close();
+                }}
+              >
+                Play card
+              </GoldButton>
+              {isPlenty && devPick.resources.length > 0 && (
+                <GoldButton variant="ghost" onClick={() => setDevPick((current) => ({ ...current, resources: [] }))}>
+                  Clear
+                </GoldButton>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-    const space = BOARD_SPACES[selectedProperty];
-    const details = propertyDetails[selectedProperty];
-    const isRoute = space.type === 'route';
-    const isUtility = space.type === 'utility';
-    const deed = state.deeds[selectedProperty];
-    const owner = ownerOf(selectedProperty);
-    const accent = isRoute ? '#2f6170' : isUtility ? '#a46f17' : `var(--color-${space.colorGroup})`;
-    const kicker = isRoute ? 'Express station' : isUtility ? 'Utility' : 'District';
-    const mine = deed && deed.owner === myPlayerId && amAlive && !state.gameOver;
-    const balance = state.balances[myPlayerId] ?? 0;
+  const playDev = (type) => {
+    if (type === 'yearOfPlenty') setDevPick({ card: type, resources: [] });
+    else if (type === 'monopoly') setDevPick({ card: type, resource: null });
+    else act({ type: 'play-dev', card: type });
+  };
+
+  const renderTradeSheet = () => {
+    if (sheet !== 'trade' || !tradeDraft || !canTrade) return null;
+    const close = () => {
+      setSheet(null);
+      setTradeDraft(null);
+    };
+    const give = Object.fromEntries(Object.entries(tradeDraft.give).filter(([, n]) => n > 0));
+    const get = Object.fromEntries(Object.entries(tradeDraft.get).filter(([, n]) => n > 0));
+    const problem = tradeShapeProblem(give, get) || (!hasResources(myHand, give) ? 'You do not have those cards' : null);
+    const others = players.filter((player) => player.id !== myPlayerId);
+    const target = isMyTurn ? tradeDraft.to : activePlayer.id;
+    const bankGive = bankDraft.give;
+    const bankRate = bankGive ? rates[bankGive] : null;
+    const bankReady = bankGive && bankDraft.get && bankDraft.get !== bankGive && myHand[bankGive] >= bankRate && view.bank[bankDraft.get] > 0;
 
     return (
-      <div className="property-card-overlay" onClick={() => setSelectedProperty(null)}>
-        <div
-          className="property-card"
-          onClick={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-labelledby="property-card-title"
-        >
+      <div className="property-card-overlay end-overlay" onClick={close}>
+        <div className="property-card trade-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="trade-title">
           <header className="property-card-header">
-            <div className="property-card-color-bar" style={{ background: accent }} />
-            <p className="property-card-kicker">{kicker}</p>
-            <h3 id="property-card-title">{space.name}</h3>
-            <button
-              type="button"
-              className="property-card-close"
-              onClick={() => setSelectedProperty(null)}
-              aria-label="Close property details"
-            >
+            <p className="property-card-kicker">{isMyTurn ? 'Your trade phase' : `Offer to ${activePlayer.name}`}</p>
+            <h3 id="trade-title">Trade</h3>
+            <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
             </button>
           </header>
 
           <div className="property-card-body">
-            <div className="property-card-row">
-              <span>Owner</span>
-              <strong>
-                {owner ? `${owner.name}${deed.mortgaged ? ' · mortgaged' : ''}` : 'The bank'}
-              </strong>
-            </div>
-            <div className="property-card-row">
-              <span>Purchase price</span>
-              <strong>{formatRupees(space.price)}</strong>
-            </div>
-
-            {isRoute && (
-              <>
-                <div className="property-card-section">
-                  <h4>Rent by stations owned</h4>
-                  {routeDetails.rent.map((rent, index) => (
-                    <div className="property-card-row" key={rent}>
-                      <span>{index + 1} station{index ? 's' : ''} owned</span>
-                      <span>{formatRupees(rent)}</span>
-                    </div>
+            <section className="property-card-section">
+              <h4>With players</h4>
+              {isMyTurn ? (
+                <div className="cards-tabs" role="tablist" aria-label="Offer to">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!tradeDraft.to}
+                    className={`cards-tab ${!tradeDraft.to ? 'cards-tab--active' : ''}`}
+                    onClick={() => setTradeDraft((draft) => ({ ...draft, to: null }))}
+                  >
+                    <span>Everyone</span>
+                  </button>
+                  {others.map((player) => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={tradeDraft.to === player.id}
+                      className={`cards-tab seat-${player.pieceKey} ${tradeDraft.to === player.id ? 'cards-tab--active' : ''}`}
+                      onClick={() => setTradeDraft((draft) => ({ ...draft, to: player.id }))}
+                    >
+                      <PieceMark piece={player.pieceKey} variant="token" />
+                      <span>
+                        {player.name} · {visibleHandSize(view.hands[player.id])}
+                      </span>
+                    </button>
                   ))}
                 </div>
-                <div className="property-card-section">
-                  <div className="property-card-row">
-                    <span>Mortgage value</span>
-                    <span>{formatRupees(routeDetails.mortgage)}</span>
-                  </div>
-                </div>
-                <p className="property-card-note">
-                  Secunderabad, Vijayawada, Kacheguda and Tirupati share this schedule, and rent rises with
-                  how many stations one owner holds
-                </p>
-              </>
-            )}
+              ) : (
+                <p className="trade-note">Only the player whose turn it is can trade, so this offer goes to {activePlayer.name}</p>
+              )}
 
-            {isUtility && (
-              <>
-                <div className="property-card-section">
-                  <h4>Rent by dice roll</h4>
-                  <div className="property-card-row">
-                    <span>Owning one utility</span>
-                    <span>{utilityDetails.multipliers[0]} × dice roll × {formatRupees(utilityDetails.perPip)}</span>
-                  </div>
-                  <div className="property-card-row">
-                    <span>Owning both utilities</span>
-                    <strong>{utilityDetails.multipliers[1]} × dice roll × {formatRupees(utilityDetails.perPip)}</strong>
-                  </div>
+              <div className="trade-columns">
+                <div>
+                  <p className="trade-side-title">You give</p>
+                  <BundlePicker
+                    value={tradeDraft.give}
+                    limits={myHand}
+                    label="You give"
+                    onChange={(next) => setTradeDraft((draft) => ({ ...draft, give: next }))}
+                  />
                 </div>
-                <div className="property-card-section">
-                  <div className="property-card-row">
-                    <span>Mortgage value</span>
-                    <span>{formatRupees(utilityDetails.mortgage)}</span>
-                  </div>
+                <div>
+                  <p className="trade-side-title">You get</p>
+                  <BundlePicker
+                    value={tradeDraft.get}
+                    label="You get"
+                    onChange={(next) => setTradeDraft((draft) => ({ ...draft, get: next }))}
+                  />
                 </div>
-              </>
-            )}
+              </div>
 
-            {details && (
-              <>
-                <div className="property-card-section">
-                  <h4>Rent schedule</h4>
-                  {['Base rent', 'With 1 house', 'With 2 houses', 'With 3 houses', 'With 4 houses', 'With a hotel'].map(
-                    (label, index) => (
-                      <div className="property-card-row" key={label}>
-                        <span>{label}</span>
-                        <span>{formatRupees(details.rent[index])}</span>
-                      </div>
-                    ),
-                  )}
-                </div>
-                <div className="property-card-section">
-                  <div className="property-card-row">
-                    <span>House cost</span>
-                    <span>{formatRupees(details.houseCost)}</span>
-                  </div>
-                  <div className="property-card-row">
-                    <span>Mortgage value</span>
-                    <span>{formatRupees(details.mortgage)}</span>
-                  </div>
-                </div>
-                <p className="property-card-note">
-                  Own every district in this colour family to build, houses go up evenly across the
-                  family before a hotel, and base rent doubles once the family is complete
+              {problem && bundleSize(give) + bundleSize(get) > 0 && <p className="trade-problem">{problem}</p>}
+
+              <div className="purchase-offer-actions">
+                <GoldButton
+                  disabled={Boolean(problem)}
+                  onClick={() => {
+                    act({ type: 'trade-propose', give, get, to: target });
+                    close();
+                  }}
+                >
+                  Send offer{target ? ` to ${nameOf(target)}` : ' to everyone'}
+                </GoldButton>
+              </div>
+              <p className="trade-note">No gifts, and never the same resource on both sides</p>
+            </section>
+
+            {isMyTurn && (
+              <section className="property-card-section">
+                <h4>With the bank</h4>
+                <p className="trade-note">
+                  4:1 always. A harbour gives 3:1, or 2:1 for its resource. Your rates:{' '}
+                  {RESOURCES.map((resource) => `${RESOURCE_LABELS[resource]} ${rates[resource]}:1`).join(' · ')}
                 </p>
-              </>
+                <div className="bank-trade">
+                  <div className="resource-choice resource-choice--small" aria-label="Give">
+                    {RESOURCES.map((resource) => (
+                      <button
+                        key={resource}
+                        type="button"
+                        className={`resource-choice-btn res-${resource} ${bankGive === resource ? 'is-picked' : ''}`}
+                        disabled={myHand[resource] < rates[resource]}
+                        onClick={() => setBankDraft((draft) => ({ ...draft, give: resource }))}
+                      >
+                        <ResourceIcon resource={resource} size={18} />
+                        <span>
+                          {rates[resource]} {RESOURCE_LABELS[resource]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <span className="trade-swap" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M4 8h14l-4-4M20 16H6l4 4" />
+                    </svg>
+                  </span>
+                  <div className="resource-choice resource-choice--small" aria-label="Get">
+                    {RESOURCES.map((resource) => (
+                      <button
+                        key={resource}
+                        type="button"
+                        className={`resource-choice-btn res-${resource} ${bankDraft.get === resource ? 'is-picked' : ''}`}
+                        disabled={resource === bankGive || view.bank[resource] < 1}
+                        onClick={() => setBankDraft((draft) => ({ ...draft, get: resource }))}
+                      >
+                        <ResourceIcon resource={resource} size={18} />
+                        <span>1 {RESOURCE_LABELS[resource]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="purchase-offer-actions">
+                  <GoldButton
+                    variant="ghost"
+                    disabled={!bankReady}
+                    onClick={() => act({ type: 'maritime', give: bankGive, get: bankDraft.get })}
+                  >
+                    {bankReady
+                      ? `Trade ${bankRate} ${RESOURCE_LABELS[bankGive].toLowerCase()} for 1 ${RESOURCE_LABELS[bankDraft.get].toLowerCase()}`
+                      : 'Pick what to give and what to get'}
+                  </GoldButton>
+                </div>
+              </section>
             )}
           </div>
-
-          {mine && !canDevelopNow && (
-            <p className="property-card-note property-card-note--timing">
-              Build and lift mortgages on your turn, before you roll or in the {Math.round(DEFAULT_TIMING.actionWindow / 1000)} seconds
-              after your move, selling and mortgaging are open any time
-            </p>
-          )}
-
-          {mine && (
-            <div className="property-card-actions">
-              {!deed.mortgaged && details && (
-                <>
-                  <button
-                    type="button"
-                    className="property-action-btn"
-                    disabled={
-                      !canDevelopNow || !Estate.canBuild(state.deeds, selectedProperty, BOARD_SPACES) || balance < details.houseCost
-                    }
-                    title="Own the full colour family and build evenly first, on your turn"
-                    onClick={() => act({ type: 'manage', spaceId: selectedProperty, action: 'build' })}
-                  >
-                    Build {deed.houses === 4 ? 'hotel' : 'house'} ({formatRupees(details.houseCost)})
-                  </button>
-                  <button
-                    type="button"
-                    className="property-action-btn"
-                    disabled={!Estate.canSellBuilding(state.deeds, selectedProperty, BOARD_SPACES)}
-                    onClick={() => act({ type: 'manage', spaceId: selectedProperty, action: 'sell' })}
-                  >
-                    Sell building ({formatRupees(details.houseCost / 2)})
-                  </button>
-                </>
-              )}
-              {!deed.mortgaged && (
-                <button
-                  type="button"
-                  className="property-action-btn"
-                  disabled={!Estate.canMortgage(state.deeds, selectedProperty, BOARD_SPACES)}
-                  title="Sell the buildings in this family before mortgaging"
-                  onClick={() => act({ type: 'manage', spaceId: selectedProperty, action: 'mortgage' })}
-                >
-                  Mortgage ({formatRupees(Estate.mortgageValue(selectedProperty, BOARD_SPACES))})
-                </button>
-              )}
-              {deed.mortgaged && (
-                <button
-                  type="button"
-                  className="property-action-btn"
-                  disabled={!canDevelopNow || balance < liftCost(deed, selectedProperty)}
-                  title={deed.interestPaid ? 'The 10% fee was paid when you traded for it' : 'Includes 10% interest'}
-                  onClick={() => act({ type: 'manage', spaceId: selectedProperty, action: 'unmortgage' })}
-                >
-                  Unmortgage ({formatRupees(liftCost(deed, selectedProperty))})
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </div>
     );
   };
 
   const renderResults = () => {
-    const over = state.gameOver;
-
-    if (!over || !showResults) {
-      return null;
-    }
-
-    const winners = over.winners.map((id) => players.find((player) => player.id === id)).filter(Boolean);
-    const iWon = over.winners.includes(myPlayerId);
-    const headline = winners.length > 1
-      ? `${winners.map((player) => player.name).join(' and ')} share the crown`
-      : iWon
-        ? 'You win the crown'
-        : `${winners[0]?.name} wins the crown`;
+    if (!over || !showResults) return null;
+    const result = view.gameOver;
+    const winners = result.winners.map((id) => players.find((player) => player.id === id)).filter(Boolean);
+    const iWon = result.winners.includes(myPlayerId);
+    const headline =
+      winners.length > 1
+        ? `${winners.map((player) => player.name).join(' and ')} share the win`
+        : iWon
+          ? 'You settled Catan'
+          : `${winners[0]?.name} wins`;
 
     return (
       <div className="property-card-overlay results-overlay">
@@ -1037,47 +870,46 @@ export default function BoardGame({
               </svg>
             </span>
             <p className="property-card-kicker">
-              {over.reason === 'bankruptcy'
-                ? 'Last player standing'
-                : over.reason === 'agreed'
-                  ? `Ended by agreement after ${over.turns ?? state.turnCount} turns`
-                  : `Match complete after ${TOTAL_MATCH_TURNS} turns`}
+              {result.reason === 'agreed' ? `Ended by agreement after ${result.turns} turns` : `Victory on turn ${result.turns}`}
             </p>
             <h3 id="results-title">{headline}</h3>
-            <p className="results-sub">Ranked by total net worth, cash plus the value of every property held</p>
+            <p className="results-sub">Every point counts, hidden victory point cards are now revealed</p>
           </div>
 
           <ol className="results-table">
-            {over.standings.map((entry, index) => {
-              const isWinner = over.winners.includes(entry.id);
-              return (
-                <li
-                  key={entry.id}
-                  className={`results-row ${isWinner ? 'results-row--winner' : ''}`}
-                  style={{ '--reveal-delay': `${index * 0.12}s` }}
-                >
-                  <span className="results-rank">{index + 1}</span>
-                  <span className={`results-token seat-${entry.pieceKey}`}>
-                    <PieceMark piece={entry.pieceKey} variant="token" title={entry.name} />
+            {result.standings.map((entry, index) => (
+              <li
+                key={entry.id}
+                className={`results-row ${result.winners.includes(entry.id) ? 'results-row--winner' : ''}`}
+                style={{ '--reveal-delay': `${index * 0.12}s` }}
+              >
+                <span className="results-rank">{index + 1}</span>
+                <span className={`results-token seat-${entry.pieceKey}`}>
+                  <PieceMark piece={entry.pieceKey} variant="token" title={entry.name} />
+                </span>
+                <span className="results-name">
+                  <strong>
+                    {entry.name}
+                    {entry.id === myPlayerId ? ' (You)' : ''}
+                  </strong>
+                  <span>
+                    {[
+                      `${entry.settlements} settlement${entry.settlements === 1 ? '' : 's'}`,
+                      `${entry.cities} cit${entry.cities === 1 ? 'y' : 'ies'}`,
+                      entry.longestRoad && 'Longest Road',
+                      entry.largestArmy && 'Largest Army',
+                      entry.victoryCards && `${entry.victoryCards} VP card${entry.victoryCards === 1 ? '' : 's'}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
-                  <span className="results-name">
-                    <strong>
-                      {entry.name}
-                      {entry.id === myPlayerId ? ' (You)' : ''}
-                    </strong>
-                    <span>
-                      {entry.bankrupt
-                        ? 'Bankrupt'
-                        : `Cash ${formatRupees(entry.cash)} · Property ${formatRupees(entry.propertyValue)} · ${entry.deeds} deed${entry.deeds === 1 ? '' : 's'}`}
-                    </span>
-                  </span>
-                  <span className="results-worth">
-                    <span>Net worth</span>
-                    <strong>{formatRupees(entry.netWorth)}</strong>
-                  </span>
-                </li>
-              );
-            })}
+                </span>
+                <span className="results-worth">
+                  <span>Points</span>
+                  <strong>{entry.points}</strong>
+                </span>
+              </li>
+            ))}
           </ol>
 
           <div className="results-actions">
@@ -1095,622 +927,109 @@ export default function BoardGame({
     );
   };
 
-  const offer = state.purchaseOffer;
-  const deciding = offer && offer.playerId !== myPlayerId ? players.find((player) => player.id === offer.playerId) : null;
-
-  // A rent, tax, fine or Go pop up. The money moves only when it closes.
-  const renderNotice = () => {
-    const notice = state.notice;
-
-    if (!notice) {
-      return null;
-    }
-
-    const payer = players.find((player) => player.id === notice.playerId);
-    const gain = notice.amount > 0;
-    const canClose = notice.playerId === myPlayerId && isMyTurn;
-
+  const renderInfoSheet = () => {
+    if (!['rules', 'costs', 'dice'].includes(sheet)) return null;
+    const close = () => setSheet(null);
     return (
-      <div className="drawn-card-overlay">
-        <div className={`drawn-card notice-card notice-card--${notice.kind}`} role="status" aria-live="polite" key={notice.id}>
-          <span className="drawn-card-deck">{notice.title}</span>
-          <div className="drawn-card-rule" />
-          <strong className={`notice-amount ${gain ? 'amount-positive' : 'amount-negative'}`}>
-            {gain ? '+' : '−'}
-            {formatRupees(Math.abs(notice.amount))}
-          </strong>
-          <p className="drawn-card-text">{notice.text}</p>
-          <span className="drawn-card-holder">
-            {notice.playerId === myPlayerId ? 'Your balance' : `${payer?.name}'s balance`} updates when this closes
-          </span>
-          <RadialDial key={notice.id} className="pop-dial" endsAt={localTime(notice.endsAt)} length={notice.length} />
-          {canClose && (
-            <button type="button" className="text-link hold-close" onClick={() => act({ type: 'dismiss' })}>
-              {gain ? 'Collect now' : 'Pay now'}
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderDrawnCard = () => {
-    const card = state.drawnCard;
-
-    if (!card) {
-      return null;
-    }
-
-    return (
-      <div className="drawn-card-overlay">
-        <div className="drawn-card" role="status" aria-live="polite">
-          <span className="drawn-card-deck">{card.deckName}</span>
-          <div className="drawn-card-rule" />
-          <p className="drawn-card-text">{card.text}</p>
-          <span className="drawn-card-holder">Drawn by {card.playerId === myPlayerId ? 'you' : card.playerName}</span>
-          <RadialDial key={card.endsAt} className="pop-dial" endsAt={localTime(card.endsAt)} length={card.length} />
-          {card.playerId === myPlayerId && isMyTurn && (
-            <button type="button" className="text-link hold-close" onClick={() => act({ type: 'dismiss' })}>
-              Got it
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // Everyone's title deeds, open to the whole table.
-  // ------------------------------------------------------------ trading
-
-  const trades = state.trades || [];
-  const nameOf = (id) => players.find((player) => player.id === id)?.name || 'A player';
-  const tradePartners = players.filter((player) => player.id !== myPlayerId && !state.bankrupt[player.id]);
-  const canTrade = Boolean(me) && amAlive && !state.gameOver && tradePartners.length > 0;
-  const myOffers = trades.filter((trade) => trade.from === myPlayerId);
-  const offersToMe = trades.filter((trade) => trade.to === myPlayerId);
-  const incoming = offersToMe.find((trade) => !hiddenTrades.includes(trade.id));
-  const blankSide = () => ({ cash: 0, deeds: [], pardons: 0 });
-  const deedsOf = (id) =>
-    Object.keys(state.deeds)
-      .map(Number)
-      .filter((spaceId) => state.deeds[spaceId].owner === id)
-      .sort((a, b) => a - b);
-
-  const openTrade = (to, preset = {}) => {
-    setSheet(null);
-    setTradeDraft({
-      to: to || tradePartners[0]?.id,
-      give: blankSide(),
-      get: blankSide(),
-      mortgageChoice: {},
-      ...preset,
-    });
-  };
-
-  const describeSide = (side) => {
-    const parts = [
-      ...side.deeds.map((id) => BOARD_SPACES[id].name),
-      side.cash > 0 ? formatRupees(side.cash) : null,
-      side.pardons > 0 ? 'Get Out of Jail Free card' : null,
-    ].filter(Boolean);
-    return parts.length ? parts.join(', ') : 'Nothing yet';
-  };
-
-  // One side of a deal: deeds to tick, cash to add and a Jail Free card.
-  const renderTradeSide = (key, ownerId, title) => {
-    const side = tradeDraft[key];
-    const owned = deedsOf(ownerId);
-    const cashLimit = state.balances[ownerId] || 0;
-    const pardonsHeld = state.pardons[ownerId] || 0;
-    const update = (patch) => setTradeDraft((draft) => ({ ...draft, [key]: { ...draft[key], ...patch } }));
-    const setCash = (value) => update({ cash: Math.max(0, Math.min(cashLimit, Math.floor(value) || 0)) });
-
-    return (
-      <div className="trade-side">
-        <h4>{title}</h4>
-
-        {owned.length === 0 ? (
-          <p className="trade-empty">No properties</p>
-        ) : (
-          <ul className="trade-deeds">
-            {owned.map((id) => {
-              const space = BOARD_SPACES[id];
-              const deed = state.deeds[id];
-              const locked = familyHasBuildings(state.deeds, id);
-              const picked = side.deeds.includes(id);
-
-              return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    className={`trade-deed ${picked ? 'trade-deed--picked' : ''}`}
-                    style={{ '--deed': spaceAccent(space) }}
-                    disabled={locked}
-                    aria-pressed={picked}
-                    onClick={() =>
-                      update({ deeds: picked ? side.deeds.filter((entry) => entry !== id) : [...side.deeds, id] })
-                    }
-                  >
-                    <span className="trade-deed-band" aria-hidden="true" />
-                    <strong>{space.name}</strong>
-                    <span>
-                      {locked ? 'Sell buildings first' : deed.mortgaged ? 'Mortgaged' : formatRupees(space.price)}
-                    </span>
-                    <i className="trade-deed-check" aria-hidden="true">
-                      ✓
-                    </i>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <label className="trade-cash">
-          <span>Cash</span>
-          <input
-            type="number"
-            min="0"
-            step="10000"
-            max={cashLimit}
-            inputMode="numeric"
-            value={side.cash || ''}
-            placeholder="₹0"
-            onChange={(event) => setCash(Number(event.target.value))}
-            aria-label={`${title} cash`}
-          />
-        </label>
-        <div className="trade-cash-steps">
-          {[10000, 50000, 100000].map((step) => (
-            <button key={step} type="button" onClick={() => setCash(side.cash + step)} disabled={side.cash + step > cashLimit}>
-              + {formatCurrency(step)}
-            </button>
-          ))}
-          {side.cash > 0 && (
-            <button type="button" onClick={() => setCash(0)}>
-              Clear
-            </button>
-          )}
-        </div>
-        <p className="trade-limit">Up to {formatRupees(cashLimit)}</p>
-
-        {pardonsHeld > 0 && (
-          <button
-            type="button"
-            className={`trade-pardon ${side.pardons ? 'trade-pardon--picked' : ''}`}
-            aria-pressed={side.pardons > 0}
-            onClick={() => update({ pardons: side.pardons ? 0 : 1 })}
-          >
-            ⚖ Get Out of Jail Free card
-          </button>
-        )}
-      </div>
-    );
-  };
-
-  const renderMortgageChoices = (ids, choices, onChoose) => {
-    const mortgaged = ids.filter((id) => state.deeds[id]?.mortgaged);
-
-    if (mortgaged.length === 0) {
-      return null;
-    }
-
-    return (
-      <div className="trade-mortgages">
-        <h4>Mortgaged properties you receive</h4>
-        {mortgaged.map((id) => (
-          <div className="trade-mortgage" key={id}>
-            <span>{BOARD_SPACES[id].name}</span>
-            <div role="radiogroup" aria-label={`${BOARD_SPACES[id].name} mortgage`}>
-              {['interest', 'lift'].map((choice) => (
-                <button
-                  key={choice}
-                  type="button"
-                  role="radio"
-                  aria-checked={(choices[id] || 'interest') === choice}
-                  className={(choices[id] || 'interest') === choice ? 'is-picked' : ''}
-                  onClick={() => onChoose(id, choice)}
-                >
-                  {choice === 'interest' ? 'Pay 10% now' : 'Lift mortgage'} {formatRupees(mortgageFee(id, choice))}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-        <p className="trade-note">
-          Paying 10% keeps it mortgaged, lifting it later then costs just the mortgage value
-        </p>
-      </div>
-    );
-  };
-
-  const renderTradeComposer = () => {
-    if (!tradeDraft || !canTrade) {
-      return null;
-    }
-
-    const partner = players.find((player) => player.id === tradeDraft.to) || tradePartners[0];
-    const trade = { from: myPlayerId, to: partner.id, give: tradeDraft.give, get: tradeDraft.get };
-    const problem = tradeProblem(state, trade, tradeDraft.mortgageChoice);
-    const untouched =
-      !trade.give.deeds.length && !trade.get.deeds.length && !trade.give.cash && !trade.get.cash && !trade.give.pardons && !trade.get.pardons;
-
-    return (
-      <div className="property-card-overlay end-overlay" onClick={() => setTradeDraft(null)}>
-        <div className="property-card trade-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="trade-title">
+      <div className="property-card-overlay" onClick={close}>
+        <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="info-title">
           <header className="property-card-header">
-            <p className="property-card-kicker">Propose a deal</p>
-            <h3 id="trade-title">Trade with {partner.name}</h3>
-            <button type="button" className="property-card-close" onClick={() => setTradeDraft(null)} aria-label="Close">
+            <p className="property-card-kicker">{sheet === 'dice' ? 'Fair play' : 'Reference'}</p>
+            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'How the dice work'}</h3>
+            <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
             </button>
           </header>
-
-          {tradePartners.length > 1 && (
-            <div className="cards-tabs" role="tablist">
-              {tradePartners.map((player) => (
-                <button
-                  key={player.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={player.id === partner.id}
-                  className={`cards-tab seat-${player.pieceKey} ${player.id === partner.id ? 'cards-tab--active' : ''}`}
-                  onClick={() => setTradeDraft((draft) => ({ ...draft, to: player.id, get: blankSide(), mortgageChoice: {} }))}
-                >
-                  <PieceMark piece={player.pieceKey} variant="token" />
-                  <span>{player.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="property-card-body">
-            <div className="trade-columns">
-              {renderTradeSide('give', myPlayerId, 'You give')}
-              <span className="trade-swap" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M4 8h14l-4-4M20 16H6l4 4" />
-                </svg>
-              </span>
-              {renderTradeSide('get', partner.id, `You ask ${partner.name} for`)}
-            </div>
-
-            {renderMortgageChoices(tradeDraft.get.deeds, tradeDraft.mortgageChoice, (id, choice) =>
-              setTradeDraft((draft) => ({ ...draft, mortgageChoice: { ...draft.mortgageChoice, [id]: choice } })),
+          <div className="property-card-body dice-info-body">
+            {sheet === 'rules' && (
+              <>
+                <div className="property-card-section">
+                  <h4>1. Roll for resources</h4>
+                  <p>
+                    Every hex with the rolled number pays each settlement next to it 1 card and each city 2 cards, unless the
+                    robber sits on it. A 7 pays nothing: anyone with more than 7 cards discards half, then you move the robber
+                    and steal a card.
+                  </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>2. Trade</h4>
+                  <p>
+                    Trade with the other players (only with the player whose turn it is), or with the bank at 4:1, 3:1 at a
+                    generic harbour or 2:1 at a special harbour.
+                  </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>3. Build</h4>
+                  <p>
+                    Roads connect to your network. Settlements need a road and the Distance Rule: no building on any
+                    neighbouring intersection. Cities upgrade settlements. You may play one development card per turn, but not
+                    one bought this turn.
+                  </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>Winning</h4>
+                  <p>
+                    The first player with {WINNING_POINTS} victory points on their own turn wins. Settlement 1, city 2, Longest
+                    Road (5+ roads) 2, Largest Army (3+ knights) 2, victory point card 1.
+                  </p>
+                </div>
+              </>
             )}
-
-            <div className="trade-summary">
-              <p>
-                <span>You give</span> {describeSide(trade.give)}
-              </p>
-              <p>
-                <span>You get</span> {describeSide(trade.get)}
-              </p>
-            </div>
-
-            {problem && !untouched && <p className="trade-problem">{problem}</p>}
-
-            <div className="purchase-offer-actions">
-              <GoldButton
-                disabled={Boolean(problem)}
-                onClick={() => {
-                  act({ type: 'trade-propose', offer: { ...trade, mortgageChoice: tradeDraft.mortgageChoice } });
-                  setTradeDraft(null);
-                }}
-              >
-                Send offer
-              </GoldButton>
-              <GoldButton variant="ghost" onClick={() => setTradeDraft(null)}>
-                Cancel
-              </GoldButton>
-            </div>
-            <p className="trade-note">
-              Both players must agree, buildings cannot be traded, and gifts or loans are not allowed
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // A payment bigger than this player's cash: they choose which buildings to
-  // sell and which properties to mortgage, in any order, before the clock
-  // runs out and the rest is sold for them.
-  const renderDebt = () => {
-    const debt = state.debt;
-
-    if (!debt || debt.playerId !== myPlayerId || state.gameOver) {
-      return null;
-    }
-
-    const balance = state.balances[myPlayerId];
-    const short = Math.max(0, debt.amount - balance);
-    const creditor = players.find((player) => player.id === debt.creditorId);
-    const mine = Object.keys(state.deeds)
-      .map(Number)
-      .filter((id) => state.deeds[id].owner === myPlayerId)
-      .sort((a, b) => a - b);
-    const hasBuildings = (id) => state.deeds[id].houses > 0 || state.deeds[id].hotel;
-    const built = mine.filter(hasBuildings);
-    const plain = mine.filter((id) => !hasBuildings(id) && !state.deeds[id].mortgaged);
-    const sell = (id) => act({ type: 'manage', spaceId: id, action: 'sell' });
-    const mortgage = (id) => act({ type: 'manage', spaceId: id, action: 'mortgage' });
-
-    return (
-      <div className="property-card-overlay end-overlay">
-        <div className="property-card debt-sheet" role="dialog" aria-labelledby="debt-title">
-          <RadialDial key={debt.endsAt} className="pop-dial" endsAt={localTime(debt.endsAt)} length={debt.length} />
-          <header className="property-card-header">
-            <p className="property-card-kicker">Raise funds</p>
-            <h3 id="debt-title">
-              {formatRupees(debt.amount)} for {debt.reason}
-              {creditor ? ` to ${creditor.name}` : ''}
-            </h3>
-          </header>
-
-          <div className="property-card-body">
-            <div className="debt-progress">
-              <span>
-                Cash <strong>{formatRupees(balance)}</strong>
-              </span>
-              <span className={short ? 'amount-negative' : 'amount-positive'}>
-                {short ? `${formatRupees(short)} still to raise` : 'Covered'}
-              </span>
-            </div>
-            <p className="debt-help">
-              Choose what goes first, sell houses and hotels for half their cost or mortgage any property for half its
-              price, the payment goes through as soon as your cash covers it
-            </p>
-
-            {built.length > 0 && (
-              <section className="debt-group">
-                <h4>Buildings</h4>
-                <ul>
-                  {built.map((id) => {
-                    const deed = state.deeds[id];
-                    const canSell = Estate.canSellBuilding(state.deeds, id, BOARD_SPACES);
-                    const refund = Estate.propertyDetails[id].houseCost / 2;
-                    return (
-                      <li key={id} style={{ '--family': `var(--color-${BOARD_SPACES[id].colorGroup})` }}>
-                        <span className="debt-name">
-                          <strong>{BOARD_SPACES[id].name}</strong>
-                          <em>{deed.hotel ? 'Hotel' : `${deed.houses} house${deed.houses > 1 ? 's' : ''}`}</em>
-                        </span>
-                        <button type="button" className="debt-action" disabled={!canSell} onClick={() => sell(id)}>
-                          {canSell
-                            ? `Sell ${deed.hotel ? 'the hotel' : 'a house'} ${formatRupees(refund)}`
-                            : 'Sell evenly, fullest first'}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
-
-            {plain.length > 0 && (
-              <section className="debt-group">
-                <h4>Properties</h4>
-                <ul>
-                  {plain.map((id) => {
-                    const canMortgage = Estate.canMortgage(state.deeds, id, BOARD_SPACES);
-                    const family = BOARD_SPACES[id].colorGroup;
-                    return (
-                      <li key={id} style={family ? { '--family': `var(--color-${family})` } : undefined}>
-                        <span className="debt-name">
-                          <strong>{BOARD_SPACES[id].name}</strong>
-                        </span>
-                        <button type="button" className="debt-action" disabled={!canMortgage} onClick={() => mortgage(id)}>
-                          {canMortgage
-                            ? `Mortgage ${formatRupees(Estate.mortgageValue(id, BOARD_SPACES))}`
-                            : "Sell this family's buildings first"}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
-
-            <div className="debt-footer">
-              {confirmBankrupt ? (
-                <>
-                  <span>Everything you own goes to {creditor ? creditor.name : 'the bank'}</span>
-                  <button type="button" className="debt-bankrupt" onClick={() => act({ type: 'debt-bankrupt' })}>
-                    Yes, declare bankruptcy
-                  </button>
-                  <button type="button" className="text-link" onClick={() => setConfirmBankrupt(false)}>
-                    Keep playing
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span>When the time runs out, the rest is sold for you</span>
-                  <button type="button" className="debt-bankrupt" onClick={() => setConfirmBankrupt(true)}>
-                    Declare bankruptcy
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderIncomingTrade = () => {
-    if (!incoming || tradeDraft || state.gameOver || state.debt?.playerId === myPlayerId) {
-      return null;
-    }
-
-    const choices = tradeChoices[incoming.id] || {};
-    const problem = tradeProblem(state, incoming, { ...incoming.mortgageChoice, ...choices });
-    const proposer = players.find((player) => player.id === incoming.from);
-
-    return (
-      <div className="property-card-overlay end-overlay">
-        <div className="property-card trade-sheet trade-sheet--incoming" role="dialog" aria-labelledby="trade-offer-title">
-          <header className="property-card-header">
-            <p className="property-card-kicker">Trade offer</p>
-            <h3 id="trade-offer-title">{proposer?.name} wants to trade</h3>
-          </header>
-          <div className="property-card-body">
-            <div className="trade-summary trade-summary--large">
-              <p>
-                <span>You receive</span> {describeSide(incoming.give)}
-              </p>
-              <p>
-                <span>You give</span> {describeSide(incoming.get)}
-              </p>
-            </div>
-
-            {renderMortgageChoices(incoming.give.deeds, choices, (id, choice) =>
-              setTradeChoices((all) => ({ ...all, [incoming.id]: { ...choices, [id]: choice } })),
-            )}
-
-            {problem && <p className="trade-problem">{problem}</p>}
-
-            <div className="purchase-offer-actions">
-              <GoldButton
-                disabled={Boolean(problem)}
-                onClick={() => act({ type: 'trade-respond', tradeId: incoming.id, accept: true, mortgageChoice: choices })}
-              >
-                Accept
-              </GoldButton>
-              <GoldButton variant="ghost" onClick={() => act({ type: 'trade-respond', tradeId: incoming.id, accept: false })}>
-                Decline
-              </GoldButton>
-            </div>
-            <div className="trade-incoming-links">
-              <button
-                type="button"
-                className="text-link"
-                onClick={() => {
-                  act({ type: 'trade-respond', tradeId: incoming.id, accept: false });
-                  openTrade(incoming.from, { give: { ...incoming.get }, get: { ...incoming.give } });
-                }}
-              >
-                Counter offer
-              </button>
-              <button type="button" className="text-link" onClick={() => setHiddenTrades((list) => [...list, incoming.id])}>
-                Decide later
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderCardViewer = () => {
-    if (sheet !== 'cards') {
-      return null;
-    }
-
-    const shown = players.find((player) => player.id === cardsFor) || players[0];
-    const held = Object.keys(state.deeds)
-      .map(Number)
-      .filter((id) => state.deeds[id].owner === shown.id)
-      .sort((a, b) => a - b);
-
-    return (
-      <div className="property-card-overlay" onClick={() => setSheet(null)}>
-        <div
-          className="property-card cards-sheet"
-          onClick={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-labelledby="cards-title"
-        >
-          <header className="property-card-header">
-            <p className="property-card-kicker">Title deeds</p>
-            <h3 id="cards-title">Everyone's cards</h3>
-            <button type="button" className="property-card-close" onClick={() => setSheet(null)} aria-label="Close">
-              ✕
-            </button>
-          </header>
-
-          <div className="cards-tabs" role="tablist">
-            {players.map((player) => {
-              const count = Object.values(state.deeds).filter((deed) => deed.owner === player.id).length;
-              return (
-                <button
-                  key={player.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={player.id === shown.id}
-                  className={`cards-tab seat-${player.pieceKey} ${player.id === shown.id ? 'cards-tab--active' : ''}`}
-                  onClick={() => setCardsFor(player.id)}
-                >
-                  <PieceMark piece={player.pieceKey} variant="token" />
-                  <span>{player.id === myPlayerId ? 'You' : player.name}</span>
-                  <em>{count}</em>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="property-card-body">
-            <div className="cards-summary">
-              <span>Cash {formatRupees(state.balances[shown.id] || 0)}</span>
-              <span>Net worth {formatRupees(netWorths[shown.id] || 0)}</span>
-              {state.pardons[shown.id] > 0 && <span>{state.pardons[shown.id]} Get Out of Jail Free</span>}
-            </div>
-
-            {held.length === 0 ? (
-              <p className="cards-empty">{shown.id === myPlayerId ? 'You hold' : `${shown.name} holds`} no title deeds yet</p>
-            ) : (
-              <ul className="cards-grid">
-                {held.map((id, index) => {
-                  const space = BOARD_SPACES[id];
-                  const deed = state.deeds[id];
-                  return (
-                    <li key={id} style={{ '--reveal-delay': `${index * 0.04}s` }}>
-                      <button
-                        type="button"
-                        className={`deed-mini ${deed.mortgaged ? 'deed-mini--mortgaged' : ''}`}
-                        style={{ '--deed': spaceAccent(space) }}
-                        onClick={() => {
-                          setSheet(null);
-                          setSelectedProperty(id);
-                        }}
-                      >
-                        <span className="deed-mini-band">
-                          {space.art && <TileArt kind={space.art} />}
-                        </span>
-                        <strong>{space.name}</strong>
-                        <span>
-                          {deed.mortgaged
-                            ? 'Mortgaged'
-                            : deed.hotel
-                              ? 'Hotel'
-                              : deed.houses
-                                ? `${deed.houses} house${deed.houses > 1 ? 's' : ''}`
-                                : formatRupees(space.price)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
+            {sheet === 'costs' && (
+              <ul className="costs-list">
+                {[
+                  ['Road', COSTS.road, '0 VP · builds toward Longest Road'],
+                  ['Settlement', COSTS.settlement, '1 VP'],
+                  ['City', COSTS.city, '2 VP · replaces a settlement'],
+                  ['Development card', COSTS.dev, 'Knight, progress or victory point'],
+                ].map(([name, cost, note]) => (
+                  <li key={name}>
+                    <strong>{name}</strong>
+                    <CostChips cost={cost} />
+                    <span>{note}</span>
+                  </li>
+                ))}
               </ul>
             )}
+            {sheet === 'dice' && (
+              <>
+                <p className="dice-info-intro">
+                  Dice are rolled on the host with the cryptographically secure generator built into the browser, so every
+                  roll is fair and unpredictable
+                </p>
+                <div className="property-card-section">
+                  <h4>Perfectly fair with rejection sampling</h4>
+                  <p>
+                    Random bytes run from 0 to 255, and 256 does not divide evenly by 6, so any byte of 252 or more is drawn
+                    again, leaving exactly 42 values per face
+                  </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>Odds for two dice</h4>
+                  <ul className="dice-probability-list">
+                    <li><strong>7</strong> 17%, the robber&apos;s number</li>
+                    <li><strong>6 and 8</strong> 14% each, the red numbers</li>
+                    <li><strong>5 and 9</strong> 11% · <strong>4 and 10</strong> 8%</li>
+                    <li><strong>3 and 11</strong> 6% · <strong>2 and 12</strong> 3%</li>
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  const copyMyId = async () => {
-    try {
-      await navigator.clipboard.writeText(myCode);
-      setCopiedId(true);
-      window.setTimeout(() => setCopiedId(false), 2000);
-    } catch {
-      setCopiedId(false);
-    }
-  };
+  // ------------------------------------------------------------- render
 
-  const actionSeconds = Math.ceil(actionLeft / 1000);
-  const actionShare = state.actionLength ? Math.min(1, actionLeft / state.actionLength) : 0;
+  const steal = view.lastSteal;
+  const stealNote =
+    steal && steal.resource && (steal.thief === myPlayerId || steal.victim === myPlayerId)
+      ? steal.thief === myPlayerId
+        ? `You stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from ${nameOf(steal.victim)}`
+        : `${nameOf(steal.thief)} stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from you`
+      : null;
 
   return (
     <main className="board-game-page">
@@ -1720,15 +1039,15 @@ export default function BoardGame({
         </button>
 
         <div className="round-indicator">
-          <span>Turn</span>
-          <strong>{state.turnCount.toString().padStart(3, '0')}</strong>
-          <span>of {TOTAL_MATCH_TURNS}</span>
+          <span>{phase === 'setup' ? 'Set-up' : 'Turn'}</span>
+          <strong>{phase === 'setup' ? `${view.setup.step + 1}/${view.setup.order.length}` : view.turnCount}</strong>
+          <span>first to {WINNING_POINTS}</span>
           <button
             type="button"
             className="match-info-button"
-            onClick={() => setSheet('match')}
-            aria-label="How the match works"
-            title="How the match works"
+            onClick={() => setSheet('rules')}
+            aria-label="How a turn works"
+            title="How a turn works"
           >
             i
           </button>
@@ -1782,10 +1101,11 @@ export default function BoardGame({
 
             <div className="player-list">
               {players.map((player, index) => {
-                const bankrupt = state.bankrupt[player.id];
+                const active = index === view.activeIndex && !over && phase !== 'setup';
+                const points = publicPoints(view, player.id) + (player.id === myPlayerId ? hiddenPoints(view, player.id) : 0);
                 return (
                   <article
-                    className={`game-player seat-${player.pieceKey} ${index === state.activeIndex && !state.gameOver ? 'game-player--active' : ''} ${bankrupt ? 'game-player--bankrupt' : ''} ${player.away ? 'game-player--away' : ''}`}
+                    className={`game-player catan-player seat-${player.pieceKey} ${active ? 'game-player--active' : ''} ${player.away ? 'game-player--away' : ''}`}
                     key={player.id}
                   >
                     <span className="game-player-token">
@@ -1797,35 +1117,57 @@ export default function BoardGame({
                         {player.name}
                         {player.id === myPlayerId && <em className="you-chip">You</em>}
                       </strong>
-                      <span>
-                        {bankrupt
-                          ? 'Bankrupt'
-                          : isDetained(player.id)
-                            ? `In Jail, attempt ${detainedFor(player.id) + 1} of ${DETENTION_MAX_ATTEMPTS}`
-                            : index === state.activeIndex && !state.gameOver
-                              ? player.away
-                                ? 'Away, the computer is playing'
-                                : 'Taking a turn'
-                              : kindLabel(player)}
-                      </span>
-                      {state.pardons[player.id] > 0 && (
-                        <span className="player-pardons" title="Get Out of Jail Free">
-                          ⚖ {state.pardons[player.id]} pardon{state.pardons[player.id] > 1 ? 's' : ''} held
-                        </span>
-                      )}
+                      <span>{view.thinking === player.id ? 'Thinking' : active ? 'Taking a turn' : kindLabel(player)}</span>
                     </div>
 
-                    <AnimatedBalance value={state.balances[player.id]} className="game-player-balance" />
-                    <span className="game-player-worth">Net worth {formatRupees(netWorths[player.id])}</span>
-                    {canTrade && player.id !== myPlayerId && !bankrupt && (
-                      <button type="button" className="game-player-trade" onClick={() => openTrade(player.id)}>
-                        Trade
-                      </button>
+                    <span className="catan-player-points" title="Victory points">
+                      <strong>{points}</strong>
+                      <span>VP</span>
+                    </span>
+
+                    <ul className="catan-player-stats">
+                      <li title="Resource cards">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="5" y="3" width="12" height="17" rx="2" />
+                          <path d="M9 21h10a2 2 0 0 0 0 0V6" />
+                        </svg>
+                        {visibleHandSize(view.hands[player.id])}
+                      </li>
+                      <li title="Development cards">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="12" r="8" />
+                          <path d="M4 12h16" />
+                        </svg>
+                        {(view.devCards[player.id] || []).length}
+                      </li>
+                      <li title="Knights played">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z" />
+                        </svg>
+                        {view.knights[player.id] || 0}
+                      </li>
+                      <li title="Longest road">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 20 10 4M20 20 14 4M12 6v2m0 4v2m0 4v2" />
+                        </svg>
+                        {view.longestRoad.lengths[player.id] || 0}
+                      </li>
+                    </ul>
+
+                    {(view.longestRoad.holder === player.id || view.largestArmy === player.id) && (
+                      <div className="catan-badges">
+                        {view.longestRoad.holder === player.id && <span className="catan-badge">Longest Road +2</span>}
+                        {view.largestArmy === player.id && <span className="catan-badge">Largest Army +2</span>}
+                      </div>
                     )}
                   </article>
                 );
               })}
             </div>
+            <p className="bank-line">
+              Bank {RESOURCES.map((resource) => `${RESOURCE_LABELS[resource].slice(0, 2)} ${view.bank[resource]}`).join(' · ')} ·
+              Dev {deckLeft}
+            </p>
           </section>
 
           {session && <ChatPanel session={session} compact />}
@@ -1833,7 +1175,7 @@ export default function BoardGame({
           <section className="activity-log" aria-label="Activity log">
             <p className="eyebrow">Activity</p>
             {log.length === 0 ? (
-              <p className="activity-empty">{state.activity}</p>
+              <p className="activity-empty">{view.activity}</p>
             ) : (
               <ol aria-live="polite">
                 {[...log].reverse().map((entry) => {
@@ -1850,217 +1192,34 @@ export default function BoardGame({
           </section>
         </aside>
 
-        <section className="game-board-area" aria-label="Manapally game board">
-          <div className="game-board" ref={boardRef}>
-            {BOARD_SPACES.map((space) => {
-              const [column, row] = BOARD_GRID[space.id];
-              const isClickable = ['property', 'route', 'utility'].includes(space.type);
-              const deed = state.deeds[space.id];
-              const owner = deed ? ownerOf(space.id) : null;
+        <section className="game-board-area catan-board-area" aria-label="Catan game board">
+          <p className="board-prompt" aria-live="polite">
+            {prompt}
+          </p>
+          <HexBoard
+            board={view.board}
+            buildings={view.buildings}
+            roads={view.roads}
+            players={players}
+            highlight={highlight}
+            onVertex={onVertex}
+            onEdge={onEdge}
+            onHex={onHex}
+            rolled={phase === 'actions' && rolledTotal !== 7 ? rolledTotal : null}
+          />
 
-              return (
-                <article
-                  className={`board-space ${getSpaceClass(space)} ${isClickable ? 'board-space--clickable' : ''} ${
-                    selectedProperty === space.id ? 'board-space--selected' : ''
-                  } ${owner ? 'board-space--owned' : ''} ${space.art ? 'board-space--art' : ''} ${
-                    goFlash && space.id === 0 ? 'board-space--go-flash' : ''
-                  }`}
-                  key={space.id}
-                  ref={(tile) => {
-                    tileRefs.current[space.id] = tile;
-                  }}
-                  style={{ gridColumn: column, gridRow: row }}
-                  onClick={() => isClickable && setSelectedProperty(space.id)}
-                  onKeyDown={(event) => {
-                    if (isClickable && (event.key === 'Enter' || event.key === ' ')) {
-                      event.preventDefault();
-                      setSelectedProperty(space.id);
-                    }
-                  }}
-                  tabIndex={isClickable ? 0 : -1}
-                  role={isClickable ? 'button' : undefined}
-                  aria-label={
-                    isClickable
-                      ? `${space.name}, ${owner ? `owned by ${owner.name}` : `for sale at ${formatRupees(space.price)}`}`
-                      : space.taxLabel
-                        ? `${space.name}, ${space.taxLabel}`
-                        : space.name
-                  }
-                >
-                  <span className={`space-name ${nameFit(space)}`}>
-                    {space.name}
-                    {space.subname && <small>{space.subname}</small>}
-                  </span>
-
-                  {space.art && <TileArt kind={space.art} className="space-art" />}
-
-                  {space.taxLabel && (
-                    <span className="space-cost space-cost--tax">
-                      Pay <b>{formatRupees(TAXES[space.id])}</b>
-                    </span>
-                  )}
-
-                  {/* Owned spaces swap the price label for a solid owner badge */}
-                  {owner ? (
-                    <span
-                      className={`space-owner seat-${owner.pieceKey} ${deed.mortgaged ? 'space-owner--mortgaged' : ''}`}
-                      title={`Owned by ${owner.name}${deed.mortgaged ? ', mortgaged' : ''}`}
-                    >
-                      <PieceMark piece={owner.pieceKey} variant="token" />
-                      <span>{deed.mortgaged ? 'Mortgaged' : owner.id === myPlayerId ? 'Yours' : owner.name}</span>
-                      {(deed.houses > 0 || deed.hotel) && (
-                        <b
-                          className={`space-builds ${deed.hotel ? 'space-builds--hotel' : ''}`}
-                          aria-label={deed.hotel ? 'Hotel' : `${deed.houses} house${deed.houses > 1 ? 's' : ''}`}
-                        >
-                          <svg viewBox="0 0 12 12" aria-hidden="true">
-                            {deed.hotel ? (
-                              <path d="M2 11V3.5L6 1l4 2.5V11H7.5V8.5h-3V11z" />
-                            ) : (
-                              <path d="M1.5 6 6 2l4.5 4H9.5v5h-7V6z" />
-                            )}
-                          </svg>
-                          {deed.hotel ? 'H' : deed.houses}
-                        </b>
-                      )}
-                    </span>
-                  ) : (
-                    space.price && <span className="space-cost">{formatCurrency(space.price)}</span>
-                  )}
-
-                </article>
-              );
-            })}
-
-            {/* Tokens ride above the tiles and glide from one to the next */}
-            <div className="token-layer" aria-hidden="true">
-              {players.map((player) => {
-                if (state.bankrupt[player.id]) return null;
-                const position = shownPositions[player.id];
-                const centre = tileCentres[position];
-                if (!centre) return null;
-
-                const sharing = players.filter(
-                  (other) => !state.bankrupt[other.id] && shownPositions[other.id] === position,
-                );
-                const index = sharing.indexOf(player);
-                const spread = Math.min(centre.w * 0.28, 14);
-                const dx = (index - (sharing.length - 1) / 2) * spread;
-                const waiting =
-                  player.id === activePlayer?.id && state.turnPhase === 'pre-roll' && !state.busy && !state.gameOver;
-
-                return (
-                  <span
-                    className="token-slot"
-                    key={player.id}
-                    style={{
-                      transform: `translate(${centre.x + dx}px, ${centre.y}px)`,
-                      transitionDuration: `${Math.round(stepMs * 0.85)}ms`,
-                      '--step': `${Math.round(stepMs * 0.85)}ms`,
-                      zIndex: 2 + index,
-                    }}
-                  >
-                    <span
-                      key={position}
-                      className={`board-token seat-${player.pieceKey} ${waiting ? 'board-token--waiting' : ''}`}
-                      title={player.name}
-                    >
-                      <PieceMark piece={player.pieceKey} variant="token" title={player.name} />
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="board-direction-indicator" aria-label="Movement direction is clockwise">
-              <svg viewBox="0 0 100 100" className="direction-arrow">
-                <path d="M 50 10 A 40 40 0 1 1 10 50" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
-                <polygon points="8,50 14,54 14,46" fill="currentColor" />
-              </svg>
-            </div>
-
-            <div className="board-centre-art">
-              <BrandMark size={64} className="centre-crown" />
-              <h1>Manapally</h1>
-              <p>Andhra Pradesh and Telangana edition</p>
-              <div className="centre-divider" />
-              <span className="centre-message">
-                Pass Go
-                <br />
-                to receive {formatCurrency(START_REWARD)}
-              </span>
-              {deciding && (
-                <span className="centre-status">
-                  {deciding.name} is deciding on {BOARD_SPACES[offer.spaceId].name}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {renderDrawnCard()}
-          {renderNotice()}
-          {renderPurchaseOffer()}
-          {renderAuction()}
-          {renderPropertyCard()}
-          {renderCardViewer()}
-          {renderTradeComposer()}
-          {renderIncomingTrade()}
-          {renderDebt()}
+          {renderDiscard()}
+          {renderSteal()}
+          {renderDevPick()}
+          {renderTradeSheet()}
+          {renderInfoSheet()}
           {renderResults()}
-
-          {sheet === 'dice' && (
-            <div className="property-card-overlay" onClick={() => setSheet(null)}>
-              <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="dice-info-title">
-                <header className="property-card-header">
-                  <p className="property-card-kicker">Fair play</p>
-                  <h3 id="dice-info-title">How the dice work</h3>
-                  <button type="button" className="property-card-close" onClick={() => setSheet(null)} aria-label="Close dice information">
-                    ✕
-                  </button>
-                </header>
-                <div className="property-card-body dice-info-body">
-                  <p className="dice-info-intro">
-                    Manapally rolls with the cryptographically secure random generator built into your
-                    browser, so every roll is fair and unpredictable
-                  </p>
-                  <div className="property-card-section">
-                    <h4>Two standard dice</h4>
-                    <p>
-                      Each turn rolls two six sided dice showing 1 to 6 and your token moves their total,
-                      three doubles in a row sends you to Jail
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Perfectly fair with rejection sampling</h4>
-                    <p>
-                      Random bytes run from 0 to 255 and 256 does not divide evenly by 6, so any byte of
-                      252 or more is discarded and drawn again, leaving exactly 42 values per face
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Real dice probabilities</h4>
-                    <ul className="dice-probability-list">
-                      <li><strong>7</strong> is the most common total with 6 ways to roll it</li>
-                      <li><strong>6 and 8</strong> follow closely with 5 ways each</li>
-                      <li><strong>2 and 12</strong> are the rarest with 1 way each</li>
-                    </ul>
-                  </div>
-                  <p className="dice-info-footer">May fortune favour your strategy</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {sheet === 'end' && canProposeEnd && (
             <div className="property-card-overlay end-overlay" onClick={() => setSheet(null)}>
-              <div
-                className="property-card end-sheet"
-                onClick={(event) => event.stopPropagation()}
-                role="dialog"
-                aria-labelledby="end-title"
-              >
+              <div className="property-card end-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="end-title">
                 <header className="property-card-header">
-                  <p className="property-card-kicker">End the match early</p>
+                  <p className="property-card-kicker">End the game early</p>
                   <h3 id="end-title">End the game for everyone?</h3>
                   <button type="button" className="property-card-close" onClick={() => setSheet(null)} aria-label="Close">
                     ✕
@@ -2075,9 +1234,7 @@ export default function BoardGame({
                           .join(' and ')} will be asked`
                       : 'You are the only person at the table, the game ends as soon as you confirm'}
                   </p>
-                  <p className="end-sheet-text">
-                    The crown goes to the highest total net worth right now, cash plus every property held
-                  </p>
+                  <p className="end-sheet-text">The win goes to the most victory points right now, hidden cards included</p>
                   <div className="purchase-offer-actions">
                     <GoldButton
                       onClick={() => {
@@ -2101,14 +1258,10 @@ export default function BoardGame({
               <div className="property-card end-sheet" role="dialog" aria-labelledby="vote-title">
                 <header className="property-card-header">
                   <p className="property-card-kicker">A vote at the table</p>
-                  <h3 id="vote-title">
-                    {players.find((player) => player.id === endVote.proposerId)?.name} wants to end the game
-                  </h3>
+                  <h3 id="vote-title">{nameOf(endVote.proposerId)} wants to end the game</h3>
                 </header>
                 <div className="property-card-body">
-                  <p className="end-sheet-text">
-                    If everyone agrees the match ends now and the crown goes to the highest total net worth
-                  </p>
+                  <p className="end-sheet-text">If everyone agrees the game ends now and the most victory points wins</p>
                   <ol className="end-vote-list">
                     {voters.map((player) => (
                       <li key={player.id} className={endVote.agreed.includes(player.id) ? 'is-agreed' : ''}>
@@ -2130,100 +1283,10 @@ export default function BoardGame({
               </div>
             </div>
           )}
-
-          {sheet === 'match' && (
-            <div className="property-card-overlay" onClick={() => setSheet(null)}>
-              <div className="property-card match-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="match-info-title">
-                <header className="property-card-header">
-                  <p className="property-card-kicker">Match rules</p>
-                  <h3 id="match-info-title">How a match ends</h3>
-                  <button type="button" className="property-card-close" onClick={() => setSheet(null)} aria-label="Close match information">
-                    ✕
-                  </button>
-                </header>
-                <div className="property-card-body dice-info-body">
-                  <p className="dice-info-intro">
-                    The richest estate wins, measured by total net worth when the match ends
-                  </p>
-                  <div className="property-card-section">
-                    <h4>Three ways to finish</h4>
-                    <ul className="dice-probability-list">
-                      <li>All {TOTAL_MATCH_TURNS} turns shared by the table have been played</li>
-                      <li>Every player except one has gone bankrupt</li>
-                      <li>Everyone at the table agrees to end the game with End game</li>
-                    </ul>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Net worth</h4>
-                    <p>
-                      Cash plus the purchase value of every district, station and utility you hold, plus half
-                      the cost of your houses and hotels, mortgaged property counts at its value minus the
-                      mortgage
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Doubles and Jail</h4>
-                    <p>
-                      Doubles earn another roll, while three doubles in one turn, the Go to Jail corner
-                      or certain cards send you to Jail, and to leave you can pay {formatRupees(DETENTION_FINE)}, spend
-                      a pardon or roll doubles, after {DETENTION_MAX_ATTEMPTS} misses the fine is paid for you, and
-                      you still collect rent while held
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Your turn</h4>
-                    <p>
-                      Take as long as you like before rolling, then after your move you have{' '}
-                      {Math.round(DEFAULT_TIMING.actionWindow / 1000)} seconds to build houses and hotels before the
-                      turn passes on, or press End turn, rent, taxes and the Go reward move only once their pop up closes
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Taxes</h4>
-                    <p>
-                      Income Tax asks {formatRupees(TAXES[4])} and Luxury Tax asks {formatRupees(TAXES[38])}, the amounts are
-                      printed on their spaces
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Houses and hotels</h4>
-                    <p>
-                      Own every district in a colour family to build, one house at a time and evenly across the
-                      family, a fifth build becomes a hotel and buildings sell back for half their cost
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Trading</h4>
-                    <p>
-                      Trade properties, cash and Get Out of Jail Free cards with any player at any time, even
-                      on another turn or from Jail, both sides must give something, houses and hotels cannot be
-                      traded so sell every building in a colour family before trading any of it, and whoever
-                      receives a mortgaged property pays the bank 10% of the mortgage at once or lifts it in full
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Auctions</h4>
-                    <p>
-                      When a player declines an unowned space it goes to auction straight away, bids rise in
-                      steps of {formatRupees(AUCTION_INCREMENT)} and a late bid keeps the clock open a few
-                      seconds longer
-                    </p>
-                  </div>
-                  <div className="property-card-section">
-                    <h4>Running short</h4>
-                    <p>
-                      If you cannot pay, buildings are sold and districts mortgaged automatically, and if that
-                      is still not enough you are bankrupt and your estate passes to the player you owed
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </section>
 
         <aside className="turn-panel">
-          <p className="eyebrow">Current turn</p>
+          <p className="eyebrow">{phase === 'setup' ? 'Set-up' : 'Current turn'}</p>
 
           <div className="turn-player">
             <span className={`turn-token seat-${activePlayer.pieceKey}`}>
@@ -2231,89 +1294,228 @@ export default function BoardGame({
             </span>
             <div>
               <strong>{activePlayer.id === myPlayerId ? 'Your turn' : activePlayer.name}</strong>
-              <span>
-                {state.gameOver
-                  ? 'The match is over'
-                  : activePlayer.id === myPlayerId
-                    ? inActionWindow
-                      ? 'Build before your turn ends'
-                      : state.busy
-                        ? 'Your move is under way'
-                        : 'Take your time, roll when ready'
-                    : activePlayer.away
-                      ? 'Away, the computer is playing'
-                      : `${kindLabel(activePlayer)} is making a move`}
-              </span>
+              <span>{view.activity}</span>
             </div>
           </div>
 
           <div
-            className={`dice-display ${state.rolling ? 'dice-display--rolling' : ''}`}
+            className={`dice-display ${view.rolling ? 'dice-display--rolling' : ''}`}
             aria-live="polite"
-            aria-label={state.dice ? `Rolled ${state.dice[0]} and ${state.dice[1]}` : 'Dice ready'}
+            aria-label={view.dice ? `Rolled ${view.dice[0]} and ${view.dice[1]}` : 'Dice ready'}
           >
             <div className="dice-pair">
-              <DieFace value={state.dice?.[0]} />
-              <DieFace value={state.dice?.[1]} />
+              <DieFace value={view.dice?.[0]} />
+              <DieFace value={view.dice?.[1]} />
             </div>
             <span className="dice-total">
-              {state.dice ? `Total ${state.dice[0] + state.dice[1]}` : state.rolling ? 'Rolling' : 'Ready to roll'}
+              {view.dice ? `Total ${view.dice[0] + view.dice[1]}` : view.rolling ? 'Rolling' : 'Ready to roll'}
             </span>
           </div>
 
-          {state.debt && state.debt.playerId !== myPlayerId && !state.gameOver && (
-            <p className="debt-banner" role="status">
-              <RadialDial key={state.debt.endsAt} endsAt={localTime(state.debt.endsAt)} length={state.debt.length} />
-              {players.find((player) => player.id === state.debt.playerId)?.name} is raising{' '}
-              {formatRupees(Math.max(0, state.debt.amount - (state.balances[state.debt.playerId] || 0)))} for{' '}
-              {state.debt.reason}
+          {view.phaseEndsAt && !over && (
+            <p className={`phase-timer ${phaseLeft < 15000 ? 'phase-timer--urgent' : ''}`} aria-live="off">
+              {Math.ceil(phaseLeft / 1000)} s left for this move
             </p>
           )}
 
-          {state.turnPhase === 'actions' && !state.gameOver && (
-            <div className={`action-window ${actionSeconds <= 3 ? 'action-window--urgent' : ''}`} aria-live="polite">
-              <svg className="action-ring" viewBox="0 0 44 44" aria-hidden="true">
-                <circle cx="22" cy="22" r="19" />
-                <circle cx="22" cy="22" r="19" style={{ strokeDashoffset: `${119.4 * (1 - actionShare)}` }} />
-              </svg>
-              <strong>{actionSeconds}</strong>
-              <span>
-                {inActionWindow
-                  ? 'seconds to build houses and hotels before your turn ends'
-                  : `seconds for ${activePlayer.name} to build before the turn ends`}
-              </span>
-            </div>
-          )}
-
-          {inActionWindow ? (
-            <GoldButton onClick={() => act({ type: 'end-turn' })}>End turn</GoldButton>
-          ) : (
+          {isMyTurn && phase === 'pre-roll' && !over ? (
+            <GoldButton loading={view.busy} disabled={view.busy} onClick={() => act({ type: 'roll' })}>
+              Roll the dice
+            </GoldButton>
+          ) : canBuildNow ? (
             <GoldButton
-              loading={isMyTurn && state.busy && !state.gameOver}
-              disabled={!canRoll}
-              onClick={() => act({ type: 'roll' })}
+              onClick={() => {
+                setMode(null);
+                act({ type: 'end-turn' });
+              }}
             >
-              {state.gameOver
-                ? 'Match complete'
-                : !amAlive
-                  ? 'You are bankrupt'
-                  : isMyTurn
-                    ? myDetention
-                      ? 'Roll for doubles'
-                      : rollAgain
-                        ? 'Doubles, roll again'
-                        : 'Roll the dice'
-                    : `Waiting for ${activePlayer.name}`}
+              End turn
+            </GoldButton>
+          ) : (
+            <GoldButton disabled loading={isMyTurn && view.busy}>
+              {over
+                ? 'Game complete'
+                : setupTurn || (isMyTurn && ['robber', 'road-building'].includes(phase))
+                  ? 'Your move on the board'
+                  : iOweDiscard
+                    ? 'Discard your cards'
+                    : isMyTurn && phase === 'steal'
+                      ? 'Choose who to rob'
+                      : phase === 'discard'
+                        ? 'Waiting for discards'
+                        : `Waiting for ${phase === 'setup' ? players[view.setup.order[view.setup.step]]?.name : activePlayer.name}`}
             </GoldButton>
           )}
 
-          {endVote && !state.gameOver && !mustVote && (
+          {stealNote && <p className="private-note">{stealNote}</p>}
+
+          {me && (
+            <section className="hand-panel" aria-label="Your cards">
+              <div className="hand-head">
+                <p className="eyebrow">Your hand</p>
+                <span className="hand-points">
+                  {myPoints} VP{hiddenPoints(view, myPlayerId) ? ` (${hiddenPoints(view, myPlayerId)} hidden)` : ''}
+                </span>
+              </div>
+              <ul className="hand-cards">
+                {RESOURCES.map((resource) => (
+                  <li key={resource} className={`hand-card res-${resource} ${myHand[resource] ? '' : 'hand-card--empty'}`}>
+                    <ResourceIcon resource={resource} size={20} />
+                    <strong>{myHand[resource]}</strong>
+                    <span>{RESOURCE_LABELS[resource]}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {canBuildNow && (
+            <section className="build-panel" aria-label="Build">
+              <p className="eyebrow">Build</p>
+              {[
+                ['road', 'Road', COSTS.road, left.road, legalRoadSpots(view, myPlayerId).length],
+                ['settlement', 'Settlement', COSTS.settlement, left.settlement, legalSettlementSpots(view, myPlayerId).length],
+                ['city', 'City', COSTS.city, left.city, legalCitySpots(view, myPlayerId).length],
+              ].map(([key, label, cost, piecesRemaining, spots]) => {
+                const affordable = hasResources(myHand, cost);
+                const disabled = !affordable || piecesRemaining <= 0 || spots === 0;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`build-option ${mode === key ? 'build-option--active' : ''}`}
+                    disabled={disabled}
+                    aria-pressed={mode === key}
+                    onClick={() => setMode((current) => (current === key ? null : key))}
+                    title={
+                      !affordable ? 'Not enough resources' : piecesRemaining <= 0 ? 'No pieces left' : spots === 0 ? 'Nowhere to build' : ''
+                    }
+                  >
+                    <span>
+                      <strong>{label}</strong>
+                      <em>{piecesRemaining} left</em>
+                    </span>
+                    <CostChips cost={cost} />
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="build-option"
+                disabled={!hasResources(myHand, COSTS.dev) || deckLeft === 0}
+                onClick={() => act({ type: 'buy-dev' })}
+              >
+                <span>
+                  <strong>Development card</strong>
+                  <em>{deckLeft} left</em>
+                </span>
+                <CostChips cost={COSTS.dev} />
+              </button>
+            </section>
+          )}
+
+          {myDev.length > 0 && (
+            <section className="dev-panel" aria-label="Your development cards">
+              <p className="eyebrow">Development cards</p>
+              <ul>
+                {myDev.map((card) => {
+                  const info = DEV_CARDS[card.type];
+                  const fresh = card.boughtTurn === view.turnCount;
+                  const playable = canPlayDev && card.type !== 'victoryPoint' && !fresh && playableDev.includes(card);
+                  return (
+                    <li key={card.id} className={`dev-card dev-card--${info?.kind}`}>
+                      <div>
+                        <strong>{info?.label}</strong>
+                        <span>{info?.text}</span>
+                      </div>
+                      {card.type === 'victoryPoint' ? (
+                        <em>Counts automatically</em>
+                      ) : (
+                        <button type="button" className="text-link" disabled={!playable} onClick={() => playDev(card.type)}>
+                          {fresh ? 'Next turn' : 'Play'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {view.devPlayedThisTurn && isMyTurn && <p className="trade-note">One development card per turn, already played</p>}
+            </section>
+          )}
+
+          {trades.length > 0 && !over && (
+            <section className="trade-pending" aria-label="Trade offers">
+              <p className="eyebrow">Trade offers</p>
+              <ul>
+                {trades.map((trade) => {
+                  const mine = trade.from === myPlayerId;
+                  const answered = trade.responses?.[myPlayerId];
+                  const accepters = Object.entries(trade.responses || {})
+                    .filter(([, yes]) => yes)
+                    .map(([id]) => id);
+                  return (
+                    <li key={trade.id} className="trade-offer">
+                      <p>
+                        <strong>{mine ? 'You' : nameOf(trade.from)}</strong> {mine ? 'offer' : 'offers'}{' '}
+                        <BundleLine bundle={trade.give} /> for <BundleLine bundle={trade.get} />
+                        {trade.to ? ` to ${trade.to === myPlayerId ? 'you' : nameOf(trade.to)}` : ' to everyone'}
+                      </p>
+                      {mine ? (
+                        <div className="trade-offer-actions">
+                          {accepters.map((id) => (
+                            <button key={id} type="button" className="property-action-btn" onClick={() => act({ type: 'trade-complete', tradeId: trade.id, partnerId: id })}>
+                              Trade with {nameOf(id)}
+                            </button>
+                          ))}
+                          {!accepters.length && (
+                            <span className="trade-note">
+                              {Object.values(trade.responses || {}).length ? 'Declined so far' : 'Waiting for answers'}
+                            </span>
+                          )}
+                          <button type="button" className="text-link" onClick={() => act({ type: 'trade-cancel', tradeId: trade.id })}>
+                            Withdraw
+                          </button>
+                        </div>
+                      ) : answered === undefined ? (
+                        <div className="trade-offer-actions">
+                          <button
+                            type="button"
+                            className="property-action-btn"
+                            disabled={!hasResources(myHand, trade.get)}
+                            onClick={() => act({ type: 'trade-respond', tradeId: trade.id, accept: true })}
+                          >
+                            Accept
+                          </button>
+                          <button type="button" className="text-link" onClick={() => act({ type: 'trade-respond', tradeId: trade.id, accept: false })}>
+                            Decline
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="trade-note">{answered ? `You accepted, waiting for ${nameOf(trade.from)}` : 'You declined'}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          {canTrade && (
+            <button type="button" className="view-cards-button trade-button" onClick={openTrade}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 8h14l-4-4M20 16H6l4 4" />
+              </svg>
+              {isMyTurn ? 'Trade' : `Make an offer to ${activePlayer.name}`}
+            </button>
+          )}
+
+          {endVote && !over && !mustVote && (
             <div className={`end-vote-status ${endVote.passed ? 'end-vote-status--passed' : ''}`} aria-live="polite">
               <p className="eyebrow">{endVote.passed ? 'Game ending' : 'Vote to end the game'}</p>
               <p>
                 {endVote.passed
-                  ? 'Everyone agreed, the final standings appear when this turn is over'
-                  : `Waiting for ${waitingOn.map((player) => player.name).join(' and ')} to agree`}
+                  ? 'Everyone agreed, the final standings appear in a moment'
+                  : `Waiting for ${waitingOnVote.map((player) => player.name).join(' and ')} to agree`}
               </p>
               {!endVote.passed && iAmVoter && (
                 <button type="button" className="text-link" onClick={() => act({ type: 'end-vote', agree: false })}>
@@ -2323,58 +1525,20 @@ export default function BoardGame({
             </div>
           )}
 
-          {myDetention && amAlive && !state.gameOver && (
-            <div className="detention-panel">
-              <p>
-                You are in Jail, attempt {detainedFor(myPlayerId) + 1} of {DETENTION_MAX_ATTEMPTS}, roll doubles
-                to walk free or leave now and roll as normal
-              </p>
-              <div className="detention-actions">
-                <button
-                  type="button"
-                  className="property-action-btn"
-                  disabled={!canRoll || state.balances[myPlayerId] < DETENTION_FINE}
-                  onClick={() => act({ type: 'roll', release: 'pay' })}
-                >
-                  Pay {formatRupees(DETENTION_FINE)} fine
-                </button>
-                <button
-                  type="button"
-                  className="property-action-btn"
-                  disabled={!canRoll || !(state.pardons[myPlayerId] > 0)}
-                  onClick={() => act({ type: 'roll', release: 'pardon' })}
-                >
-                  Use a pardon ({state.pardons[myPlayerId] || 0})
-                </button>
-              </div>
-            </div>
-          )}
-
-          {buildable.length > 0 && amAlive && (
-            <div className={`build-prompt ${canDevelopNow ? 'build-prompt--open' : ''}`}>
-              <p className="eyebrow">{canDevelopNow ? 'Ready to build' : 'Build on your turn'}</p>
-              <div className="build-prompt-list">
-                {buildable.map(([family, spaceId]) => (
-                  <button
-                    key={family}
-                    type="button"
-                    className="build-chip"
-                    style={{ '--family': `var(--color-${family})` }}
-                    onClick={() => setSelectedProperty(spaceId)}
-                  >
-                    <span aria-hidden="true" />
-                    {family.charAt(0).toUpperCase() + family.slice(1)} family
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {state.gameOver && !showResults && (
+          {over && !showResults && (
             <button type="button" className="text-link results-reopen" onClick={() => setShowResults(true)}>
               Show final standings <span aria-hidden="true">›</span>
             </button>
           )}
+
+          <div className="dice-info-row">
+            <button type="button" className="dice-info-button" onClick={() => setSheet('costs')}>
+              Building costs
+            </button>
+            <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
+              How the dice work
+            </button>
+          </div>
 
           {session && (
             <section className="player-ids" aria-label="Player IDs">
@@ -2397,71 +1561,12 @@ export default function BoardGame({
                     </li>
                   ))}
               </ul>
-              <p className="player-ids-note">
-                Dropped out? Open Manapally, choose Rejoin and enter the room code with your Player ID
-              </p>
+              <p className="player-ids-note">Dropped out? Open Catan, choose Rejoin and enter the room code with your Player ID</p>
             </section>
           )}
-
-          {(myOffers.length > 0 || offersToMe.length > 0) && (
-            <section className="trade-pending" aria-label="Trade offers">
-              <p className="eyebrow">Trade offers</p>
-              <ul>
-                {offersToMe.map((trade) => (
-                  <li key={trade.id}>
-                    <span>From {nameOf(trade.from)}</span>
-                    <button
-                      type="button"
-                      className="text-link"
-                      onClick={() => setHiddenTrades((list) => list.filter((id) => id !== trade.id))}
-                    >
-                      Review
-                    </button>
-                  </li>
-                ))}
-                {myOffers.map((trade) => (
-                  <li key={trade.id}>
-                    <span>To {nameOf(trade.to)}, waiting</span>
-                    <button type="button" className="text-link" onClick={() => act({ type: 'trade-cancel', tradeId: trade.id })}>
-                      Withdraw
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {canTrade && (
-            <button type="button" className="view-cards-button trade-button" onClick={() => openTrade()}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 8h14l-4-4M20 16H6l4 4" />
-              </svg>
-              Trade
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="view-cards-button"
-            onClick={() => {
-              setCardsFor(myPlayerId || players[0].id);
-              setSheet('cards');
-            }}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 4h11a2 2 0 0 1 2 2v12M4 8h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 12h13" />
-            </svg>
-            View everyone's cards
-          </button>
-
-          <div className="dice-info-row">
-            <p className="dice-transparency-label">Secure roll by Web Crypto</p>
-            <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
-              How the dice work
-            </button>
-          </div>
         </aside>
       </section>
     </main>
   );
 }
+

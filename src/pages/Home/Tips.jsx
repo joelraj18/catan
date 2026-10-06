@@ -1,36 +1,35 @@
 import Icon from '../../components/Icon';
-import { TOTAL_MATCH_TURNS } from '../Game/matchRules';
 
 const tips = [
   {
-    icon: 'train',
-    title: 'Collect the express stations',
-    text: 'Each extra station doubles the rent, and all four together earn ₹2,00,000 from every visitor',
+    icon: 'brick',
+    title: 'Brick and lumber first',
+    text: 'You need both for every road and settlement, so put at least one starting settlement on a good forest or hills hex',
   },
   {
-    icon: 'layers',
-    title: 'Finish a colour family',
-    text: 'Houses and hotels can only be built once you own every district in that family',
+    icon: 'dice',
+    title: 'Count the dots',
+    text: 'The dots under a number show how often it rolls. A settlement touching 6, 8 and 5 out-earns one on 2, 12 and 11 many times over',
   },
   {
-    icon: 'home',
-    title: 'Build evenly',
-    text: 'Houses rise one at a time across a family, so spread them out to unlock the next level',
+    icon: 'anchor',
+    title: 'Do not underestimate harbours',
+    text: 'If your settlements make a lot of one resource, a 2:1 harbour for it turns surplus into whatever you lack',
   },
   {
-    icon: 'coins',
-    title: 'Keep a cash cushion',
-    text: 'Rent can arrive on any roll, a healthy reserve saves you from selling under pressure',
+    icon: 'hex',
+    title: 'Leave room to grow',
+    text: 'Look at your opponents’ roads before placing. The middle of the island is rich but easy to get boxed in',
   },
   {
-    icon: 'rupee',
-    title: 'Mortgage before you sell',
-    text: 'A mortgage returns cash quickly and can be lifted later for its value plus 10 percent',
+    icon: 'city',
+    title: 'Cities win games',
+    text: 'With only 5 settlements you can reach 5 points by building them alone. Cities double production and points',
   },
   {
-    icon: 'chart',
-    title: 'Watch the turn counter',
-    text: `The highest net worth after turn ${TOTAL_MATCH_TURNS} wins, so property counts as much as cash in the final stretch`,
+    icon: 'trade',
+    title: 'Trade often',
+    text: 'The more you trade, the better your chances. Offer deals to the player whose turn it is even when it is not yours',
   },
 ];
 
@@ -40,7 +39,7 @@ export default function Tips() {
       <div className="section-inner">
         <header className="section-head reveal">
           <h2 id="tips-heading">
-            Tips from the table <span>Small moves that win matches</span>
+            Tips from the table <span>Small moves that win games</span>
           </h2>
         </header>
 

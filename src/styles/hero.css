@@ -185,108 +185,6 @@
   animation: shimmer 7s 1.6s var(--ease) infinite;
 }
 
-.preview-board {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.4fr repeat(9, 1fr) 1.4fr;
-  grid-template-rows: 1.4fr repeat(9, 1fr) 1.4fr;
-  gap: clamp(2px, 0.45vw, 4px);
-  aspect-ratio: 1;
-  padding: clamp(6px, 1.2vw, 12px);
-  background: rgba(250, 251, 247, 0.55);
-  border-radius: clamp(16px, 3vw, 30px);
-  box-shadow: inset 0 1px 3px rgba(60, 71, 46, 0.18);
-}
-
-.preview-tile {
-  position: relative;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: var(--surface);
-  border-radius: clamp(3px, 0.6vw, 7px);
-  box-shadow: 0 1px 1px rgba(60, 71, 46, 0.08);
-}
-
-.preview-tile--property::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 26%;
-  background: var(--tile-colour);
-  content: '';
-}
-
-.preview-tile--route {
-  background: #e7ecec;
-}
-
-.preview-tile--utility {
-  background: #eaf0f1;
-}
-
-.preview-tile--chance,
-.preview-tile--community,
-.preview-tile--tax {
-  background: #f1f3ea;
-}
-
-.preview-tile--corner {
-  background: linear-gradient(145deg, #eef1e6, #dde3cf);
-}
-
-.preview-tile--start {
-  background: linear-gradient(145deg, #8f9a72, #6d7b53);
-}
-
-.preview-token {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 82%;
-  place-items: center;
-  animation: float 4s var(--ease) infinite;
-}
-
-.preview-token .piece-mark {
-  width: 100%;
-  height: auto;
-}
-
-.preview-centre {
-  display: grid;
-  grid-column: 2 / 11;
-  grid-row: 2 / 11;
-  align-content: center;
-  justify-items: center;
-  gap: clamp(4px, 1vw, 10px);
-  margin: clamp(10px, 3vw, 30px);
-  color: var(--sage-800);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.75), rgba(232, 236, 223, 0.6));
-  border-radius: clamp(14px, 3vw, 28px);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.8),
-    0 10px 30px rgba(60, 71, 46, 0.1);
-}
-
-.preview-centre .brand-logo-mark {
-  width: clamp(36px, 8vw, 72px);
-  height: auto;
-}
-
-.preview-centre strong {
-  font-size: clamp(1rem, 3.4vw, 2.1rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.preview-centre span {
-  padding: 0 12px;
-  color: var(--ink-tertiary);
-  font-size: clamp(0.62rem, 1.4vw, 0.9rem);
-}
-
 /* Two dice resting in a raised plate, a nod to the camera module */
 
 .hero-dice {
@@ -327,4 +225,14 @@
     transform: none;
     opacity: 1;
   }
+}
+
+/* The island preview sits on the slab without a frame of its own */
+.board-slab--hex {
+  padding: clamp(8px, 1.6vw, 16px);
+}
+
+.board-slab--hex .hex-board {
+  position: relative;
+  border-radius: 18px;
 }

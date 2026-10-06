@@ -1,19 +1,19 @@
 const steps = [
   {
-    title: 'Choose a name and a piece',
-    text: 'Enter a display name in the lobby and pick one of twelve pieces, from the Deepam and the Tiger to the Cricket Bat and the Crown, each with its own seat colour',
+    title: 'Set up the island',
+    text: 'Open a private room, pick a colour and choose the beginners’ map from the rulebook or a random island. Each player starts with 2 settlements and 2 roads',
   },
   {
-    title: 'Open a private room',
-    text: 'Create a room to receive a six character invitation code, then choose a table of 2, 3 or 4 seats',
+    title: 'Roll for resources',
+    text: 'Every turn starts with the dice. Each hex showing the number pays 1 card to every settlement and 2 to every city next to it. Roll a 7 and the robber strikes instead',
   },
   {
-    title: 'Roll and move',
-    text: 'Press Roll the dice and your token walks clockwise, every space you land on has something to say',
+    title: 'Trade',
+    text: 'Swap cards with the player whose turn it is, or trade with the bank at 4:1, 3:1 or 2:1 when you own a harbour',
   },
   {
-    title: 'Buy, trade and build',
-    text: 'Buy open districts, trade with other players to complete a colour family, then build houses and a hotel and collect rent from every visitor',
+    title: 'Build and win',
+    text: 'Spend cards on roads, settlements, cities and development cards. The first player to reach 10 victory points on their turn wins',
   },
 ];
 

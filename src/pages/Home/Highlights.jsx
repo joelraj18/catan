@@ -1,36 +1,33 @@
-import { TOTAL_MATCH_TURNS, START_REWARD } from '../Game/matchRules';
-import { BOARD_SPACES, STARTING_BALANCE } from '../Game/boardData';
+import { NUMBER_BAG, RESOURCES } from '../Game/catanBoard';
+import { BANK_SIZE, WINNING_POINTS } from '../Game/catanRules';
 import FeatureCard from '../../components/FeatureCard';
 import Icon from '../../components/Icon';
 
-const toLakh = (amount) => `₹${amount / 100000}L`;
-
 const stats = [
-  { value: '2 to 4', label: 'Players at one table' },
-  { value: String(BOARD_SPACES.length), label: 'Spaces around the board' },
-  { value: String(TOTAL_MATCH_TURNS), label: 'Turns in every match' },
-  { value: toLakh(STARTING_BALANCE), label: 'Starting purse for each player' },
-  { value: toLakh(START_REWARD), label: 'Collected for passing Go' },
+  { value: '3 to 4', label: 'Players at one table' },
+  { value: '19', label: 'Terrain hexes on the island' },
+  { value: String(NUMBER_BAG.length), label: 'Number tokens, 2 to 12' },
+  { value: String(RESOURCES.length * BANK_SIZE), label: 'Resource cards in the bank' },
+  { value: String(WINNING_POINTS), label: 'Victory points to win' },
 ];
 
 const features = [
   {
-    icon: <Icon name="crown" size={28} />,
-    title: 'Build a legacy',
+    icon: <Icon name="hex" size={28} />,
+    title: 'Settle the island',
     description:
-      'Acquire storied districts, complete colour families and raise houses and a hotel on the streets you rule',
+      'Found settlements where the terrain is rich, connect them with roads and upgrade them into cities that produce twice as much',
   },
   {
-    icon: <Icon name="users" size={28} />,
-    title: 'Read the table',
+    icon: <Icon name="trade" size={28} />,
+    title: 'Trade to win',
     description:
-      'Every roll changes the board, so time your purchases, guard your cash and turn each decision into prestige',
+      'Nobody makes everything they need, so bargain with the table or ship your surplus through a harbour at a better rate',
   },
   {
     icon: <Icon name="globe" size={28} />,
     title: 'Play anywhere',
-    description:
-      'No downloads and no sign up, open a private room in your browser on a laptop, tablet or phone',
+    description: 'No downloads and no sign up, open a private room in your browser on a laptop, tablet or phone',
   },
 ];
 
@@ -40,7 +37,7 @@ export default function Highlights() {
       <div className="section-inner">
         <header className="section-head reveal">
           <h2 id="overview-heading">
-            Get to know Manapally <span>A royal table, set for strategy</span>
+            Get to know Catan <span>An island, set for strategy</span>
           </h2>
         </header>
 

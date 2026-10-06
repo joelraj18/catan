@@ -1,78 +1,41 @@
-/* Shared pieces used across the landing page, rooms and the board */
-
-/* District colour families, used by the board and the landing page */
+/* Resource colours, used by the board, cards and the landing page */
 
 :root {
-  --color-maroon: #a3195b;
-  --color-peacock: #1fa2e0;
-  --color-rose: #ff3d8b;
-  --color-saffron: #ff8a00;
-  --color-kumkum: #e53935;
-  --color-turmeric: #ffc400;
-  --color-emerald: #14b86a;
-  --color-indigo: #3d5afe;
+  --res-brick: #b5532f;
+  --res-lumber: #2f7a3b;
+  --res-ore: #7d8590;
+  --res-grain: #e0b12f;
+  --res-wool: #8cc152;
+  --terrain-hills: #c4693f;
+  --terrain-forest: #3f7d43;
+  --terrain-mountains: #8e959e;
+  --terrain-fields: #e6be4a;
+  --terrain-pasture: #9fcf6a;
+  --terrain-desert: #e3cf9d;
+  --sea: #4a9cc9;
+  --sea-deep: #2f7fae;
 }
 
 /* Seat colours tint every piece through currentColor, matching PIECES */
 
-.seat-lamp {
-  --seat: #1e9e5a;
-  color: #1e9e5a;
+.seat-red {
+  --seat: #c8372d;
+  color: #c8372d;
 }
 
-.seat-temple {
-  --seat: #d63031;
-  color: #d63031;
-}
-
-.seat-elephant {
-  --seat: #f0700c;
-  color: #f0700c;
-}
-
-.seat-bell {
+.seat-blue {
   --seat: #2f5bea;
   color: #2f5bea;
 }
 
-.seat-tiger {
-  --seat: #f2b705;
-  color: #f2b705;
+.seat-white {
+  --seat: #8f8a7d;
+  color: #8f8a7d;
 }
 
-.seat-coconut {
-  --seat: #8b5a2b;
-  color: #8b5a2b;
-}
-
-.seat-gun {
-  --seat: #1c1c1e;
-  color: #1c1c1e;
-}
-
-.seat-dumbbell {
-  --seat: #7f8c99;
-  color: #7f8c99;
-}
-
-.seat-bat {
-  --seat: #0aa5c2;
-  color: #0aa5c2;
-}
-
-.seat-auto {
-  --seat: #8cc152;
-  color: #8cc152;
-}
-
-.seat-clapper {
-  --seat: #d6338a;
-  color: #d6338a;
-}
-
-.seat-crown {
-  --seat: #7b4dff;
-  color: #7b4dff;
+.seat-orange {
+  --seat: #e07a1f;
+  color: #e07a1f;
 }
 
 
@@ -242,72 +205,6 @@
   stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-/* Animated balance with floating change */
-
-.animated-balance {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  font-variant-numeric: tabular-nums;
-  transition: color 0.4s var(--ease);
-}
-
-.animated-balance--up {
-  color: var(--success) !important;
-}
-
-.animated-balance--down {
-  color: var(--danger) !important;
-}
-
-.balance-float {
-  position: absolute;
-  top: -2px;
-  left: calc(100% + 8px);
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.78rem;
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
-  animation: balanceFloat 1.9s var(--ease-out) forwards;
-}
-
-.balance-float--gain {
-  color: #1f6b43;
-  background: #dcf1e4;
-}
-
-.balance-float--loss {
-  color: #a3271f;
-  background: #fbe0de;
-}
-
-@keyframes balanceFloat {
-  0% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.9);
-  }
-
-  15% {
-    opacity: 1;
-    transform: translateY(0) scale(1.05);
-  }
-
-  25% {
-    transform: translateY(0) scale(1);
-  }
-
-  75% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-22px);
-  }
 }
 
 /* API key information sheet */
@@ -484,12 +381,6 @@
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
-.sound-mixer--left .sound-mixer-panel {
-  right: auto;
-  left: -8px;
-  transform-origin: top left;
-}
-
 .sound-mixer--open .sound-mixer-panel {
   opacity: 1;
   pointer-events: auto;
@@ -623,8 +514,7 @@
 /* On phones the pop-up spans the screen just under the top bar instead of
    hanging off the button, so it can never run off the edge */
 @media (max-width: 620px) {
-  .sound-mixer-panel,
-  .sound-mixer--left .sound-mixer-panel {
+  .sound-mixer-panel {
     position: fixed;
     top: 58px;
     right: 12px;
