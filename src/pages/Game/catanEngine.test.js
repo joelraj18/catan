@@ -433,11 +433,52 @@ describe('trading', () => {
     expect(engine.state.hands[me].grain).toBe(grain - rate);
     expect(engine.state.hands[me].ore).toBe(ore + 1);
     engine.state = { ...engine.state, hands: { ...engine.state.hands, [me]: hand({ wool: 3 }) }, bank: { ...engine.state.bank, wool: engine.state.bank.wool + engine.state.hands[me].wool - 3 } };
-    if (maritimeRates(engine.state, me).wool === 4) expect(engine.maritime(me, 'wool', 'ore')).toBe(false);
+    // Three wool buys nothing at 4:1, and does at a 3:1 or wool harbour.
+    expect(engine.maritime(me, 'wool', 'ore')).toBe(maritimeRates(engine.state, me).wool <= 3);
   });
 });
 
 describe('audit regressions', () => {
+  test('every change within one move reaches the table as a single update', async () => {
+    const seen = [];
+    const engine = track(engineWith());
+    engine.onChange = (state) => seen.push(state);
+    const me = active(engine);
+    await rollTo(engine, [1, 1]);
+    await Promise.resolve();
+    seen.length = 0;
+    give(engine, me, { brick: 1, lumber: 1 });
+    expect(engine.placeRoad(me, legalRoadSpots(engine.state, me)[0])).toBe(true);
+    await Promise.resolve();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(engine.state);
+  });
+
+  test('a malformed card choice is refused without throwing', async () => {
+    const engine = track(engineWith());
+    const me = active(engine);
+    engine.state = { ...engine.state, devCards: { ...engine.state.devCards, [me]: [{ id: 1, type: 'yearOfPlenty', boughtTurn: -1 }, { id: 2, type: 'monopoly', boughtTurn: -1 }] } };
+    expect(engine.playDev(me, 'yearOfPlenty', { resources: 'ab' })).toBe(false);
+    expect(engine.playDev(me, 'yearOfPlenty', { resources: {} })).toBe(false);
+    expect(engine.playDev(me, 'monopoly', null)).toBe(false);
+    expect(engine.state.devPlayedThisTurn).toBe(false);
+  });
+
+  test('a forced move held back by a computer move is dropped once the phase moves on', async () => {
+    const engine = track(engineWith());
+    const me = active(engine);
+    await rollTo(engine, [1, 1]);
+    const key = engine.phaseKey();
+    const moved = [];
+    engine.autoMove = async (id) => moved.push(id);
+    engine.stepping = true;
+    engine.forceMoves([me], key);
+    engine.stepping = false;
+    expect(engine.endTurn(me)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(moved).toEqual([]);
+  });
+
   test('an offer is withdrawn as soon as its maker can no longer pay', async () => {
     const engine = track(engineWith());
     const [me, x] = [0, 1].map((i) => engine.state.players[(engine.state.activeIndex + i) % 3].id);

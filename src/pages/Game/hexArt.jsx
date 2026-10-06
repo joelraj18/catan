@@ -9,6 +9,21 @@ import './hex-board.css';
 
 export const UNIT = 60; // pixels per hex radius in the SVG's own units
 
+// Enter or Space on a board target; Space would otherwise scroll the page.
+const onPress = (fn) => (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  fn();
+};
+
+// Where a spot is, for screen readers: the land hexes it touches.
+const placeOf = (board, hexIds) =>
+  hexIds
+    .map((id) => board.hexes[id])
+    .filter(Boolean)
+    .map((tile) => `${TERRAINS[tile.terrain].label.toLowerCase()}${tile.number ? ` ${tile.number}` : ''}`)
+    .join(', ') || 'the coast';
+
 const px = (value) => Math.round(value * UNIT * 10) / 10;
 
 const hexPoints = (hex, inset = 0) =>
@@ -280,7 +295,7 @@ function HexBoard({
             role={target ? 'button' : undefined}
             tabIndex={target ? 0 : undefined}
             aria-label={target ? `Move the robber to ${TERRAINS[tile.terrain].label} ${tile.number || ''}` : undefined}
-            onKeyDown={target && onHex ? (event) => (event.key === 'Enter' || event.key === ' ') && onHex(tile.id) : undefined}
+            onKeyDown={target && onHex ? onPress(() => onHex(tile.id)) : undefined}
           >
             <polygon points={hexPoints(hex, 0.03)} fill={`url(#t-${tile.terrain}-${uid})`} className="hex-tile-face" />
             <g transform={`translate(${px(hex.x)} ${px(hex.y)})`}>
@@ -324,8 +339,8 @@ function HexBoard({
             onClick={onEdge ? () => onEdge(edgeId) : undefined}
             role="button"
             tabIndex={0}
-            aria-label="Build a road here"
-            onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && onEdge?.(edgeId)}
+            aria-label={`Build a road by ${placeOf(board, GEOMETRY.edges[edgeId].hexes)}`}
+            onKeyDown={onPress(() => onEdge?.(edgeId))}
           />
         );
       })}
@@ -349,8 +364,8 @@ function HexBoard({
             onClick={upgradable && onVertex ? () => onVertex(Number(vertexId)) : undefined}
             role={upgradable ? 'button' : undefined}
             tabIndex={upgradable ? 0 : undefined}
-            aria-label={upgradable ? 'Upgrade to a city' : undefined}
-            onKeyDown={upgradable && onVertex ? (event) => (event.key === 'Enter' || event.key === ' ') && onVertex(Number(vertexId)) : undefined}
+            aria-label={upgradable ? `Upgrade to a city by ${placeOf(board, v.hexes)}` : undefined}
+            onKeyDown={upgradable && onVertex ? onPress(() => onVertex(Number(vertexId))) : undefined}
           >
             <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
             <path d={city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
@@ -371,8 +386,8 @@ function HexBoard({
             onClick={onVertex ? () => onVertex(vertexId) : undefined}
             role="button"
             tabIndex={0}
-            aria-label="Build a settlement here"
-            onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && onVertex?.(vertexId)}
+            aria-label={`Build a settlement by ${placeOf(board, v.hexes)}`}
+            onKeyDown={onPress(() => onVertex?.(vertexId))}
           />
         );
       })}

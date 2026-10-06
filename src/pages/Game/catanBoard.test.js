@@ -98,7 +98,8 @@ describe("beginners' map (rulebook illustration A)", () => {
     const spots = Object.values(BEGINNER_SETTLEMENTS).flatMap((entry) => [entry.first, entry.star]);
     expect(spots.every((id) => Number.isInteger(id))).toBe(true);
     expect(new Set(spots).size).toBe(8);
-    spots.forEach((a) => spots.forEach((b) => a !== b && expect(GEOMETRY.vertices[a].neighbours).not.toContain(b)));
+    const touching = spots.flatMap((a) => spots.filter((b) => GEOMETRY.vertices[a].neighbours.includes(b)));
+    expect(touching).toEqual([]);
   });
 });
 
