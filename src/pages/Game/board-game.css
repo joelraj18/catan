@@ -2724,3 +2724,142 @@
   }
 
 }
+
+/* The move clock */
+
+.turn-clock {
+  display: grid;
+  grid-template-columns: 44px auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-content: center;
+  column-gap: 10px;
+  margin: -2px 0 12px;
+  color: var(--ink-secondary);
+}
+
+.turn-clock svg {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  width: 44px;
+  height: 44px;
+  transform: rotate(-90deg);
+}
+
+.turn-clock-track,
+.turn-clock-fill {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.turn-clock-track {
+  stroke: var(--hairline);
+}
+
+.turn-clock-fill {
+  stroke: var(--accent);
+  stroke-dasharray: 100;
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 0.25s linear,
+    stroke 0.3s var(--ease);
+}
+
+.turn-clock strong {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  justify-self: center;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-clock span {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  font-size: 0.8rem;
+}
+
+.turn-clock--urgent .turn-clock-fill {
+  stroke: var(--danger);
+}
+
+.turn-clock--urgent.turn-clock--mine strong {
+  color: var(--danger);
+  animation: clockPulse 1s var(--ease) infinite;
+}
+
+@keyframes clockPulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+/* The same clock as a thin line along the bottom of the seat it waits on */
+.seat-clock {
+  position: absolute;
+  right: 14px;
+  bottom: 4px;
+  left: 16px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 3px;
+  opacity: 0.55;
+  transform: scaleX(var(--clock-from, 1));
+  transform-origin: left center;
+  animation: seatClock var(--clock-ms, 0ms) linear forwards;
+  pointer-events: none;
+}
+
+@keyframes seatClock {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.seat-card .seat-clock {
+  color: var(--seat, var(--accent));
+}
+
+/* The table's rules, and the island fingerprint */
+
+.table-rules-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.table-rules-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+}
+
+.table-rules-list span {
+  color: var(--ink-tertiary);
+}
+
+.table-rules-list strong {
+  font-weight: 600;
+  text-align: right;
+}
+
+.island-code {
+  display: inline-block;
+  padding: 4px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  background: var(--sage-50);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--sage-200);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-clock--urgent.turn-clock--mine strong,
+  .seat-clock {
+    animation: none;
+  }
+}

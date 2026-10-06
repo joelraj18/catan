@@ -80,6 +80,11 @@ const EFFECTS = {
     noise(ctx, out, { length: 0.08, gain: 0.25, filter: 4000 });
     tone(ctx, out, { freq: 880, start: 0.05, length: 0.14, gain: 0.12, slide: 1320 });
   },
+  // A quiet clock tick for the last seconds of a move.
+  tick: (ctx, out) => {
+    tone(ctx, out, { freq: 1320, length: 0.045, gain: 0.07 });
+    noise(ctx, out, { length: 0.02, gain: 0.05, filter: 5200 });
+  },
   // A soft chime when the turn passes on.
   turn: (ctx, out) => {
     tone(ctx, out, { freq: 523, length: 0.25, gain: 0.1 });

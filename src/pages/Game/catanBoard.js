@@ -9,6 +9,9 @@
 //   vertices  0..53, top to bottom, left to right (the intersections)
 //   edges     0..71 (the paths), each joining two vertices
 
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
+
 export const RESOURCES = ['brick', 'lumber', 'ore', 'grain', 'wool'];
 
 export const TERRAINS = {
@@ -226,18 +229,28 @@ export const shuffle = (items, pickIndex) => {
   return list;
 };
 
-const isHot = (number) => number === 6 || number === 8;
+const RED = [6, 8];
+const EXTREMES = [2, 12];
 
-// True when no two red numbers (6 and 8) sit on neighbouring hexes.
-export const redNumbersApart = (hexes) =>
+// True when no two numbers of the group sit on neighbouring hexes.
+export const numbersApart = (hexes, group) =>
   hexes.every(
     (hex) =>
-      !isHot(hex.number) || GEOMETRY.hexes[hex.id].neighbours.every((other) => !isHot(hexes[other].number)),
+      !group.includes(hex.number) ||
+      GEOMETRY.hexes[hex.id].neighbours.every((other) => !group.includes(hexes[other].number)),
   );
 
-// The variable set-up: shuffled terrain, shuffled number tokens with no red
-// numbers side by side, desert without a token, shuffled harbours.
-export const randomBoard = (pickIndex) => {
+// True when no two red numbers (6 and 8) sit on neighbouring hexes.
+export const redNumbersApart = (hexes) => numbersApart(hexes, RED);
+
+// Whether a layout follows the host's number rules: by default the red 6s
+// and 8s never touch, and the host may also keep 2 and 12 apart.
+export const numbersOk = (hexes, { redsMayTouch = false, extremesMayTouch = true } = {}) =>
+  (redsMayTouch || numbersApart(hexes, RED)) && (extremesMayTouch || numbersApart(hexes, EXTREMES));
+
+// The variable set-up: shuffled terrain, shuffled number tokens placed by
+// the host's number rules, desert without a token, shuffled harbours.
+export const randomBoard = (pickIndex, rules = {}) => {
   const terrains = shuffle(TERRAIN_BAG, pickIndex);
 
   for (let attempt = 0; attempt < 5000; attempt += 1) {
@@ -249,10 +262,21 @@ export const randomBoard = (pickIndex) => {
       number: terrain === 'desert' ? null : numbers[next++],
     }));
 
-    if (redNumbersApart(hexes)) {
+    if (numbersOk(hexes, rules)) {
       return buildBoard(hexes, shuffle(HARBOR_BAG, pickIndex));
     }
   }
 
   return beginnerBoard();
+};
+
+// A short, stable name for one island layout: the SHA-256 of its terrain,
+// numbers and harbours. Two boards share it only if they are the same board.
+export const boardFingerprint = (board) => {
+  const text = [
+    board.hexes.map((hex) => `${hex.terrain}${hex.number ?? 0}`).join(','),
+    board.harbors.map((harbor) => harbor.type).join(','),
+  ].join('|');
+  const hex = bytesToHex(sha256(utf8ToBytes(text))).toUpperCase();
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}`;
 };

@@ -7,6 +7,7 @@
 
 import { openGuestTransport, openHostTransport } from './roomTransport';
 import { PIECE_ORDER } from '../pages/Game/pieces.jsx';
+import { DEFAULT_SETTINGS, cleanSettings } from '../pages/Game/gameSettings';
 
 const CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_CHAT = 120;
@@ -75,7 +76,7 @@ export default class RoomSession {
     this.status = 'connecting'; // 'online' | 'offline' | 'connecting' | 'closed'
     this.transport = null;
     this.myClientId = role === 'host' ? 'host' : null;
-    this.lobby = { tableSize: MIN_PLAYERS, seats: [], board: 'beginner' };
+    this.lobby = { tableSize: MIN_PLAYERS, seats: [], board: 'beginner', settings: { ...DEFAULT_SETTINGS } };
     this.chat = [];
     this.started = false;
     this.players = null;
@@ -456,6 +457,18 @@ export default class RoomSession {
     }
 
     this.lobby.board = board === 'random' ? 'random' : 'beginner';
+    this.lobby.settings = cleanSettings({ ...this.lobby.settings, board: this.lobby.board });
+    this.publishLobby();
+  }
+
+  // The host's table rules: turn timer, discard limit, points to win and
+  // how the number tokens may sit.
+  setSettings(patch) {
+    if (!this.isHost || this.started) {
+      return;
+    }
+
+    this.lobby.settings = cleanSettings({ ...this.lobby.settings, ...patch, board: this.lobby.board });
     this.publishLobby();
   }
 
@@ -541,7 +554,7 @@ export default class RoomSession {
       myPlayerId: 'p1',
       gameId: this.gameId,
       resume,
-      options: { board: this.lobby.board || 'beginner' },
+      options: cleanSettings({ ...this.lobby.settings, board: this.lobby.board || 'beginner' }),
     });
     this.startBeat();
   }

@@ -204,9 +204,9 @@ export const settleProduction = (owed, bank) => {
   return { paid, shortages };
 };
 
-export const discardCount = (hand) => {
+export const discardCount = (hand, limit = HAND_LIMIT) => {
   const size = handSize(hand);
-  return size > HAND_LIMIT ? Math.floor(size / 2) : 0;
+  return size > limit ? Math.floor(size / 2) : 0;
 };
 
 // Players with a settlement or city on the hex who have cards to steal.

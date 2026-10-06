@@ -4,6 +4,7 @@
 // hand size and public points).
 
 import { GEOMETRY, PIPS, RESOURCES, TERRAINS } from './catanBoard';
+import { handLimitOf, victoryPointsOf } from './gameSettings';
 import {
   COSTS,
   canBuildCity,
@@ -309,7 +310,7 @@ export const wantsKnightBeforeRoll = (state, playerId) =>
 
 // Keeps the cards the next build needs, throws away surplus first.
 export const chooseDiscard = (state, playerId) => {
-  const count = discardCount(handOf(state, playerId));
+  const count = state.pendingDiscards?.[playerId] ?? discardCount(handOf(state, playerId), handLimitOf(state));
   const hand = { ...handOf(state, playerId) };
   const goal = chooseGoal(state, playerId);
   const keep = goal ? goal.cost : {};
@@ -335,7 +336,7 @@ export const tradeValue = (state, playerId, trade) => {
   const hand = handOf(state, playerId);
 
   if (!hasResources(hand, paying)) return { blocked: true, margin: -Infinity };
-  if (partner && publicPoints(state, partner) >= 8) return { blocked: true, margin: -Infinity };
+  if (partner && publicPoints(state, partner) >= victoryPointsOf(state) - 2) return { blocked: true, margin: -Infinity };
 
   const goal = chooseGoal(state, playerId);
   const need = goal ? missingFor(hand, goal.cost) : {};

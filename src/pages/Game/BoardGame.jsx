@@ -12,7 +12,6 @@ import GameEngine, { AI_CALL_BUDGET, DEFAULT_TIMING, createInitialState } from '
 import {
   COSTS,
   DEV_CARDS,
-  WINNING_POINTS,
   bundleSize,
   hasResources,
   hiddenPoints,
@@ -27,6 +26,7 @@ import {
   visibleHandSize,
 } from './catanRules';
 import GameToasts from './GameToasts.jsx';
+import { settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
 import {
   ArmyIcon,
@@ -119,6 +119,36 @@ function useCountdown(endsAt) {
 function Countdown({ endsAt, render }) {
   const left = useCountdown(endsAt);
   return render(Math.ceil(left / 1000), left);
+}
+
+// The move clock: a ring that empties as the seconds run out, with a soft
+// tick in the last five seconds when it is this player's own clock.
+function TurnClock({ endsAt, length, label, mine, sound }) {
+  const left = useCountdown(endsAt);
+  const seconds = Math.ceil(left / 1000);
+  const lastTick = useRef(null);
+
+  useEffect(() => {
+    if (!mine || !sound || seconds > 5 || seconds <= 0 || lastTick.current === seconds) return;
+    lastTick.current = seconds;
+    sound();
+  }, [mine, sound, seconds]);
+
+  const fraction = length ? Math.min(1, Math.max(0, left / length)) : 0;
+  return (
+    <div
+      className={`turn-clock ${seconds <= 5 ? 'turn-clock--urgent' : ''} ${mine ? 'turn-clock--mine' : ''}`}
+      role="timer"
+      aria-label={`${seconds} seconds ${label}`}
+    >
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <circle className="turn-clock-track" cx="20" cy="20" r="17" />
+        <circle className="turn-clock-fill" cx="20" cy="20" r="17" pathLength="100" style={{ strokeDashoffset: 100 - fraction * 100 }} />
+      </svg>
+      <strong>{seconds}</strong>
+      <span>{label}</span>
+    </div>
+  );
 }
 
 // The coloured role tag on a player's card.
@@ -286,12 +316,13 @@ export default function BoardGame({
   onExit,
   onRestart,
   resume = null,
-  boardMode = 'beginner',
+  settings = null,
 }) {
   const isHost = !session || session.isHost;
+  const tableOptions = settings || { board: 'beginner' };
   const [state, setState] = useState(() => {
     const cached = !isHost && session?.lastGame;
-    return cached ? cached.state : resume || createInitialState(seatPlayers, { board: boardMode });
+    return cached ? cached.state : resume || createInitialState(seatPlayers, { options: tableOptions });
   });
   const [connection, setConnection] = useState('online');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -318,7 +349,7 @@ export default function BoardGame({
       advisor: premiumAdvisor,
       timing: testTiming(),
       initialState: resume,
-      options: { board: boardMode },
+      options: tableOptions,
       onChange: (next) => {
         setState(next);
         session?.broadcastGame(next, redactFor);
@@ -433,6 +464,10 @@ export default function BoardGame({
   // -------------------------------------------------------------- sound
 
   const effectsOn = audioSettings.effectsOn && audioSettings.effectsVolume > 0;
+  const tickSound = useMemo(
+    () => (effectsOn ? () => playSfx('tick', audioSettings.effectsVolume) : null),
+    [effectsOn, audioSettings.effectsVolume],
+  );
   const winnerRef = useRef(null);
 
   if (!winnerRef.current && typeof Audio !== 'undefined') {
@@ -522,6 +557,8 @@ export default function BoardGame({
   );
   const canPlayDev = isMyTurn && !view.busy && !over && !view.devPlayedThisTurn && (phase === 'pre-roll' || phase === 'actions');
   const myPoints = me ? publicPoints(view, myPlayerId) + hiddenPoints(view, myPlayerId) : 0;
+  const rules = settingsOf(view);
+  const goal = rules.victoryPoints;
 
   // Placement mode is cleared whenever the phase moves on.
   useEffect(() => {
@@ -574,6 +611,17 @@ export default function BoardGame({
 
   const localTime = (at) => (at ? at + (isHost ? 0 : clockOffset) : 0);
   const phaseEndsAt = localTime(view.phaseEndsAt);
+  const clockIsMine = Boolean(setupTurn || iOweDiscard || (isMyTurn && phase !== 'discard'));
+  const clockLabel =
+    phase === 'pre-roll'
+      ? 'to roll'
+      : phase === 'setup'
+        ? 'to place'
+        : phase === 'discard'
+          ? 'to discard'
+          : phase === 'robber' || phase === 'steal'
+            ? 'for the robber'
+            : 'for this move';
   const log = view.log || [];
   const myCode = me?.code;
   const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
@@ -668,7 +716,7 @@ export default function BoardGame({
           </header>
           <div className="property-card-body">
             <p className="end-sheet-text">
-              You hold more than 7 resource cards, so half of them (rounded down) go back to the bank
+              You hold more than {rules.handLimit} resource cards, so half of them (rounded down) go back to the bank
             </p>
             <BundlePicker value={discardDraft} onChange={setDiscardDraft} limits={myHand} label="Cards to discard" />
             <div className="purchase-offer-actions">
@@ -978,7 +1026,7 @@ export default function BoardGame({
               </svg>
             </span>
             <p className="property-card-kicker">
-              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${WINNING_POINTS} or more points`}
+              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${goal} or more points`}
             </p>
             <h3 id="results-title">{headline}</h3>
             <p className="results-sub">Every point counts, hidden victory point cards are now revealed</p>
@@ -1043,7 +1091,7 @@ export default function BoardGame({
         <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="info-title">
           <header className="property-card-header">
             <p className="property-card-kicker">{sheet === 'dice' ? 'Fair play' : 'Reference'}</p>
-            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'How the dice work'}</h3>
+            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'Dice and island'}</h3>
             <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
             </button>
@@ -1055,7 +1103,7 @@ export default function BoardGame({
                   <h4>1. Roll for resources</h4>
                   <p>
                     Every hex with the rolled number pays each settlement next to it 1 card and each city 2 cards, unless the
-                    robber sits on it. A 7 pays nothing: anyone with more than 7 cards discards half, then you move the robber
+                    robber sits on it. A 7 pays nothing: anyone with more than {rules.handLimit} cards discards half, then you move the robber
                     and steal a card.
                   </p>
                 </div>
@@ -1077,9 +1125,41 @@ export default function BoardGame({
                 <div className="property-card-section">
                   <h4>Winning</h4>
                   <p>
-                    The first player with {WINNING_POINTS} victory points on their own turn wins. Settlement 1, city 2, Longest
+                    The first player with {goal} victory points on their own turn wins. Settlement 1, city 2, Longest
                     Road (5+ roads) 2, Largest Army (3+ knights) 2, victory point card 1.
                   </p>
+                </div>
+                <div className="property-card-section">
+                  <h4>This table</h4>
+                  <ul className="table-rules-list">
+                    <li>
+                      <span>Turn timer</span>
+                      <strong>
+                        {rules.turnSeconds
+                          ? `${timerLabel(rules.turnSeconds)} to roll, then ${timerLabel(rules.turnSeconds)} per move`
+                          : 'Off'}
+                      </strong>
+                    </li>
+                    <li>
+                      <span>Discard on a 7</span>
+                      <strong>More than {rules.handLimit} cards</strong>
+                    </li>
+                    <li>
+                      <span>Victory</span>
+                      <strong>{goal} points</strong>
+                    </li>
+                    {rules.board === 'random' && (
+                      <li>
+                        <span>Number tokens</span>
+                        <strong>
+                          {[
+                            rules.redsMayTouch ? '6 and 8 may touch' : '6 and 8 kept apart',
+                            rules.extremesMayTouch ? '2 and 12 may touch' : '2 and 12 kept apart',
+                          ].join(' · ')}
+                        </strong>
+                      </li>
+                    )}
+                  </ul>
                 </div>
               </>
             )}
@@ -1101,6 +1181,19 @@ export default function BoardGame({
                   Dice are rolled on the host with the cryptographically secure generator built into the browser, so every
                   roll is fair and unpredictable
                 </p>
+                {view.boardId && (
+                  <div className="property-card-section island-id">
+                    <h4>This island</h4>
+                    <p>
+                      <code className="island-code">Island {view.boardId}</code>
+                    </p>
+                    <p>
+                      {rules.board === 'random'
+                        ? 'Terrain, numbers and harbours were shuffled for this game with the same secure generator. The code is a SHA-256 fingerprint of the layout: a different island always gets a different code, so you can compare it with the islands of earlier games'
+                        : 'The beginners\u2019 map from the rulebook is always the same island, so it always has this code. Choose Random island before the game for a freshly shuffled one'}
+                    </p>
+                  </div>
+                )}
                 <div className="property-card-section">
                   <h4>Perfectly fair with rejection sampling</h4>
                   <p>
@@ -1151,7 +1244,7 @@ export default function BoardGame({
             </>
           ) : null}
           <span>First to</span>
-          <strong>{WINNING_POINTS}</strong>
+          <strong>{goal}</strong>
           <span className="round-goal-long">victory points wins</span>
           <span className="round-goal-short">VP wins</span>
           <button
@@ -1216,7 +1309,7 @@ export default function BoardGame({
             <div className="player-panel-head">
               <p className="eyebrow">The table</p>
               <span className="player-panel-goal">
-                <SunIcon size={14} /> {WINNING_POINTS} to win
+                <SunIcon size={14} /> {goal} to win
               </span>
             </div>
 
@@ -1253,8 +1346,8 @@ export default function BoardGame({
 
                       <span
                         className="vp-medal"
-                        style={{ '--vp': Math.min(1, points / WINNING_POINTS) }}
-                        title={`${points} of ${WINNING_POINTS} victory points${hidden ? `, ${hidden} hidden from the others` : ''}`}
+                        style={{ '--vp': Math.min(1, points / goal) }}
+                        title={`${points} of ${goal} victory points${hidden ? `, ${hidden} hidden from the others` : ''}`}
                       >
                         <svg viewBox="0 0 40 40" aria-hidden="true">
                           <circle className="vp-medal-track" cx="20" cy="20" r="17" />
@@ -1301,6 +1394,18 @@ export default function BoardGame({
                         </span>
                       )}
                     </div>
+
+                    {(active || placing) && phase !== 'discard' && view.phaseEndsAt && view.phaseLength && (
+                      <span
+                        key={view.phaseEndsAt}
+                        className="seat-clock"
+                        aria-hidden="true"
+                        style={{
+                          '--clock-from': Math.min(1, Math.max(0, (phaseEndsAt - Date.now()) / view.phaseLength)),
+                          '--clock-ms': `${Math.max(0, phaseEndsAt - Date.now())}ms`,
+                        }}
+                      />
+                    )}
 
                     {player.kind === 'ai' && view.aiUsage?.[player.id] && (
                       <p className="ai-usage" title="Claude calls and tokens this game">
@@ -1471,13 +1576,12 @@ export default function BoardGame({
           </div>
 
           {view.phaseEndsAt && !over && (
-            <Countdown
+            <TurnClock
               endsAt={phaseEndsAt}
-              render={(seconds, left) => (
-                <p className={`phase-timer ${left < 15000 ? 'phase-timer--urgent' : ''}`} aria-live="off">
-                  {seconds} s left for this move
-                </p>
-              )}
+              length={view.phaseLength}
+              label={clockLabel}
+              mine={clockIsMine}
+              sound={tickSound}
             />
           )}
 
@@ -1711,7 +1815,7 @@ export default function BoardGame({
               Building costs
             </button>
             <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
-              How the dice work
+              Fair play{view.boardId ? ` · Island ${view.boardId.slice(0, 4)}` : ''}
             </button>
             {/* Phones hide the top bar's goal pill, so the turn guide lives here too */}
             <button type="button" className="dice-info-button dice-info-button--rules" onClick={() => setSheet('rules')}>

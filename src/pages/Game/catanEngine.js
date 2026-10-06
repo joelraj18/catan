@@ -15,14 +15,15 @@ import {
   RESOURCES,
   RESOURCE_LABELS,
   beginnerBoard,
+  boardFingerprint,
   randomBoard,
   shuffle,
 } from './catanBoard';
+import { cleanSettings, handLimitOf, settingsOf, victoryPointsOf } from './gameSettings';
 import {
   COSTS,
   DEV_CARDS,
   DEV_DECK,
-  WINNING_POINTS,
   addResources,
   canBuildCity,
   canPlaceRoad,
@@ -176,11 +177,18 @@ export const beginnerPieces = (players, board, hands = byId(players, emptyHand),
   return { buildings, roads, hands: nextHands, bank: nextBank };
 };
 
-export const createInitialState = (players, { board = 'beginner', pickIndex = secureIndex } = {}) => {
-  const mode = board === 'random' ? 'random' : 'beginner';
+// The host's table rules. Without a turn timer named, a game has none, as
+// games did before the timer existed.
+export const tableRules = (options = {}) => cleanSettings({ ...options, turnSeconds: options.turnSeconds ?? 0 });
+
+export const createInitialState = (players, { options = {}, board, pickIndex = secureIndex } = {}) => {
+  const settings = tableRules({ ...options, board: board ?? options.board });
+  const mode = settings.board;
+  const island = mode === 'random' ? randomBoard(pickIndex, settings) : beginnerBoard();
   return {
     version: 0,
-    options: { board: mode },
+    options: settings,
+    boardId: boardFingerprint(island),
     players: players.map((player) => ({
       id: player.id,
       name: player.name,
@@ -190,7 +198,7 @@ export const createInitialState = (players, { board = 'beginner', pickIndex = se
       code: player.code || null, // the Player ID used to rejoin
       away: false, // a disconnected person, played by the computer until they rejoin
     })),
-    board: mode === 'random' ? randomBoard(pickIndex) : beginnerBoard(),
+    board: island,
     buildings: {}, // vertexId -> { owner, type: 'settlement' | 'city' }
     roads: {}, // edgeId -> owner
     hands: byId(players, emptyHand),
@@ -288,7 +296,7 @@ export default class GameEngine {
     if (initialState) {
       this.state = GameEngine.resumable(initialState);
     } else {
-      this.state = createInitialState(players, { board: options.board, pickIndex });
+      this.state = createInitialState(players, { options, pickIndex });
       this.openGame();
     }
   }
@@ -543,51 +551,76 @@ export default class GameEngine {
     return `${state.turnCount}:${state.turnPhase}:${state.setup?.step ?? ''}:${state.setup?.expect ?? ''}:${state.activeIndex}`;
   }
 
+  // How long a person has for this phase, or null for no limit. With the
+  // host's turn timer the roll and every move get the chosen seconds (a
+  // little more where others must answer first); without it people roll
+  // when they like and the classic, generous clocks apply.
+  phaseLimit(phase) {
+    const seconds = settingsOf(this.state).turnSeconds;
+    const t = this.timing;
+    if (!seconds) {
+      if (phase === 'pre-roll') return null;
+      if (phase === 'setup') return t.setupTurn;
+      if (phase === 'discard') return t.discard;
+      if (phase === 'robber' || phase === 'steal') return t.robber;
+      return t.turn;
+    }
+    const scale = t.clockScale ?? 1;
+    const move = seconds * 1000;
+    if (phase === 'setup') return Math.max(2 * move, 30000) * scale;
+    if (phase === 'discard' || phase === 'robber' || phase === 'steal') return Math.max(move, 20000) * scale;
+    // An offer on the table gets time for answers.
+    const offering = (this.state.trades || []).some((trade) => trade.from === this.activePlayer.id);
+    if (phase === 'actions' && offering) return Math.max(move, 12000) * scale;
+    return move * scale;
+  }
+
+  // The clock restarts with each phase, and with the turn timer also after
+  // every move of the player whose turn it is.
+  deadlineKeyNow() {
+    const timed = settingsOf(this.state).turnSeconds > 0;
+    const phase = this.state.turnPhase;
+    const perMove = timed && (phase === 'actions' || phase === 'road-building');
+    return `${this.phaseKey()}${perMove ? `:${this.clockTicks || 0}` : ''}`;
+  }
+
   // A countdown for the people this phase waits on; when it runs out the
-  // computer makes their move so the table never stalls.
+  // computer makes their move so the table never stalls: it rolls for them,
+  // ends their turn, or finishes their set-up, discard or robber move.
   armDeadline() {
-    const key = this.phaseKey();
+    const key = this.deadlineKeyNow();
     if (this.deadlineKey === key) return;
     this.deadlineKey = key;
     this.clearLater(this.deadlineTimer);
     this.deadlineTimer = null;
 
     const humans = this.waitingOn().filter((id) => !this.isAuto(id));
-    if (!humans.length) {
-      if (this.state.phaseEndsAt) this.set({ phaseEndsAt: null, phaseLength: null });
-      return;
-    }
-
     const phase = this.state.turnPhase;
-    // People take as long as they like before rolling.
-    if (phase === 'pre-roll') {
+    const length = humans.length ? this.phaseLimit(phase) : null;
+    if (!length) {
       if (this.state.phaseEndsAt) this.set({ phaseEndsAt: null, phaseLength: null });
       return;
     }
 
-    const length =
-      phase === 'setup'
-        ? this.timing.setupTurn
-        : phase === 'discard'
-          ? this.timing.discard
-          : phase === 'robber' || phase === 'steal'
-            ? this.timing.robber
-            : this.timing.turn;
-
-    // The trade and build clock runs for the whole turn: playing a knight or
-    // Road Building part way through does not start it again.
+    // The classic trade and build clock runs for the whole turn: playing a
+    // knight or Road Building part way through does not start it again.
     let endsAt = Date.now() + length;
-    if (phase === 'actions' || phase === 'road-building') {
+    const timed = settingsOf(this.state).turnSeconds > 0;
+    if (!timed && (phase === 'actions' || phase === 'road-building')) {
       if (this.turnClock?.turn === this.state.turnCount) endsAt = this.turnClock.endsAt;
       else this.turnClock = { turn: this.state.turnCount, endsAt };
     }
 
     this.set({ phaseEndsAt: endsAt, phaseLength: length });
     this.deadlineTimer = this.later(() => {
-      if (this.phaseKey() !== key || this.state.gameOver) return;
+      if (this.deadlineKeyNow() !== key || this.state.gameOver) return;
       const late = this.waitingOn().filter((id) => !this.isAuto(id));
-      late.forEach((id) => this.chat(`${this.nameOf(id)} ran out of time, the computer moves for them`));
-      this.forceMoves(late, key);
+      late.forEach((id) => {
+        if (phase === 'pre-roll') this.note(`${this.nameOf(id)}'s dice were rolled for them`, id);
+        else if (phase === 'actions') this.note(`${this.nameOf(id)}'s time ran out, the turn passes on`, id);
+        else this.chat(`${this.nameOf(id)} ran out of time, the computer moves for them`);
+      });
+      this.forceMoves(late, this.phaseKey());
     }, Math.max(0, endsAt - Date.now()));
   }
 
@@ -942,7 +975,7 @@ export default class GameEngine {
     // Ask only about offers worth thinking over: a person's offer the
     // computer cannot call clearly, or any offer from someone close to winning.
     const proposer = trade.from === id ? trade.to : trade.from;
-    const nearWin = publicPoints(this.state, proposer) >= 7;
+    const nearWin = publicPoints(this.state, proposer) >= victoryPointsOf(this.state) - 3;
     const unclearFromPerson = this.player(proposer)?.kind === 'human' && Math.abs(margin) < 0.8;
     if (!nearWin && !unclearFromPerson) return accept;
     const summary = describeTrade(this.state, trade, id);
@@ -990,7 +1023,7 @@ export default class GameEngine {
     }
 
     this.sound('build');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1023,7 +1056,7 @@ export default class GameEngine {
     }
 
     this.sound('build');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1045,7 +1078,7 @@ export default class GameEngine {
     );
     this.event('build', { actor: playerId, piece: 'settlement', at: vertexId, paid: COSTS.settlement });
     this.sound('build');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1066,7 +1099,7 @@ export default class GameEngine {
       this.event('build', { actor: playerId, piece: 'road', at: edgeId, free: true });
       this.sound('build');
       if (remaining <= 0 || !legalRoadSpots(this.state, playerId).length) this.finishRoadBuilding();
-      this.afterAction();
+      this.afterAction(playerId);
       return true;
     }
 
@@ -1078,7 +1111,7 @@ export default class GameEngine {
     this.setBoard({ roads: { ...this.state.roads, [edgeId]: playerId } }, `${this.nameOf(playerId)} built a road`, playerId);
     this.event('build', { actor: playerId, piece: 'road', at: edgeId, paid: COSTS.road });
     this.sound('build');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1097,7 +1130,7 @@ export default class GameEngine {
     this.note(`${this.nameOf(playerId)} upgraded a settlement to a city`, playerId);
     this.event('build', { actor: playerId, piece: 'city', at: vertexId, paid: COSTS.city });
     this.sound('build');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1119,7 +1152,7 @@ export default class GameEngine {
     this.note(`${this.nameOf(playerId)} bought a development card`, playerId);
     this.event('buyDev', { actor: playerId, paid: COSTS.dev });
     this.sound('card');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1175,7 +1208,7 @@ export default class GameEngine {
     if (total === 7) {
       const pendingDiscards = {};
       this.state.players.forEach((player) => {
-        const count = discardCount(this.state.hands[player.id]);
+        const count = discardCount(this.state.hands[player.id], handLimitOf(this.state));
         if (count) pendingDiscards[player.id] = count;
       });
       const discarders = Object.keys(pendingDiscards);
@@ -1193,7 +1226,7 @@ export default class GameEngine {
       this.set({ turnPhase: 'actions', activity: `${this.nameOf(playerId)} rolled ${total}, trade and build` });
     }
 
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1248,7 +1281,7 @@ export default class GameEngine {
       this.set({ turnPhase: 'robber', activity: `${this.activePlayer.name} moves the robber` });
     }
 
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1274,7 +1307,7 @@ export default class GameEngine {
     } else {
       this.set({ turnPhase: this.state.robberReturn, stealFrom: [], activity: this.phaseActivity(this.state.robberReturn) });
     }
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1298,7 +1331,7 @@ export default class GameEngine {
     }
 
     this.set({ turnPhase: back, stealFrom: [], activity: this.phaseActivity(back) });
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1399,7 +1432,7 @@ export default class GameEngine {
       this.event('monopoly', { actor: playerId, resource, from, total: taken });
     }
 
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1446,7 +1479,7 @@ export default class GameEngine {
       playerId,
     );
     this.sound('trade');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1486,7 +1519,7 @@ export default class GameEngine {
     }
 
     this.watchOpenTrade(tradeId);
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1563,7 +1596,7 @@ export default class GameEngine {
     );
     this.event('trade', { actor: from, partner: partnerId, give: trade.give, get: trade.get });
     this.sound('trade');
-    this.afterAction();
+    this.afterAction(this.activePlayer.id);
     return true;
   }
 
@@ -1571,7 +1604,7 @@ export default class GameEngine {
     const trade = this.state.trades.find((entry) => entry.id === tradeId);
     if (!trade || trade.from !== playerId) return false;
     this.set({ trades: this.state.trades.filter((entry) => entry.id !== tradeId) });
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1589,7 +1622,7 @@ export default class GameEngine {
     this.event('maritime', { actor: playerId, give: { [give]: rate }, get: { [get]: 1 } });
     this.note(`${this.nameOf(playerId)} traded ${rate} ${RESOURCE_LABELS[give].toLowerCase()} with the bank for 1 ${RESOURCE_LABELS[get].toLowerCase()}`, playerId);
     this.sound('trade');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
@@ -1611,13 +1644,15 @@ export default class GameEngine {
       activity: `${next.name} rolls the dice`,
     });
     this.sound('turn');
-    this.afterAction();
+    this.afterAction(playerId);
     return true;
   }
 
   // Every successful move ends here: a win is checked for the player whose
-  // turn it is, then the next decision is armed.
-  afterAction() {
+  // turn it is, then the next decision is armed. A move by the player whose
+  // turn it is starts their move clock again.
+  afterAction(actorId = null) {
+    if (actorId && actorId === this.activePlayer?.id) this.clockTicks = (this.clockTicks || 0) + 1;
     this.pruneTrades();
     this.checkWin();
     if (!this.stepping) this.schedule();
@@ -1635,7 +1670,7 @@ export default class GameEngine {
     const { state } = this;
     if (state.gameOver || state.turnPhase === 'setup') return;
     const active = this.activePlayer;
-    if (totalPoints(state, active.id) >= WINNING_POINTS) this.finish('victory', active.id);
+    if (totalPoints(state, active.id) >= victoryPointsOf(state)) this.finish('victory', active.id);
   }
 
   finish(reason, winnerId = null) {

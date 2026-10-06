@@ -840,3 +840,85 @@ describe('round 2 rules', () => {
     expect(ids).toEqual([...ids].sort((a, b) => a - b));
   });
 });
+
+describe('table settings in play', () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const timed = (options, timing = {}) => {
+    const random = seeded(5);
+    return track(
+      new GameEngine({
+        players: seats(['human', 'human', 'human']),
+        timing: { ...CALM, ...timing },
+        options: { board: 'beginner', ...options },
+        rollDie: () => 1 + Math.floor(random() * 6),
+        pickIndex: (n) => Math.floor(random() * n),
+        random,
+      }),
+    );
+  };
+
+  test('with the turn timer, the dice roll themselves and an idle turn passes on', async () => {
+    // 15 seconds scaled down to 45 ms.
+    const engine = timed({ turnSeconds: 15 }, { clockScale: 0.003 });
+    engine.rollDie = () => 2; // a 4, never the robber
+    const first = active(engine);
+    engine.start();
+    expect(engine.state.phaseLength).toBe(45);
+    await wait(80);
+    expect(engine.state.dice).not.toBeNull();
+    const turn = engine.state.turnCount;
+    await wait(120);
+    expect(engine.state.turnCount).toBeGreaterThan(turn);
+    expect(engine.state.log.some((entry) => entry.text === `${first.toUpperCase()}'s time ran out, the turn passes on`)).toBe(true);
+  });
+
+  test('every move starts the move clock again', async () => {
+    const engine = timed({ turnSeconds: 15 }, { clockScale: 0.004 }); // 60 ms per move
+    const me = active(engine);
+    await rollTo(engine, [3, 3]);
+    if (engine.state.turnPhase !== 'actions') return;
+    await wait(40);
+    give(engine, me, { brick: 1, lumber: 1 });
+    expect(engine.placeRoad(me, legalRoadSpots(engine.state, me)[0])).toBe(true);
+    await wait(40); // 80 ms into the turn, 40 ms after the move
+    expect(active(engine)).toBe(me);
+    await wait(120);
+    expect(active(engine)).not.toBe(me);
+  });
+
+  test('without a timer, people roll when they like', async () => {
+    const engine = timed({});
+    engine.start();
+    await wait(20);
+    expect(engine.state.phaseEndsAt).toBeNull();
+    expect(engine.state.dice).toBeNull();
+  });
+
+  test('the discard limit and the points to win follow the table', async () => {
+    const engine = timed({ handLimit: 9, victoryPoints: 8 });
+    const [me, x] = [0, 1].map((i) => engine.state.players[(engine.state.activeIndex + i) % 3].id);
+    give(engine, x, { ore: 9 - handSize(engine.state.hands[x]) });
+    expect(handSize(engine.state.hands[x])).toBe(9);
+    await rollTo(engine, [3, 4]);
+    expect(engine.state.pendingDiscards[x]).toBeUndefined();
+
+    const other = timed({ victoryPoints: 8 });
+    const who = active(other);
+    other.state = {
+      ...other.state,
+      longestRoad: { ...other.state.longestRoad, holder: who },
+      largestArmy: who,
+      buildings: Object.fromEntries(Object.entries(other.state.buildings).map(([v, b]) => [v, b.owner === who ? { ...b, type: 'city' } : b])),
+    };
+    expect(totalPoints(other.state, who)).toBe(8);
+    await rollTo(other, [1, 1]);
+    expect(other.state.gameOver).toMatchObject({ reason: 'victory', winners: [who] });
+    expect(me).toBeDefined();
+  });
+
+  test('a fresh game carries its island fingerprint and its rules', () => {
+    const engine = timed({ board: 'random', turnSeconds: 30, redsMayTouch: true });
+    expect(engine.state.boardId).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/);
+    expect(engine.state.options).toMatchObject({ board: 'random', turnSeconds: 30, redsMayTouch: true, handLimit: 7 });
+  });
+});
