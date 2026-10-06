@@ -185,19 +185,35 @@ export const runAction = (engine, playerId, action) => {
   }
 };
 
-function CostChips({ cost }) {
+function CostChips({ cost, size = 13 }) {
   return (
-    <span className="cost-chips">
+    <span className={`cost-chips ${size > 16 ? 'cost-chips--large' : ''}`}>
       {Object.entries(cost).map(([resource, count]) => (
         <span key={resource} className={`cost-chip res-${resource}`} title={`${count} ${RESOURCE_LABELS[resource]}`}>
           {Array.from({ length: count }, (_, i) => (
-            <ResourceIcon key={i} resource={resource} size={13} />
+            <ResourceIcon key={i} resource={resource} size={size} />
           ))}
         </span>
       ))}
     </span>
   );
 }
+
+// The piece a building option makes, drawn in the player's colour.
+function BuildArt({ kind, size = 28 }) {
+  return (
+    <span className={`build-art build-art--${kind}`} aria-hidden="true">
+      {kind === 'dev' ? <ScrollIcon size={size} /> : <PieceIcon kind={kind} size={size} />}
+    </span>
+  );
+}
+
+const BUILDS = [
+  { key: 'road', label: 'Road', note: '0 VP · builds toward Longest Road' },
+  { key: 'settlement', label: 'Settlement', note: '1 VP' },
+  { key: 'city', label: 'City', note: '2 VP · replaces a settlement' },
+  { key: 'dev', label: 'Development card', note: 'Knight, progress or victory point' },
+];
 
 function BundleLine({ bundle }) {
   const entries = Object.entries(bundle || {}).filter(([, count]) => count > 0);
@@ -1025,16 +1041,12 @@ export default function BoardGame({
             )}
             {sheet === 'costs' && (
               <ul className="costs-list">
-                {[
-                  ['Road', COSTS.road, '0 VP · builds toward Longest Road'],
-                  ['Settlement', COSTS.settlement, '1 VP'],
-                  ['City', COSTS.city, '2 VP · replaces a settlement'],
-                  ['Development card', COSTS.dev, 'Knight, progress or victory point'],
-                ].map(([name, cost, note]) => (
-                  <li key={name}>
-                    <strong>{name}</strong>
-                    <CostChips cost={cost} />
-                    <span>{note}</span>
+                {BUILDS.map((build) => (
+                  <li key={build.key}>
+                    <BuildArt kind={build.key} size={32} />
+                    <strong>{build.label}</strong>
+                    <CostChips cost={COSTS[build.key]} size={22} />
+                    <span>{build.note}</span>
                   </li>
                 ))}
               </ul>
@@ -1480,7 +1492,7 @@ export default function BoardGame({
           )}
 
           {canBuildNow && (
-            <section className="build-panel" aria-label="Build">
+            <section className={`build-panel seat-${me.pieceKey}`} aria-label="Build">
               <p className="eyebrow">Build</p>
               {[
                 ['road', 'Road', COSTS.road, left.road, legalRoadSpots(view, myPlayerId).length],
@@ -1501,11 +1513,12 @@ export default function BoardGame({
                       !affordable ? 'Not enough resources' : piecesRemaining <= 0 ? 'No pieces left' : spots === 0 ? 'Nowhere to build' : ''
                     }
                   >
-                    <span>
+                    <BuildArt kind={key} />
+                    <span className="build-option-text">
                       <strong>{label}</strong>
                       <em>{piecesRemaining} left</em>
                     </span>
-                    <CostChips cost={cost} />
+                    <CostChips cost={cost} size={20} />
                   </button>
                 );
               })}
@@ -1515,11 +1528,12 @@ export default function BoardGame({
                 disabled={!hasResources(myHand, COSTS.dev) || deckLeft === 0}
                 onClick={() => act({ type: 'buy-dev' })}
               >
-                <span>
+                <BuildArt kind="dev" />
+                <span className="build-option-text">
                   <strong>Development card</strong>
                   <em>{deckLeft} left</em>
                 </span>
-                <CostChips cost={COSTS.dev} />
+                <CostChips cost={COSTS.dev} size={20} />
               </button>
             </section>
           )}
