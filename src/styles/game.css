@@ -171,6 +171,20 @@
   line-height: 1.45;
 }
 
+/* A lede short enough to read as one line on wider screens */
+.section-lede--single {
+  max-width: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .section-lede--single {
+    max-width: 640px;
+    white-space: normal;
+    text-wrap: balance;
+  }
+}
+
 /* Stats */
 
 .stat-strip {
