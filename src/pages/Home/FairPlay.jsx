@@ -28,7 +28,7 @@ export default function FairPlay() {
           <h2 id="fair-heading" className="gradient-text">
             Fair by design
           </h2>
-          <p className="section-lede">
+          <p className="section-lede section-lede--single">
             No hidden tricks and no weighted luck, only your decisions and an honest roll
           </p>
         </header>
