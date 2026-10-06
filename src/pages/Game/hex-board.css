@@ -447,3 +447,121 @@
   stroke: currentColor;
   stroke-width: 1.3;
 }
+
+/* Building on the board: everything you can afford shows softly; a first
+   tap picks a spot and shows the piece, a second tap builds it */
+
+.hex-board--browse .spot--vertex {
+  r: 7.5;
+  fill: rgba(255, 255, 255, 0.82);
+  stroke-width: 2.5;
+  animation: none;
+}
+
+.hex-board--browse .spot--edge {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-dasharray: 5 5;
+  stroke-width: 6;
+  animation: none;
+}
+
+.hex-board--browse .spot--edge:hover,
+.hex-board--browse .spot--edge:focus-visible {
+  stroke: #ffffff;
+  stroke-dasharray: none;
+}
+
+.hex-board--browse .building--upgradable {
+  animation: none;
+}
+
+.hex-board--browse .building--upgradable path:last-child {
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  stroke-dasharray: 3 2;
+}
+
+.spot--picked {
+  stroke: transparent !important;
+  stroke-width: 18;
+  animation: none;
+}
+
+.ghost {
+  pointer-events: none;
+  opacity: 0.85;
+  animation: ghostPulse 1.1s ease-in-out infinite alternate;
+}
+
+.spot--ghost {
+  cursor: pointer;
+  outline: none;
+  animation: ghostPulse 1.1s ease-in-out infinite alternate;
+}
+
+.spot-halo {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.building--picked {
+  animation: ghostPulse 1.1s ease-in-out infinite alternate !important;
+}
+
+.building--picked path:last-child {
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-dasharray: none;
+}
+
+.hex-tile--picked .hex-tile-face {
+  stroke: #ffffff;
+  stroke-dasharray: none;
+  stroke-width: 6;
+  filter: brightness(1.12);
+}
+
+.confirm-chip {
+  pointer-events: none;
+  animation: chipIn 0.22s var(--ease-out);
+}
+
+.confirm-chip rect {
+  fill: rgba(24, 28, 34, 0.9);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.2;
+}
+
+.confirm-chip text {
+  fill: #ffffff;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+@keyframes ghostPulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.6;
+  }
+}
+
+/* Opacity only: the chip's place is its SVG transform */
+@keyframes chipIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost,
+  .spot--ghost,
+  .building--picked,
+  .confirm-chip {
+    animation: none !important;
+  }
+}

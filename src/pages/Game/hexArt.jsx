@@ -237,6 +237,8 @@ function HexBoard({
   onVertex,
   onEdge,
   onHex,
+  selected = null,
+  myPiece = null,
   rolled = null,
   compact = false,
   className = '',
@@ -248,12 +250,14 @@ function HexBoard({
   const edgeSet = new Set(highlight.edges || []);
   const hexSet = new Set(highlight.hexes || []);
   const citySet = new Set(highlight.cities || []);
+  const mine = PIECES[myPiece] || PIECES.red;
+  const isPicked = (kind, id) => selected?.kind === kind && selected.id === id;
   const width = px(5.55);
   const height = px(4.85);
 
   return (
     <svg
-      className={`hex-board ${compact ? 'hex-board--compact' : ''} ${className}`.trim()}
+      className={`hex-board ${compact ? 'hex-board--compact' : ''} ${highlight.browse ? 'hex-board--browse' : ''} ${selected ? 'hex-board--picking' : ''} ${className}`.trim()}
       viewBox={`${-width} ${-height} ${width * 2} ${height * 2}`}
       role="img"
       aria-label={label}
@@ -314,10 +318,11 @@ function HexBoard({
         const hex = GEOMETRY.hexes[tile.id];
         const producing = rolled && tile.number === rolled && board.robber !== tile.id;
         const target = hexSet.has(tile.id);
+        const picked = target && isPicked('robber', tile.id);
         return (
           <g
             key={tile.id}
-            className={`hex-tile hex-tile--${tile.terrain} ${producing ? 'hex-tile--producing' : ''} ${target ? 'hex-tile--target' : ''}`}
+            className={`hex-tile hex-tile--${tile.terrain} ${producing ? 'hex-tile--producing' : ''} ${target ? 'hex-tile--target' : ''} ${picked ? 'hex-tile--picked' : ''}`}
             onClick={target && onHex ? () => onHex(tile.id) : undefined}
             role={target ? 'button' : undefined}
             tabIndex={target ? 0 : undefined}
@@ -354,10 +359,17 @@ function HexBoard({
       {/* Open paths for a road */}
       {[...edgeSet].map((edgeId) => {
         const [a, b] = GEOMETRY.edges[edgeId].vertices.map((id) => GEOMETRY.vertices[id]);
+        const picked = isPicked('road', edgeId);
         return (
+          <React.Fragment key={`edge-${edgeId}`}>
+            {picked && (
+              <g className="ghost ghost--road" aria-hidden="true">
+                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.edge} strokeWidth="11" strokeLinecap="round" />
+                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.fill} strokeWidth="7.5" strokeLinecap="round" />
+              </g>
+            )}
           <line
-            key={`edge-${edgeId}`}
-            className="spot spot--edge"
+            className={`spot spot--edge ${picked ? 'spot--picked' : ''}`}
             x1={px(a.x + (b.x - a.x) * 0.2)}
             y1={px(a.y + (b.y - a.y) * 0.2)}
             x2={px(b.x + (a.x - b.x) * 0.2)}
@@ -365,9 +377,11 @@ function HexBoard({
             onClick={onEdge ? () => onEdge(edgeId) : undefined}
             role="button"
             tabIndex={0}
-            aria-label={`Build a road by ${placeOf(board, GEOMETRY.edges[edgeId].hexes)}`}
+            aria-label={`${picked ? 'Confirm the road' : 'Build a road'} by ${placeOf(board, GEOMETRY.edges[edgeId].hexes)}`}
+            aria-pressed={picked}
             onKeyDown={onPress(() => onEdge?.(edgeId))}
           />
+          </React.Fragment>
         );
       })}
 
@@ -382,10 +396,11 @@ function HexBoard({
         const colour = colourOf(building.owner);
         const city = building.type === 'city';
         const upgradable = citySet.has(Number(vertexId));
+        const picked = upgradable && isPicked('city', Number(vertexId));
         return (
           <g
             key={`b-${vertexId}`}
-            className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''}`}
+            className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''} ${picked ? 'building--picked' : ''}`}
             transform={`translate(${px(v.x) - (city ? 14 : 12)} ${px(v.y) - (city ? 15 : 13)}) scale(${city ? 1.15 : 1})`}
             onClick={upgradable && onVertex ? () => onVertex(Number(vertexId)) : undefined}
             role={upgradable ? 'button' : undefined}
@@ -394,7 +409,7 @@ function HexBoard({
             onKeyDown={upgradable && onVertex ? onPress(() => onVertex(Number(vertexId))) : undefined}
           >
             <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
-            <path d={city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
+            <path d={picked ? CITY_PATH : city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
           </g>
         );
       })}
@@ -402,6 +417,25 @@ function HexBoard({
       {/* Open intersections for a settlement */}
       {[...vertexSet].map((vertexId) => {
         const v = GEOMETRY.vertices[vertexId];
+        const picked = isPicked('settlement', vertexId);
+        if (picked) {
+          return (
+            <g
+              key={`v-${vertexId}`}
+              className="spot spot--ghost"
+              transform={`translate(${px(v.x) - 12} ${px(v.y) - 13})`}
+              onClick={onVertex ? () => onVertex(vertexId) : undefined}
+              role="button"
+              tabIndex={0}
+              aria-pressed="true"
+              aria-label={`Confirm the settlement by ${placeOf(board, v.hexes)}`}
+              onKeyDown={onPress(() => onVertex?.(vertexId))}
+            >
+              <circle cx="12" cy="13" r="19" className="spot-halo" />
+              <path d={SETTLEMENT_PATH} fill={mine.fill} stroke={mine.edge} strokeWidth="1.6" strokeLinejoin="round" />
+            </g>
+          );
+        }
         return (
           <circle
             key={`v-${vertexId}`}
@@ -417,7 +451,45 @@ function HexBoard({
           />
         );
       })}
+
+      {selected && <ConfirmChip selected={selected} board={board} />}
     </svg>
+  );
+}
+
+// Where a first tap landed, and the words for the second.
+const chipAt = (selected) => {
+  const { kind, id } = selected;
+  if (kind === 'road') {
+    const [a, b] = GEOMETRY.edges[id]?.vertices.map((vertexId) => GEOMETRY.vertices[vertexId]) || [];
+    return a && { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, text: 'Tap again to build the road' };
+  }
+  if (kind === 'settlement' || kind === 'city') {
+    const v = GEOMETRY.vertices[id];
+    return v && { x: v.x, y: v.y, text: `Tap again to build the ${kind}` };
+  }
+  if (kind === 'robber') {
+    const hex = GEOMETRY.hexes[id];
+    return hex && { x: hex.x, y: hex.y - 0.35, text: 'Tap again to send the robber' };
+  }
+  return null;
+};
+
+// The small label that asks for the confirming tap, kept inside the board.
+function ConfirmChip({ selected }) {
+  const at = chipAt(selected);
+  if (!at) return null;
+  const width = at.text.length * 6.1 + 22;
+  const x = Math.max(-330 + width / 2, Math.min(330 - width / 2, px(at.x)));
+  const above = px(at.y) - 34 > -280;
+  const y = above ? px(at.y) - 30 : px(at.y) + 30;
+  return (
+    <g className="confirm-chip" transform={`translate(${x} ${y})`} aria-hidden="true">
+      <rect x={-width / 2} y="-12" width={width} height="24" rx="12" />
+      <text textAnchor="middle" dominantBaseline="central" y="0.5">
+        {at.text}
+      </text>
+    </g>
   );
 }
 

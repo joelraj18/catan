@@ -3104,3 +3104,171 @@
     transition: none;
   }
 }
+
+.game-card--deck {
+  --card: #46546a;
+  --card-ink: #2b3646;
+}
+
+.deck-plus {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 3;
+}
+
+/* Build guide: costs at a glance; a chip shows only that kind of spot */
+
+.build-guide {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.build-guide-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.build-guide-head .eyebrow {
+  margin: 0;
+}
+
+.build-guide-head span {
+  color: var(--ink-quaternary);
+  font-size: 0.72rem;
+}
+
+.build-guide ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.build-chip {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: var(--sage-25);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    background 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    opacity 0.2s var(--ease);
+}
+
+.build-chip--ready {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.build-chip--ready:hover,
+.build-chip--focus {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.build-chip:disabled {
+  cursor: default;
+}
+
+.build-chip .build-art {
+  width: 30px;
+  height: 30px;
+}
+
+.build-chip-name {
+  display: grid;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.15;
+}
+
+.build-chip-name em {
+  color: var(--ink-quaternary);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* One trade composer: what you give and get, then who with */
+
+.trade-to-title {
+  margin-top: 16px;
+}
+
+.trade-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trade-target {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: var(--sage-25);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+.trade-target strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-target strong .piece-mark {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--seat);
+}
+
+.trade-target span {
+  color: var(--ink-tertiary);
+  font-size: 0.72rem;
+}
+
+.trade-target:hover {
+  border-color: var(--hairline-strong);
+}
+
+.trade-target--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.trade-target--bank.trade-target--ready span {
+  color: var(--accent);
+  font-weight: 650;
+}
