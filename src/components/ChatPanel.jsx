@@ -5,6 +5,7 @@ import { PIECES } from '../pages/Game/pieces.jsx';
 // the Longest Road changing hands, the winner) are set apart from player messages.
 export default function ChatPanel({ session, title = 'Table chat', compact = false }) {
   const [messages, setMessages] = useState(() => session?.chat || []);
+  const said = messages.filter((message) => !message.system).length;
   const [draft, setDraft] = useState('');
   const listRef = useRef(null);
 
@@ -38,7 +39,7 @@ export default function ChatPanel({ session, title = 'Table chat', compact = fal
     <section className={`chat-panel ${compact ? 'chat-panel--compact' : ''}`} aria-label={title}>
       <header className="chat-panel-head">
         <p className="eyebrow">{title}</p>
-        <span>{messages.filter((message) => !message.system).length} messages</span>
+        <span>{said === 1 ? '1 message' : `${said} messages`}</span>
       </header>
 
       <ol className="chat-list" ref={listRef} aria-live="polite">

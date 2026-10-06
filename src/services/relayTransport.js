@@ -186,6 +186,15 @@ export const openRelayPool = (
   const seen = new Set();
   const backlog = [];
   let closed = false;
+  // Every delay this pool starts, so closing it leaves nothing running.
+  const timers = new Set();
+  const later = (fn, ms) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      if (!closed) fn();
+    }, ms);
+    timers.add(timer);
+  };
   let chain = Promise.resolve();
   let sending = Promise.resolve();
   let markOpen;
@@ -261,7 +270,7 @@ export const openRelayPool = (
           refused(frame[1], url);
         } else if (frame[0] === 'CLOSED' && frame[1] === 'room') {
           // The relay dropped our subscription; ask once more a little later.
-          setTimeout(() => socket.readyState === 1 && subscribe(socket), 5000);
+          later(() => socket.readyState === 1 && subscribe(socket), 5000);
         } else if (frame[0] === 'NOTICE' && RATE_LIMITED.test(String(frame[1]))) {
           stateOf(url).restUntil = Date.now() + restFor;
         }
@@ -276,7 +285,7 @@ export const openRelayPool = (
       // Anything this relay had not confirmed yet may never arrive.
       [...pending.keys()].forEach((id) => refused(id, url));
       if (!closed) {
-        setTimeout(() => connect(url, attempt + 1), Math.min(15000, 1000 * 2 ** attempt));
+        later(() => connect(url, attempt + 1), Math.min(15000, 1000 * 2 ** attempt));
       }
     };
   };
@@ -314,7 +323,7 @@ export const openRelayPool = (
 
     if (targets.length) {
       pending.set(event.id, { envelope, tries, targets: new Set(targets.map(([url]) => url)), refused: new Set() });
-      setTimeout(() => pending.delete(event.id), PENDING_FOR);
+      later(() => pending.delete(event.id), PENDING_FOR);
       targets.forEach(([, socket]) => socket.send(frame));
     } else if (backlog.length < 50) {
       backlog.push(frame);
@@ -338,7 +347,7 @@ export const openRelayPool = (
     const now = Date.now();
     const rests = openSockets().map(([relay]) => stateOf(relay).restUntil - now);
     const soonest = rests.length ? Math.min(...rests) : 3000;
-    setTimeout(() => queue(entry.envelope, entry.tries + 1), Math.min(15000, Math.max(800, soonest)));
+    later(() => queue(entry.envelope, entry.tries + 1), Math.min(15000, Math.max(800, soonest)));
   }
 
   return {
@@ -355,6 +364,8 @@ export const openRelayPool = (
     close: () => {
       closed = true;
       clearTimeout(failTimer);
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
       sockets.forEach((socket) => {
         try {

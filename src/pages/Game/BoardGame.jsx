@@ -144,7 +144,19 @@ const STATUS_LABELS = {
 
 // Applies one player's action to the engine, whether it came from this
 // screen or from a friend's intent over the network.
+// A move from anyone at the table. A malformed message from a guest is
+// simply refused, never allowed to throw inside the host.
 export const runAction = (engine, playerId, action) => {
+  try {
+    return dispatchAction(engine, playerId, action);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Refused a malformed move', error);
+    return false;
+  }
+};
+
+const dispatchAction = (engine, playerId, action) => {
   switch (action?.type) {
     case 'roll':
       return engine.roll(playerId);
@@ -458,6 +470,15 @@ export default function BoardGame({
 
   // ------------------------------------------------------------ keyboard
 
+  // A popup takes the keyboard focus when it opens, so keyboard users land
+  // in it rather than on the board behind.
+  useEffect(() => {
+    const dialog = document.querySelector('.board-game-page [role="dialog"]');
+    if (!dialog || dialog.contains(document.activeElement)) return;
+    const first = dialog.querySelector('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    (first || dialog).focus?.({ preventScroll: true });
+  });
+
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') {
@@ -565,6 +586,18 @@ export default function BoardGame({
   );
   const canTrade = me && phase === 'actions' && !over && !view.busy;
 
+  // A trade draft or a card choice belongs to the moment it was opened: when
+  // the turn moves on, it closes rather than reappearing later.
+  const activeId = activePlayer?.id;
+  const tradeOpen = Boolean(me && phase === 'actions' && !over);
+  useEffect(() => {
+    setTradeDraft(null);
+    setSheet((current) => (current === 'trade' ? null : current));
+  }, [activeId, tradeOpen]);
+  useEffect(() => {
+    if (!canPlayDev) setDevPick(null);
+  }, [canPlayDev]);
+
   const copyMyId = async () => {
     try {
       await navigator.clipboard.writeText(myCode);
@@ -619,7 +652,7 @@ export default function BoardGame({
     const chosen = bundleSize(discardDraft);
     return (
       <div className="property-card-overlay end-overlay">
-        <div className="property-card discard-sheet" role="dialog" aria-labelledby="discard-title">
+        <div className="property-card discard-sheet" role="dialog" aria-modal="true" aria-labelledby="discard-title">
           <header className="property-card-header">
             <p className="property-card-kicker">The robber strikes</p>
             <h3 id="discard-title">Discard {iOweDiscard} cards</h3>
@@ -650,7 +683,7 @@ export default function BoardGame({
     if (!isMyTurn || phase !== 'steal' || over) return null;
     return (
       <div className="property-card-overlay end-overlay">
-        <div className="property-card steal-sheet" role="dialog" aria-labelledby="steal-title">
+        <div className="property-card steal-sheet" role="dialog" aria-modal="true" aria-labelledby="steal-title">
           <header className="property-card-header">
             <p className="property-card-kicker">The robber</p>
             <h3 id="steal-title">Steal a card from</h3>
@@ -686,7 +719,7 @@ export default function BoardGame({
     const ready = isPlenty ? devPick.resources.length === 2 : Boolean(devPick.resource);
     return (
       <div className="property-card-overlay" onClick={close}>
-        <div className="property-card dev-pick-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="dev-pick-title">
+        <div className="property-card dev-pick-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="dev-pick-title">
           <header className="property-card-header">
             <p className="property-card-kicker">Progress card</p>
             <h3 id="dev-pick-title">{DEV_CARDS[devPick.card].label}</h3>
@@ -703,13 +736,15 @@ export default function BoardGame({
                   : devPick.resource === resource
                     ? 1
                     : 0;
-                const bankOut = isPlenty && view.bank[resource] <= picked;
+                // Year of Plenty may only take what the bank can pay.
+                const after = isPlenty ? [...devPick.resources, resource].slice(-2).filter((entry) => entry === resource).length : 0;
+                const bankOut = isPlenty && view.bank[resource] < after;
                 return (
                   <button
                     key={resource}
                     type="button"
                     className={`resource-choice-btn res-${resource} ${picked ? 'is-picked' : ''}`}
-                    disabled={bankOut && !picked}
+                    disabled={bankOut}
                     onClick={() =>
                       setDevPick((current) =>
                         isPlenty
@@ -770,7 +805,7 @@ export default function BoardGame({
 
     return (
       <div className="property-card-overlay end-overlay" onClick={close}>
-        <div className="property-card trade-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="trade-title">
+        <div className="property-card trade-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="trade-title">
           <header className="property-card-header">
             <p className="property-card-kicker">{isMyTurn ? 'Your trade phase' : `Offer to ${activePlayer.name}`}</p>
             <h3 id="trade-title">Trade</h3>
@@ -926,7 +961,7 @@ export default function BoardGame({
 
     return (
       <div className="property-card-overlay results-overlay">
-        <div className="property-card results-sheet" role="dialog" aria-labelledby="results-title">
+        <div className="property-card results-sheet" role="dialog" aria-modal="true" aria-labelledby="results-title">
           <div className="results-hero">
             <span className="results-crown" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -996,7 +1031,7 @@ export default function BoardGame({
     const close = () => setSheet(null);
     return (
       <div className="property-card-overlay" onClick={close}>
-        <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="info-title">
+        <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="info-title">
           <header className="property-card-header">
             <p className="property-card-kicker">{sheet === 'dice' ? 'Fair play' : 'Reference'}</p>
             <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'How the dice work'}</h3>
@@ -1116,7 +1151,8 @@ export default function BoardGame({
           ) : null}
           <span>First to</span>
           <strong>{WINNING_POINTS}</strong>
-          <span>victory points wins</span>
+          <span className="round-goal-long">victory points wins</span>
+          <span className="round-goal-short">VP wins</span>
           <button
             type="button"
             className="match-info-button"
@@ -1334,7 +1370,7 @@ export default function BoardGame({
 
           {sheet === 'end' && canProposeEnd && (
             <div className="property-card-overlay end-overlay" onClick={() => setSheet(null)}>
-              <div className="property-card end-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-labelledby="end-title">
+              <div className="property-card end-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="end-title">
                 <header className="property-card-header">
                   <p className="property-card-kicker">End the game early</p>
                   <h3 id="end-title">End the game for everyone?</h3>
@@ -1372,7 +1408,7 @@ export default function BoardGame({
 
           {mustVote && (
             <div className="property-card-overlay end-overlay">
-              <div className="property-card end-sheet" role="dialog" aria-labelledby="vote-title">
+              <div className="property-card end-sheet" role="dialog" aria-modal="true" aria-labelledby="vote-title">
                 <header className="property-card-header">
                   <p className="property-card-kicker">A vote at the table</p>
                   <h3 id="vote-title">{nameOf(endVote.proposerId)} wants to end the game</h3>
@@ -1555,7 +1591,13 @@ export default function BoardGame({
                       {card.type === 'victoryPoint' ? (
                         <em>Counts automatically</em>
                       ) : (
-                        <button type="button" className="text-link" disabled={!playable} onClick={() => playDev(card.type)}>
+                        <button
+                          type="button"
+                          className="text-link"
+                          disabled={!playable}
+                          onClick={() => playDev(card.type)}
+                          aria-label={fresh ? `${info?.label}, playable next turn` : `Play ${info?.label}`}
+                        >
                           {fresh ? 'Next turn' : 'Play'}
                         </button>
                       )}
@@ -1662,6 +1704,10 @@ export default function BoardGame({
             <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
               How the dice work
             </button>
+            {/* Phones hide the top bar's goal pill, so the turn guide lives here too */}
+            <button type="button" className="dice-info-button dice-info-button--rules" onClick={() => setSheet('rules')}>
+              How a turn works
+            </button>
           </div>
 
           {session && (
@@ -1675,7 +1721,8 @@ export default function BoardGame({
                 )}
               </div>
               <ul>
-                {players
+                {/* The host keeps every Player ID to help a friend back in; a guest sees only their own. */}
+                {(isHost ? state.players : players)
                   .filter((player) => player.code)
                   .map((player) => (
                     <li key={player.id} className={`seat-${player.pieceKey} ${player.id === myPlayerId ? 'is-mine' : ''}`}>

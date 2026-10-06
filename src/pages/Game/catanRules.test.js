@@ -2,6 +2,7 @@ import { GEOMETRY, HARBORS } from './catanBoard';
 import { createInitialState } from './catanEngine';
 import {
   COSTS,
+  cleanBundle,
   DEV_DECK,
   canBuildCity,
   canPlaceRoad,
@@ -282,5 +283,17 @@ describe('victory points and privacy', () => {
     expect(JSON.stringify(view)).not.toMatch(/"type":"(knight|victoryPoint)"/);
 
     expect(redactFor(state, 'p3').lastSteal.resource).toBe('ore');
+  });
+
+  test('each seat sees only its own Player ID, and the same seat list each time', () => {
+    const state = fresh();
+    state.players = state.players.map((player, index) => ({ ...player, code: `CODE${index}` }));
+    const view = redactFor(state, 'p2');
+    expect(view.players.map((player) => player.code)).toEqual([null, 'CODE1', null]);
+    expect(redactFor({ ...state, turnCount: 9 }, 'p2').players).toBe(view.players);
+  });
+
+  test('trade bundles refuse counts no bank could hold', () => {
+    expect(cleanBundle({ ore: Infinity, wool: '1e309', grain: 2, brick: -1, gold: 3 })).toEqual({ grain: 2 });
   });
 });

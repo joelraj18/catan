@@ -51,12 +51,13 @@ export const addResources = (hand, delta, sign = 1) => {
   return next;
 };
 
-// Cleans a {resource: count} bundle: known resources, whole positive counts.
+// Cleans a {resource: count} bundle: known resources, whole positive counts
+// no larger than the whole bank holds.
 export const cleanBundle = (bundle) => {
   const clean = {};
   RESOURCES.forEach((resource) => {
     const count = Math.floor(Number(bundle?.[resource]) || 0);
-    if (count > 0) clean[resource] = count;
+    if (count > 0 && count <= BANK_SIZE) clean[resource] = count;
   });
   return clean;
 };
@@ -353,6 +354,20 @@ export const vertexScore = (state, vertexId, weights = {}) => {
 
 // --------------------------------------------------------------- privacy
 
+// The seat list with every Player ID but the viewer's hidden. The same list
+// object comes back while the seats are unchanged, so the board does not
+// redraw for nothing.
+const seatViews = new WeakMap();
+const seatsFor = (players, viewerId) => {
+  if (!Array.isArray(players)) return players;
+  if (!seatViews.has(players)) seatViews.set(players, new Map());
+  const views = seatViews.get(players);
+  if (!views.has(viewerId)) {
+    views.set(viewerId, players.map((player) => (player.id === viewerId || !player.code ? player : { ...player, code: null })));
+  }
+  return views.get(viewerId);
+};
+
 // What one seat may see: their own hand and development cards, and only the
 // counts of everyone else's. The deck shows only how many cards are left.
 export const redactFor = (state, viewerId) => {
@@ -376,6 +391,8 @@ export const redactFor = (state, viewerId) => {
 
   return {
     ...state,
+    // A Player ID reopens its seat, so each viewer sees only their own.
+    players: seatsFor(state.players, viewerId),
     hands,
     devCards,
     lastSteal,

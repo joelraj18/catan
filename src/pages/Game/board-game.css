@@ -37,6 +37,26 @@
   align-items: center;
   justify-self: end;
   gap: 16px;
+  white-space: nowrap;
+}
+
+.round-goal-short {
+  display: none;
+}
+
+/* Narrower windows: a shorter goal and closer buttons, all on one line */
+@media (max-width: 1100px) {
+  .board-topbar-actions {
+    gap: 10px;
+  }
+
+  .round-goal-long {
+    display: none;
+  }
+
+  .round-goal-short {
+    display: inline;
+  }
 }
 
 .round-indicator {
@@ -298,6 +318,7 @@
 
 .dice-info-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -315,6 +336,10 @@
   font-size: 0.78rem;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.dice-info-button--rules {
+  display: none;
 }
 
 .dice-info-button:hover {
@@ -632,46 +657,13 @@
 
 /* Responsive */
 
+/* Tablets: the board and the turn controls side by side, the table, chat
+   and log in a row underneath. Nothing sticks, so nothing can slide over
+   anything else. */
 @media (max-width: 1100px) {
   .board-game-layout {
-    grid-template-columns: 240px minmax(0, 1fr);
-  }
-
-  .turn-panel {
-    position: static;
-    grid-column: 1 / -1;
-    order: 3;
-    grid-template-columns: minmax(0, 1fr) auto minmax(220px, 280px);
-    align-items: center;
-    gap: 8px 24px;
-  }
-
-  .turn-panel > .eyebrow,
-  .turn-panel .dice-info-row {
-    display: none;
-  }
-
-  .turn-player {
-    margin: 0;
-  }
-
-  .dice-display {
-    grid-auto-flow: column;
-    align-items: center;
-    margin: 0;
-    padding: 10px 18px;
-  }
-
-  .die-face {
-    width: 44px;
-    height: 44px;
-  }
-}
-
-@media (max-width: 860px) {
-  .board-game-layout {
-    grid-template-columns: 1fr;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    gap: 18px;
   }
 
   .game-board-area {
@@ -680,17 +672,36 @@
   }
 
   .turn-panel {
+    position: static;
     order: 2;
-    grid-template-columns: 1fr auto;
-  }
-
-  .turn-panel .gold-button {
-    grid-column: 1 / -1;
   }
 
   .board-side {
     position: static;
     order: 3;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .board-side .player-panel {
+    grid-row: span 2;
+  }
+}
+
+/* Phones and narrow tablets: one column, the board first */
+@media (max-width: 860px) {
+  .board-game-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .board-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .board-side .player-panel {
+    grid-row: auto;
   }
 }
 
@@ -702,6 +713,10 @@
 
   .round-indicator {
     display: none;
+  }
+
+  .turn-panel .dice-info-button--rules {
+    display: inline-flex;
   }
 
   .board-game-layout {

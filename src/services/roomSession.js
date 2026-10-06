@@ -412,7 +412,7 @@ export default class RoomSession {
 
     this.transport.send(peerId, { t: 'welcome', clientId: peerId, code: this.code });
     this.transport.send(peerId, { t: 'chat-log', chat: this.chat });
-    this.transport.send(peerId, { t: 'start', players: this.players, gameId: this.gameId, rejoin: true });
+    this.transport.send(peerId, { t: 'start', players: this.playersFor(player.id), gameId: this.gameId, rejoin: true });
 
     if (this.lastGameState) {
       this.transport.send(peerId, { t: 'game', state: this.gameFor(player.id), sentAt: Date.now(), gameId: this.gameId });
@@ -531,7 +531,11 @@ export default class RoomSession {
     this.gameId = Date.now().toString(36);
     this.lastGameState = resume;
     writeStore(SEAT_KEY, { code: this.code, playerCode: this.players[0].code, name: this.players[0].name });
-    this.broadcast({ t: 'start', players: this.players, gameId: this.gameId });
+    this.players.forEach((player) => {
+      if (player.clientId) {
+        this.transport?.send(player.clientId, { t: 'start', players: this.playersFor(player.id), gameId: this.gameId });
+      }
+    });
     this.emit('start', {
       players: this.players,
       myPlayerId: 'p1',
@@ -682,6 +686,12 @@ export default class RoomSession {
         this.transport?.send(player.clientId, { t: 'game', state: viewFor(state, player.id), sentAt, gameId: this.gameId });
       }
     });
+  }
+
+  // The seat list as one guest may see it: a Player ID reopens its seat, so
+  // each guest only ever learns their own.
+  playersFor(playerId) {
+    return (this.players || []).map((player) => (player.id === playerId ? player : { ...player, code: null }));
   }
 
   gameFor(playerId) {

@@ -72,4 +72,20 @@ describe('room session', () => {
     session.broadcastGame(gameState());
     expect(session.transport.broadcast).toHaveBeenCalledTimes(1);
   });
+
+  test('each friend learns only their own Player ID', () => {
+    const session = hostSession();
+    session.emit = jest.fn();
+    session.players = [
+      { id: 'p1', clientId: null, kind: 'human', code: 'HOST11' },
+      { id: 'p2', clientId: 'peer-a', kind: 'human', code: 'AAAA22' },
+      { id: 'p3', clientId: 'peer-b', kind: 'human', code: 'BBBB33' },
+    ];
+    session.announceStart();
+
+    expect(session.transport.broadcast).not.toHaveBeenCalled();
+    const starts = Object.fromEntries(session.transport.send.mock.calls.map(([peer, message]) => [peer, message]));
+    expect(starts['peer-a'].players.map((player) => player.code)).toEqual([null, 'AAAA22', null]);
+    expect(starts['peer-b'].players.map((player) => player.code)).toEqual([null, null, 'BBBB33']);
+  });
 });

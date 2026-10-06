@@ -275,6 +275,7 @@ export default class GameEngine {
     this.sfxCounter = 0;
     this.advisorFailed = false;
     this.stepping = false;
+    this.emitQueued = false;
     this.botMemory = {};
     this.deadlineKey = null;
 
@@ -316,8 +317,17 @@ export default class GameEngine {
     this.timers.clear();
   }
 
+  // Every change within one move lands in a single report: the board, the
+  // guests and the saved game only ever see whole moves, never a half-done
+  // one (a discard phase with nobody left to discard, a tenth point a moment
+  // before the win), and a move costs one render and one broadcast.
   emit() {
-    if (!this.destroyed) this.onChange(this.state);
+    if (this.destroyed || this.emitQueued) return;
+    this.emitQueued = true;
+    queueMicrotask(() => {
+      this.emitQueued = false;
+      if (!this.destroyed) this.onChange(this.state);
+    });
   }
 
   set(patch) {
@@ -560,13 +570,16 @@ export default class GameEngine {
       if (this.phaseKey() !== key || this.state.gameOver) return;
       const late = this.waitingOn().filter((id) => !this.isAuto(id));
       late.forEach((id) => this.chat(`${this.nameOf(id)} ran out of time, the computer moves for them`));
-      this.forceMoves(late);
+      this.forceMoves(late, key);
     }, Math.max(0, endsAt - Date.now()));
   }
 
-  async forceMoves(ids) {
+  // Moves for the people a timed-out phase waits on. If a computer move is
+  // still running it waits, and drops out if the phase has moved on by then.
+  async forceMoves(ids, key) {
+    if (this.phaseKey() !== key || this.state.gameOver) return;
     if (this.stepping) {
-      this.later(() => this.forceMoves(ids), 300);
+      this.later(() => this.forceMoves(ids, key), 300);
       return;
     }
 
@@ -779,10 +792,18 @@ export default class GameEngine {
 
     this.set({ thinking: playerId });
     try {
-      const answer = await Promise.race([
+      // A late answer or failure after the time limit is simply dropped.
+      const asked = Promise.resolve(
         this.advisor({ kind, playerId, state: this.state, options: options.map((option) => option.label) }),
-        this.sleep(this.timing.advisor).then(() => null),
-      ]);
+      );
+      asked.catch(() => {});
+      let timeout = null;
+      const answer = await Promise.race([
+        asked,
+        new Promise((resolve) => {
+          timeout = this.later(() => resolve(null), this.timing.advisor);
+        }),
+      ]).finally(() => this.clearLater(timeout));
       if (this.destroyed) throw CANCELLED;
       const calls = (this.state.aiUsage?.[playerId]?.calls || 0) + 1;
       const tokens = answer?.usage ? answer.usage.input + answer.usage.output + answer.usage.cached : this.state.aiUsage?.[playerId]?.tokens || 0;
@@ -794,7 +815,7 @@ export default class GameEngine {
         .filter((index) => Number.isInteger(index) && index >= 0 && index < options.length);
       return plan.length ? plan : null;
     } catch (error) {
-      if (error === CANCELLED) throw error;
+      if (error === CANCELLED || this.destroyed) throw CANCELLED;
       if (!this.advisorFailed) {
         this.advisorFailed = true;
         this.chat('The premium AI could not be reached, the computer plays its moves for now');
@@ -1262,7 +1283,7 @@ export default class GameEngine {
 
     // Check the card's own requirements before spending it.
     if (type === 'yearOfPlenty') {
-      const picks = (details.resources || []).slice(0, 2);
+      const picks = Array.isArray(details?.resources) ? details.resources.slice(0, 2) : [];
       if (picks.length !== 2 || !picks.every((r) => RESOURCES.includes(r))) return false;
       const want = {};
       picks.forEach((r) => {
@@ -1270,7 +1291,7 @@ export default class GameEngine {
       });
       if (!hasResources(this.state.bank, want)) return false;
     }
-    if (type === 'monopoly' && !RESOURCES.includes(details.resource)) return false;
+    if (type === 'monopoly' && !RESOURCES.includes(details?.resource)) return false;
     if (type === 'roadBuilding' && (piecesLeft(this.state, playerId).road <= 0 || !legalRoadSpots(this.state, playerId).length)) {
       return false;
     }
