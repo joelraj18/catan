@@ -1183,8 +1183,18 @@
 
 .cost-card-list li > div {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
+}
+
+.cost-card-art {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
 }
 
 .cost-card-list strong {
@@ -1213,7 +1223,7 @@
 
 .cost-card-list .cost-chip {
   display: inline-flex;
-  padding: 3px;
+  padding: 4px;
   background: color-mix(in srgb, currentColor 12%, var(--surface));
   border-radius: 7px;
 }

@@ -4,6 +4,7 @@ import { RESOURCE_LABELS } from '../Game/catanBoard';
 import { COSTS, PIECE_LIMITS } from '../Game/catanRules';
 import { ResourceIcon } from '../Game/hexArt.jsx';
 import { PIECES, PIECE_ORDER, PieceMark } from '../Game/pieces.jsx';
+import { PieceIcon, ScrollIcon } from '../Game/tableIcons.jsx';
 
 const colourStories = {
   red: 'Bold expansion, for players who race for the Longest Road',
@@ -76,6 +77,9 @@ export default function PieceShelf({ onPlay }) {
             {builds.map((build) => (
               <li key={build.key}>
                 <div>
+                  <span className="cost-card-art" aria-hidden="true">
+                    {build.key === 'dev' ? <ScrollIcon size={20} /> : <PieceIcon kind={build.key} size={20} />}
+                  </span>
                   <strong>{build.name}</strong>
                   <span>{build.points}</span>
                 </div>
@@ -83,7 +87,7 @@ export default function PieceShelf({ onPlay }) {
                   {Object.entries(build.cost).map(([resource, count]) =>
                     Array.from({ length: count }, (_, i) => (
                       <span key={`${resource}${i}`} className={`cost-chip res-${resource}`} title={RESOURCE_LABELS[resource]}>
-                        <ResourceIcon resource={resource} size={13} />
+                        <ResourceIcon resource={resource} size={18} />
                       </span>
                     )),
                   )}
