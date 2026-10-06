@@ -19,7 +19,6 @@ import {
   piecesLeft,
   publicPoints,
   robberVictims,
-  totalPoints,
   vertexScore,
 } from './catanRules';
 
@@ -253,16 +252,8 @@ export const nextAction = (state, playerId, memory = {}) => {
 
   // A maritime trade that gets closer to the goal without spending its parts.
   if (goal && (memory.maritime || 0) < 3) {
-    const missing = missingFor(hand, goal.cost);
-    const want = Object.keys(missing).find((resource) => state.bank[resource] > 0);
-    if (want) {
-      const rates = maritimeRates(state, playerId);
-      const give = RESOURCES.filter((resource) => resource !== want)
-        .map((resource) => ({ resource, spare: hand[resource] - (goal.cost[resource] || 0) - rates[resource] }))
-        .filter((entry) => entry.spare >= 0)
-        .sort((a, b) => b.spare - a.spare)[0];
-      if (give) return { type: 'maritime', give: give.resource, get: want };
-    }
+    const trade = maritimeToward(state, playerId, goal);
+    if (trade) return trade;
   }
 
   // One friendly offer to the table each turn: a spare card for a needed one.
@@ -286,6 +277,26 @@ export const nextAction = (state, playerId, memory = {}) => {
 
   return null;
 };
+
+// A bank trade that brings the goal closer without spending its own parts.
+export const maritimeToward = (state, playerId, goal = chooseGoal(state, playerId)) => {
+  if (!goal) return null;
+  const hand = handOf(state, playerId);
+  const missing = missingFor(hand, goal.cost);
+  const want = Object.keys(missing).find((resource) => state.bank[resource] > 0);
+  if (!want) return null;
+  const rates = maritimeRates(state, playerId);
+  const give = RESOURCES.filter((resource) => resource !== want)
+    .map((resource) => ({ resource, spare: hand[resource] - (goal.cost[resource] || 0) - rates[resource] }))
+    .filter((entry) => entry.spare >= 0)
+    .sort((a, b) => b.spare - a.spare)[0];
+  return give ? { type: 'maritime', give: give.resource, get: want } : null;
+};
+
+export const bestSettlementSpot = (state, playerId) =>
+  best(legalSettlementSpots(state, playerId), (v) => settleScore(state, playerId, v));
+
+export const bestCitySpot = (state, playerId) => best(legalCitySpots(state, playerId), (v) => vertexScore(state, v));
 
 export const robberOnMe = (state, playerId) =>
   GEOMETRY.hexes[state.board.robber].vertices.some((vertexId) => state.buildings[vertexId]?.owner === playerId);
@@ -314,15 +325,17 @@ export const chooseDiscard = (state, playerId) => {
   return discard;
 };
 
-// Answers an offer from the player whose turn it is.
-export const acceptsTrade = (state, playerId, trade) => {
+// How much an offer is worth to this seat: what it would gain minus what it
+// would give up, valued against its next build. `blocked` when it cannot pay
+// or the partner shows 8 or more points (bots only count visible points).
+export const tradeValue = (state, playerId, trade) => {
   const receiving = trade.from === playerId ? trade.get : trade.give; // what the bot would get
   const paying = trade.from === playerId ? trade.give : trade.get;
   const partner = trade.from === playerId ? trade.to : trade.from;
   const hand = handOf(state, playerId);
 
-  if (!hasResources(hand, paying)) return false;
-  if (partner && totalPoints(state, partner) >= 8) return false;
+  if (!hasResources(hand, paying)) return { blocked: true, margin: -Infinity };
+  if (partner && publicPoints(state, partner) >= 8) return { blocked: true, margin: -Infinity };
 
   const goal = chooseGoal(state, playerId);
   const need = goal ? missingFor(hand, goal.cost) : {};
@@ -333,8 +346,11 @@ export const acceptsTrade = (state, playerId, trade) => {
 
   const gain = Object.entries(receiving).reduce((sum, [r, n]) => sum + value(r, false) * n, 0);
   const loss = Object.entries(paying).reduce((sum, [r, n]) => sum + value(r, true) * n, 0);
-  return gain > loss;
+  return { blocked: false, margin: gain - loss };
 };
+
+// Answers an offer from the player whose turn it is.
+export const acceptsTrade = (state, playerId, trade) => tradeValue(state, playerId, trade).margin > 0;
 
 export const chooseYearOfPlenty = (state, playerId) => {
   const goal = chooseGoal(state, playerId);

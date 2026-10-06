@@ -300,7 +300,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin: 0 0 14px;
+  margin: 18px 0 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
 }
 
 .dice-info-button {
@@ -2101,4 +2103,18 @@
 
 .turn-panel .gold-button {
   white-space: normal;
+}
+
+[data-theme='dark'] .catan-board-area {
+  box-shadow:
+    inset 0 0 0 1px rgba(57, 255, 136, 0.16),
+    0 0 36px rgba(57, 255, 136, 0.07),
+    var(--shadow-float);
+}
+
+.ai-usage {
+  color: var(--ink-quaternary);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
 }

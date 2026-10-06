@@ -1,7 +1,10 @@
 import {
+  cleanPlan,
   clearPremiumKey,
   hasPremiumKey,
   premiumAdvisor,
+  premiumUsage,
+  resetPremiumUsage,
   setPremiumKey,
   verifyPremiumKey,
 } from './premiumAi';
@@ -92,14 +95,14 @@ describe('premium AI', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('a decision sends the right request and parses the reply', async () => {
-    mockFetch(() => fakeResponse(200, message('{"choice":1,"comment":"Forest and sheep, lovely."}')));
+  test('a decision sends a small request with a cached prefix and parses the plan', async () => {
+    mockFetch(() => fakeResponse(200, message('{"plan":[1],"comment":"Forest and sheep, lovely."}')));
     setPremiumKey('sk-ant-test-key');
 
     const state = table();
     const answer = await premiumAdvisor({ kind: 'setup', playerId: 'p2', state, options: OPTIONS });
 
-    expect(answer).toEqual({ choice: 1, comment: 'Forest and sheep, lovely' });
+    expect(answer).toMatchObject({ plan: [1], choice: 1, comment: 'Forest and sheep, lovely' });
     expect(calls).toHaveLength(1);
     const [call] = calls;
     expect(call.url).toContain('https://api.anthropic.com/v1/messages');
@@ -110,27 +113,59 @@ describe('premium AI', () => {
     expect(call.body.fallbacks).toBe('default');
     expect(call.body.output_config.effort).toBe('low');
     expect(call.body.output_config.format.type).toBe('json_schema');
-    expect(call.body.output_config.format.schema.required).toEqual(['choice', 'comment']);
-    expect(call.body.messages[0].content).toContain('forest 5 + pasture 9');
+    expect(call.body.output_config.format.schema.required).toEqual(['plan', 'comment']);
+    // Rules and board are a stable, cached prefix; only the table state varies.
+    expect(call.body.system).toHaveLength(2);
+    expect(call.body.system[1].cache_control).toEqual({ type: 'ephemeral' });
+    expect(call.body.system[1].text).toContain('H9 desert');
+    expect(call.body.messages[0].content).toContain('1. Intersection 30: forest 5 + pasture 9');
     // The key never travels inside the prompt
     expect(JSON.stringify(call.body)).not.toContain('sk-ant-test-key');
   });
 
-  test('the prompt shows only the AI seat\'s own cards', async () => {
-    mockFetch(() => fakeResponse(200, message('{"choice":0,"comment":"Hmm"}')));
+  test('the prefix is identical across decisions so the cache is reused', async () => {
+    mockFetch(() => fakeResponse(200, message('{"plan":[0],"comment":"Hmm"}')));
     setPremiumKey('sk-ant-test-key');
     const state = table();
-    await premiumAdvisor({ kind: 'robber', playerId: 'p2', state, options: OPTIONS });
-    const context = JSON.parse(calls[0].body.messages[0].content.split('\n\n').slice(1).join('\n\n'));
-    expect(context.you.hand).toEqual(state.hands.p2);
-    expect(context.opponents.every((opponent) => typeof opponent.cards === 'number' && !opponent.hand)).toBe(true);
+    await premiumAdvisor({ kind: 'setup', playerId: 'p2', state, options: OPTIONS });
+    await premiumAdvisor({ kind: 'turn', playerId: 'p2', state, options: OPTIONS });
+    expect(calls[0].body.system).toEqual(calls[1].body.system);
+    expect(calls[0].body.output_config).toEqual(calls[1].body.output_config);
   });
 
-  test('an out of range choice becomes the first option', async () => {
-    mockFetch(() => fakeResponse(200, message('{"choice":7,"comment":"Bold"}')));
+  test('the prompt shows only the AI seat\'s own cards', async () => {
+    mockFetch(() => fakeResponse(200, message('{"plan":[0],"comment":"Hmm"}')));
+    setPremiumKey('sk-ant-test-key');
+    const state = table();
+    state.hands = { ...state.hands, p1: { brick: 7, lumber: 0, ore: 0, grain: 0, wool: 0 } };
+    await premiumAdvisor({ kind: 'robber', playerId: 'p2', state, options: OPTIONS });
+    const prompt = calls[0].body.messages[0].content;
+    const mine = state.hands.p2;
+    expect(prompt).toContain(`hand B${mine.brick} L${mine.lumber} O${mine.ore} G${mine.grain} W${mine.wool}`);
+    expect(prompt).toContain('Joel: 2 points | 7 cards');
+    expect(prompt).not.toContain('B7');
+  });
+
+  test('plans keep valid distinct options in order', async () => {
+    expect(cleanPlan([2, 2, 9, -1, 'x', 0, 1], 3)).toEqual([2, 0, 1]);
+    expect(cleanPlan(null, 3)).toEqual([]);
+    mockFetch(() => fakeResponse(200, message('{"plan":[7],"comment":"Bold"}')));
     setPremiumKey('sk-ant-test-key');
     const answer = await premiumAdvisor({ kind: 'turn', playerId: 'p2', state: table(), options: OPTIONS });
+    expect(answer.plan).toEqual([]);
     expect(answer.choice).toBe(0);
+  });
+
+  test('token use is counted per AI seat', async () => {
+    resetPremiumUsage();
+    mockFetch(() => fakeResponse(200, { ...message('{"plan":[0],"comment":"Hi"}'), usage: { input_tokens: 120, output_tokens: 30, cache_read_input_tokens: 700 } }));
+    setPremiumKey('sk-ant-test-key');
+    const state = table();
+    await premiumAdvisor({ kind: 'turn', playerId: 'p2', state, options: OPTIONS });
+    const answer = await premiumAdvisor({ kind: 'turn', playerId: 'p2', state, options: OPTIONS });
+    expect(premiumUsage('p2')).toEqual({ calls: 2, input: 240, output: 60, cached: 1400 });
+    expect(answer.usage.calls).toBe(2);
+    expect(premiumUsage('p3').calls).toBe(0);
   });
 
   test('a refusal falls back to the built in strategy', async () => {

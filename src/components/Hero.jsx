@@ -67,8 +67,6 @@ export default function Hero({ onCreateRoom, onExplore }) {
   return (
     <section className="hero" id="top" ref={heroRef} aria-labelledby="hero-heading">
       <div className="hero-copy">
-        <p className="hero-kicker">3 to 4 players</p>
-
         <h1 id="hero-heading" className="hero-title">
           Catan
         </h1>

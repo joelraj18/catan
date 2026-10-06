@@ -399,7 +399,7 @@ export default function RoomWaiting({ session, onLeave }) {
               <div className="premium-ai-head">
                 <div>
                   <p className="eyebrow">Premium AI opponents</p>
-                  <span>Opponents that reason about placements, the robber and trades with Claude, using your own API key</span>
+                  <span>Opponents that plan each turn with Claude using your own API key, about one short request per turn</span>
                 </div>
                 <button
                   type="button"

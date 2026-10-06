@@ -15,6 +15,35 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.hex-tile {
+  --glow: var(--terrain-desert);
+}
+
+.hex-tile--hills { --glow: var(--terrain-hills); }
+.hex-tile--forest { --glow: var(--terrain-forest); }
+.hex-tile--mountains { --glow: var(--terrain-mountains); }
+.hex-tile--fields { --glow: var(--terrain-fields); }
+.hex-tile--pasture { --glow: var(--terrain-pasture); }
+
+/* Light from the top left and a fine inner bevel give each tile depth */
+.hex-tile-shade,
+.hex-tile-bevel {
+  pointer-events: none;
+}
+
+.hex-tile-bevel {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.number-token-ring {
+  fill: none;
+  stroke: rgba(150, 120, 60, 0.35);
+  stroke-width: 0.8;
+}
+
 .hex-board-sea {
   stroke: rgba(255, 255, 255, 0.45);
   stroke-width: 3;
@@ -25,6 +54,7 @@
   stroke: #d8c287;
   stroke-width: 2;
   stroke-linejoin: round;
+  filter: drop-shadow(0 6px 10px rgba(20, 50, 70, 0.28));
 }
 
 .hex-tile-face {
@@ -166,9 +196,10 @@
 .harbor-pier {
   fill: none;
   stroke: #a5814e;
-  stroke-width: 3;
-  stroke-dasharray: 5 4;
+  stroke-width: 3.5;
+  stroke-dasharray: 9 4;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .harbor text {
@@ -285,16 +316,80 @@
   }
 }
 
-/* Dark theme: a moonlit island */
+/* Dark theme: a moonlit island with a faint neon edge. Glows are small and
+   low in opacity so the board stays calm. */
+
+[data-theme='dark'] .hex-board-sea {
+  stroke: rgba(57, 255, 136, 0.35);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 10px rgba(57, 255, 136, 0.18));
+}
 
 [data-theme='dark'] .hex-board-sand {
-  fill: #b8a678;
-  stroke: #9a8a5f;
+  fill: #a8976a;
+  stroke: rgba(120, 230, 255, 0.45);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 8px rgba(90, 210, 255, 0.28));
 }
 
 [data-theme='dark'] .hex-tile-face {
-  stroke: #c9bb8e;
-  filter: brightness(0.86);
+  stroke: color-mix(in srgb, var(--glow) 55%, #c9ffe0);
+  stroke-width: 2.4;
+  filter: brightness(0.92) saturate(1.12) drop-shadow(0 0 3px color-mix(in srgb, var(--glow) 55%, transparent));
+}
+
+[data-theme='dark'] .hex-tile-bevel {
+  stroke: color-mix(in srgb, var(--glow) 45%, rgba(255, 255, 255, 0.35));
+  stroke-opacity: 0.55;
+}
+
+[data-theme='dark'] .hex-tile--producing .hex-tile-face {
+  stroke: #eafff2;
+  stroke-width: 4;
+  filter: brightness(1.15) saturate(1.2) drop-shadow(0 0 10px color-mix(in srgb, var(--glow) 80%, white));
+}
+
+[data-theme='dark'] .number-token circle:first-child {
+  filter: drop-shadow(0 0 4px rgba(255, 240, 200, 0.35));
+}
+
+[data-theme='dark'] .harbor circle {
+  stroke: rgba(120, 230, 255, 0.8);
+  filter: drop-shadow(0 0 4px rgba(90, 210, 255, 0.45));
+}
+
+[data-theme='dark'] .road line:last-child,
+[data-theme='dark'] .building path {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35));
+}
+
+[data-theme='dark'] .spot--vertex {
+  stroke: var(--neon);
+  filter: drop-shadow(0 0 4px var(--neon));
+}
+
+[data-theme='dark'] .spot--edge {
+  stroke: color-mix(in srgb, var(--neon) 70%, white);
+  filter: drop-shadow(0 0 4px var(--neon));
+}
+
+[data-theme='dark'] .hex-tile--target .hex-tile-face {
+  stroke: var(--neon);
+}
+
+[data-theme='dark'] .robber path {
+  fill: #6b7079;
+  filter: drop-shadow(0 0 4px rgba(255, 90, 90, 0.45));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spot--vertex,
+  .spot--edge,
+  .hex-tile--target .hex-tile-face,
+  .building--upgradable path,
+  .robber {
+    animation: none;
+  }
 }
 
 [data-theme='dark'] .res-grain { color: #e8c04e; }

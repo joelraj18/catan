@@ -134,6 +134,7 @@ function NumberToken({ number, x, y, hot }) {
   return (
     <g className={`number-token ${hot ? 'number-token--hot' : ''}`} transform={`translate(${x} ${y})`}>
       <circle r="17" />
+      <circle r="14.5" className="number-token-ring" />
       <text y="3" textAnchor="middle" dominantBaseline="middle">
         {number}
       </text>
@@ -197,11 +198,18 @@ export default function HexBoard({
           <stop offset="100%" stopColor="var(--sea-deep)" />
         </radialGradient>
         {Object.keys(TERRAINS).map((terrain) => (
-          <radialGradient key={terrain} id={`t-${terrain}-${uid}`} cx="40%" cy="35%" r="75%">
-            <stop offset="0%" stopColor={`color-mix(in srgb, var(--terrain-${terrain}) 78%, white)`} />
-            <stop offset="100%" stopColor={`var(--terrain-${terrain})`} />
+          <radialGradient key={terrain} id={`t-${terrain}-${uid}`} cx="38%" cy="30%" r="80%">
+            <stop offset="0%" stopColor={`color-mix(in srgb, var(--terrain-${terrain}) 70%, white)`} />
+            <stop offset="55%" stopColor={`var(--terrain-${terrain})`} />
+            <stop offset="100%" stopColor={`color-mix(in srgb, var(--terrain-${terrain}) 82%, black)`} />
           </radialGradient>
         ))}
+        {/* Light from the top left, shade to the bottom right, over every tile */}
+        <linearGradient id={`shade-${uid}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.16" />
+        </linearGradient>
       </defs>
 
       <polygon
@@ -261,6 +269,8 @@ export default function HexBoard({
             <g transform={`translate(${px(hex.x)} ${px(hex.y)})`}>
               <TerrainMotif terrain={tile.terrain} />
             </g>
+            <polygon points={hexPoints(hex, 0.03)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(hex, 0.11)} className="hex-tile-bevel" />
             {tile.number && <NumberToken number={tile.number} x={px(hex.x)} y={px(hex.y) + 4} hot={tile.number === 6 || tile.number === 8} />}
           </g>
         );

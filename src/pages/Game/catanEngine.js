@@ -66,6 +66,10 @@ export const DEFAULT_TIMING = {
 const LOG_LIMIT = 50;
 const MAX_TRADES = 6;
 const BOT_TURN_STEPS = 24;
+// Most Claude calls one premium AI seat makes in a game; after that the
+// computer strategy plays the seat.
+export const AI_CALL_BUDGET = 40;
+const END_TURN = 'end-turn';
 const CANCELLED = Symbol('cancelled');
 
 // Cryptographically secure die roll with rejection sampling, so every face is
@@ -212,6 +216,7 @@ export const createInitialState = (players, { board = 'beginner', pickIndex = se
     rolling: false,
     busy: false,
     thinking: null, // id of a premium AI seat waiting on Claude
+    aiUsage: {}, // premium AI seat -> { calls, tokens }
     activity: 'Setting up the island',
     log: [],
     logCounter: 0,
@@ -542,13 +547,21 @@ export default class GameEngine {
             ? this.timing.robber
             : this.timing.turn;
 
-    this.set({ phaseEndsAt: Date.now() + length, phaseLength: length });
+    // The trade and build clock runs for the whole turn: playing a knight or
+    // Road Building part way through does not start it again.
+    let endsAt = Date.now() + length;
+    if (phase === 'actions' || phase === 'road-building') {
+      if (this.turnClock?.turn === this.state.turnCount) endsAt = this.turnClock.endsAt;
+      else this.turnClock = { turn: this.state.turnCount, endsAt };
+    }
+
+    this.set({ phaseEndsAt: endsAt, phaseLength: length });
     this.deadlineTimer = this.later(() => {
       if (this.phaseKey() !== key || this.state.gameOver) return;
       const late = this.waitingOn().filter((id) => !this.isAuto(id));
       late.forEach((id) => this.chat(`${this.nameOf(id)} ran out of time, the computer moves for them`));
       this.forceMoves(late);
-    }, length);
+    }, Math.max(0, endsAt - Date.now()));
   }
 
   async forceMoves(ids) {
@@ -695,55 +708,74 @@ export default class GameEngine {
       return;
     }
 
-    let action = Bot.nextAction(this.state, id, memory);
-    if (this.player(id)?.kind === 'ai' && action && action.type !== 'maritime' && action.type !== 'trade-propose') {
-      action = await this.decideTurn(id, action);
+    // A premium AI seat plans its whole trade and build phase in one call.
+    if (this.player(id)?.kind === 'ai' && !memory.planned) {
+      memory.planned = true;
+      memory.plan = await this.planTurn(id);
+      if (this.destroyed || this.state.turnPhase !== 'actions' || !this.isActive(id)) return;
     }
+
+    if (memory.plan?.length) {
+      const next = memory.plan.shift();
+      if (next === END_TURN) {
+        this.endTurn(id);
+        return;
+      }
+      if (!this.perform(id, next, memory)) memory.steps += 1;
+      return;
+    }
+
+    const action = Bot.nextAction(this.state, id, memory);
 
     if (!action) {
       this.endTurn(id);
       return;
     }
 
-    let ok = false;
+    if (!this.perform(id, action, memory)) memory.steps += 6;
+  }
+
+  // Carries out one move chosen by a computer or AI seat.
+  perform(id, action, memory = {}) {
     switch (action.type) {
       case 'build-city':
-        ok = this.buildCity(id, action.vertexId);
-        break;
+        return this.buildCity(id, action.vertexId);
       case 'place-settlement':
-        ok = this.placeSettlement(id, action.vertexId);
-        break;
+        return this.placeSettlement(id, action.vertexId);
       case 'place-road':
-        ok = this.placeRoad(id, action.edgeId);
-        break;
+        return this.placeRoad(id, action.edgeId);
       case 'buy-dev':
-        ok = this.buyDev(id);
-        break;
+        return this.buyDev(id);
       case 'play-dev':
-        ok = this.playDev(id, action.card, action);
-        break;
+        return this.playDev(id, action.card, action);
       case 'maritime':
-        memory.maritime += 1;
-        ok = this.maritime(id, action.give, action.get);
-        break;
+        memory.maritime = (memory.maritime || 0) + 1;
+        return this.maritime(id, action.give, action.get);
       case 'trade-propose':
         memory.offered = true;
-        ok = this.proposeTrade(id, action);
-        break;
+        return this.proposeTrade(id, action);
       default:
-        ok = false;
+        return false;
     }
-
-    if (!ok) memory.steps += 6;
   }
 
   // ---------------------------------------------------- premium advisor
 
-  // Asks a premium AI seat to choose between ranked options. Any failure,
-  // refusal or timeout falls back to the first (the computer's) choice.
+  // Asks a premium AI seat about ranked options and returns its plan as a
+  // list of option indexes, or null to use the computer's choice. Any
+  // failure, refusal, timeout or spent budget falls back.
   async consult(playerId, kind, options) {
     const player = this.player(playerId);
-    if (!this.advisor || !player || player.kind !== 'ai' || player.away || options.length < 2) return 0;
+    if (!this.advisor || !player || player.kind !== 'ai' || player.away || options.length < 2) return null;
+
+    const used = this.state.aiUsage?.[playerId]?.calls || 0;
+    if (used >= AI_CALL_BUDGET) {
+      if (used === AI_CALL_BUDGET) {
+        this.chat(`${player.name} has used its Claude budget for this game, the computer strategy plays on`);
+        this.set({ aiUsage: { ...this.state.aiUsage, [playerId]: { ...this.state.aiUsage[playerId], calls: used + 1 } } });
+      }
+      return null;
+    }
 
     this.set({ thinking: playerId });
     try {
@@ -752,20 +784,30 @@ export default class GameEngine {
         this.sleep(this.timing.advisor).then(() => null),
       ]);
       if (this.destroyed) throw CANCELLED;
-      if (!answer) return 0;
+      const calls = (this.state.aiUsage?.[playerId]?.calls || 0) + 1;
+      const tokens = answer?.usage ? answer.usage.input + answer.usage.output + answer.usage.cached : this.state.aiUsage?.[playerId]?.tokens || 0;
+      this.set({ aiUsage: { ...this.state.aiUsage, [playerId]: { calls, tokens } } });
+      if (!answer) return null;
       if (answer.comment) this.chat(answer.comment, playerId);
-      const choice = Number(answer.choice);
-      return Number.isInteger(choice) && choice >= 0 && choice < options.length ? choice : 0;
+      const plan = (Array.isArray(answer.plan) ? answer.plan : [answer.choice])
+        .map(Number)
+        .filter((index) => Number.isInteger(index) && index >= 0 && index < options.length);
+      return plan.length ? plan : null;
     } catch (error) {
       if (error === CANCELLED) throw error;
       if (!this.advisorFailed) {
         this.advisorFailed = true;
         this.chat('The premium AI could not be reached, the computer plays its moves for now');
       }
-      return 0;
+      return null;
     } finally {
       if (!this.destroyed) this.set({ thinking: null });
     }
+  }
+
+  async choose(playerId, kind, options) {
+    const plan = await this.consult(playerId, kind, options);
+    return plan ? plan[0] : 0;
   }
 
   async decideSetup(id) {
@@ -779,7 +821,7 @@ export default class GameEngine {
         })
         .join(' + ')}${this.state.board.harbors.find((h) => h.vertices.includes(vertexId)) ? ' (harbour)' : ''}`,
     }));
-    const choice = await this.consult(id, 'setup', options);
+    const choice = await this.choose(id, 'setup', options);
     return options[choice]?.vertexId ?? ranked[0]?.vertexId;
   }
 
@@ -795,34 +837,81 @@ export default class GameEngine {
         label: `${hex.terrain}${hex.number ? ` ${hex.number}` : ''} touching ${[...owners].map((o) => this.nameOf(o)).join(', ') || 'nobody'}`,
       };
     });
-    const choice = await this.consult(id, 'robber', options);
+    // Only a close call is worth asking about.
+    const close = ranked.length > 1 && ranked[0].score > 0 && ranked[1].score >= ranked[0].score * 0.8;
+    const choice = close ? await this.choose(id, 'robber', options) : 0;
     return options[choice]?.hexId ?? ranked[0].hexId;
   }
 
-  async decideTurn(id, suggested) {
+  // Every sensible move this turn, as options for one plan.
+  turnOptions(id) {
     const { state } = this;
     const hand = state.hands[id];
-    const options = [{ action: suggested, label: describeAction(suggested) }];
-    const add = (action) => {
-      if (!options.some((option) => describeAction(option.action) === describeAction(action))) {
-        options.push({ action, label: describeAction(action) });
-      }
-    };
-    const goal = Bot.chooseGoal(state, id);
-    if (goal?.type === 'city' && hasResources(hand, COSTS.city)) add({ type: 'build-city', vertexId: goal.vertexId });
+    const left = piecesLeft(state, id);
+    const options = [];
+    const add = (action) => options.push({ action, label: describeAction(action, state) });
+
+    if (hasResources(hand, COSTS.city) && left.city > 0) {
+      const vertexId = Bot.bestCitySpot(state, id);
+      if (vertexId !== null) add({ type: 'build-city', vertexId });
+    }
+    if (hasResources(hand, COSTS.settlement) && left.settlement > 0) {
+      const vertexId = Bot.bestSettlementSpot(state, id);
+      if (vertexId !== null) add({ type: 'place-settlement', vertexId });
+    }
+    if (hasResources(hand, COSTS.road) && left.road > 0) {
+      const edgeId = Bot.roadTowardSite(state, id) ?? legalRoadSpots(state, id)[0];
+      if (edgeId !== undefined && edgeId !== null) add({ type: 'place-road', edgeId });
+    }
     if (hasResources(hand, COSTS.dev) && state.devDeck.length) add({ type: 'buy-dev' });
-    options.push({ action: null, label: 'End the turn and keep the cards' });
-    const choice = await this.consult(id, 'turn', options);
-    return options[choice].action;
+
+    if (!state.devPlayedThisTurn) {
+      const ready = new Set(
+        (state.devCards[id] || []).filter((card) => card.boughtTurn !== state.turnCount).map((card) => card.type),
+      );
+      if (ready.has('knight')) add({ type: 'play-dev', card: 'knight' });
+      if (ready.has('roadBuilding') && legalRoadSpots(state, id).length) add({ type: 'play-dev', card: 'roadBuilding' });
+      if (ready.has('yearOfPlenty')) add({ type: 'play-dev', card: 'yearOfPlenty', resources: Bot.chooseYearOfPlenty(state, id) });
+      if (ready.has('monopoly')) add({ type: 'play-dev', card: 'monopoly', resource: Bot.chooseMonopoly(state, id) });
+    }
+
+    const trade = Bot.maritimeToward(state, id);
+    if (trade) add(trade);
+    return options;
+  }
+
+  // One Claude call per turn: the AI orders the moves it wants. With fewer
+  // than two real choices the computer just plays them, free.
+  async planTurn(id) {
+    const options = this.turnOptions(id);
+    if (options.length < 2) return null;
+    const end = { action: END_TURN, label: 'End the turn' };
+    const plan = await this.consult(id, 'turn', [...options, end]);
+    if (!plan) return null;
+    const steps = [];
+    for (const index of plan) {
+      const entry = index === options.length ? END_TURN : options[index].action;
+      steps.push(entry);
+      if (entry === END_TURN) break;
+    }
+    return steps;
   }
 
   async decideTrade(id, trade) {
-    const accept = Bot.acceptsTrade(this.state, id, trade);
-    if (this.player(id)?.kind !== 'ai') return accept;
+    const { blocked, margin } = Bot.tradeValue(this.state, id, trade);
+    const accept = !blocked && margin > 0;
+    if (this.player(id)?.kind !== 'ai' || blocked) return accept;
+    // Ask only about offers worth thinking over: a person's offer the
+    // computer cannot call clearly, or any offer from someone close to winning.
+    const proposer = trade.from === id ? trade.to : trade.from;
+    const nearWin = publicPoints(this.state, proposer) >= 7;
+    const unclearFromPerson = this.player(proposer)?.kind === 'human' && Math.abs(margin) < 0.8;
+    if (!nearWin && !unclearFromPerson) return accept;
+    const summary = describeTrade(this.state, trade, id);
     const options = accept
-      ? [{ label: 'Accept the offer' }, { label: 'Decline the offer' }]
-      : [{ label: 'Decline the offer' }, { label: 'Accept the offer' }];
-    const choice = await this.consult(id, 'trade', options.map((option) => ({ ...option, label: `${option.label}: ${describeTrade(this.state, trade, id)}` })));
+      ? [{ label: `Accept: ${summary}` }, { label: 'Decline' }]
+      : [{ label: 'Decline' }, { label: `Accept: ${summary}` }];
+    const choice = await this.choose(id, 'trade', options);
     return choice === 0 ? accept : !accept;
   }
 
@@ -1145,7 +1234,7 @@ export default class GameEngine {
     if (cards.length) {
       const resource = cards[this.pickIndex(cards.length)];
       this.move(victimId, playerId, { [resource]: 1 });
-      this.set({ lastSteal: { id: this.state.logCounter + 1, thief: playerId, victim: victimId, resource } });
+      this.set({ lastSteal: { id: this.state.logCounter + 1, turn: this.state.turnCount, thief: playerId, victim: victimId, resource } });
       this.note(`${this.nameOf(playerId)} stole a card from ${this.nameOf(victimId)}`, playerId);
     }
 
@@ -1402,8 +1491,17 @@ export default class GameEngine {
   // Every successful move ends here: a win is checked for the player whose
   // turn it is, then the next decision is armed.
   afterAction() {
+    this.pruneTrades();
     this.checkWin();
     if (!this.stepping) this.schedule();
+  }
+
+  // An offer whose maker no longer holds the cards is withdrawn at once,
+  // so nobody accepts a deal that cannot happen.
+  pruneTrades() {
+    const trades = this.state.trades || [];
+    const live = trades.filter((trade) => hasResources(this.state.hands[trade.from], trade.give));
+    if (live.length !== trades.length) this.set({ trades: live });
   }
 
   checkWin() {
@@ -1540,21 +1638,37 @@ export default class GameEngine {
 }
 
 // Short descriptions used for the premium AI's options.
-export const describeAction = (action) => {
+// Short descriptions used for the premium AI's options. With the state they
+// name the hexes a spot touches, so Claude can judge it without the map.
+const spotLabel = (state, vertexId) =>
+  state
+    ? `V${vertexId} (${GEOMETRY.vertices[vertexId].hexes
+        .map((hexId) => {
+          const hex = state.board.hexes[hexId];
+          return `${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`;
+        })
+        .join(' + ')})`
+    : `V${vertexId}`;
+
+export const describeAction = (action, state = null) => {
   if (!action) return 'End the turn';
   switch (action.type) {
     case 'build-city':
-      return `Upgrade the settlement at intersection ${action.vertexId} to a city`;
+      return `Upgrade your settlement at ${spotLabel(state, action.vertexId)} to a city`;
     case 'place-settlement':
-      return `Build a settlement at intersection ${action.vertexId}`;
-    case 'place-road':
-      return `Build a road on path ${action.edgeId}`;
+      return `Build a settlement at ${spotLabel(state, action.vertexId)}`;
+    case 'place-road': {
+      const [a, b] = GEOMETRY.edges[action.edgeId].vertices;
+      return `Build a road from V${a} to V${b}`;
+    }
     case 'buy-dev':
       return 'Buy a development card';
     case 'play-dev':
+      if (action.card === 'yearOfPlenty') return `Play Year of Plenty for ${(action.resources || []).join(' and ')}`;
+      if (action.card === 'monopoly') return `Play Monopoly on ${action.resource}`;
       return `Play ${DEV_CARDS[action.card]?.label || action.card}`;
     case 'maritime':
-      return `Trade with the bank: ${action.give} for ${action.get}`;
+      return `Trade with the bank: ${action.give} for 1 ${action.get}`;
     default:
       return action.type;
   }

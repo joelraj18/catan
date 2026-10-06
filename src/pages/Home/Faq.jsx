@@ -10,6 +10,10 @@ const questions = [
     a: 'Catan is played by 3 or 4 players. Fill any open seat with a computer opponent, or a premium AI opponent if you have a Claude API key',
   },
   {
+    q: 'How does the premium AI opponent work?',
+    a: 'The built in strategy lists the legal moves and Claude decides only where it matters: the two starting settlements, one plan per turn for what to build and in which order, close robber choices and trade offers that need judgment. Each request is small because the rules and board are cached for the whole game, the AI only sees its own cards, at most 40 requests are made per AI seat per game, and if Claude is unavailable the computer plays the move',
+  },
+  {
     q: 'Can friends join my room?',
     a: 'Yes, share your invite link or six character room code and friends anywhere join from the lobby, then chat with the table while you play',
   },

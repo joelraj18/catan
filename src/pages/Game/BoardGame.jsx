@@ -8,7 +8,7 @@ import { premiumAdvisor } from '../../services/premiumAi';
 import { transportKind } from '../../services/roomTransport';
 import { playSfx } from '../../services/sfx';
 import { RESOURCES, RESOURCE_LABELS } from './catanBoard';
-import GameEngine, { DEFAULT_TIMING, createInitialState } from './catanEngine';
+import GameEngine, { AI_CALL_BUDGET, DEFAULT_TIMING, createInitialState } from './catanEngine';
 import {
   COSTS,
   DEV_CARDS,
@@ -870,7 +870,7 @@ export default function BoardGame({
               </svg>
             </span>
             <p className="property-card-kicker">
-              {result.reason === 'agreed' ? `Ended by agreement after ${result.turns} turns` : `Victory on turn ${result.turns}`}
+              {result.reason === 'agreed' ? 'Ended by agreement' : `Victory with ${WINNING_POINTS} or more points`}
             </p>
             <h3 id="results-title">{headline}</h3>
             <p className="results-sub">Every point counts, hidden victory point cards are now revealed</p>
@@ -1025,7 +1025,7 @@ export default function BoardGame({
 
   const steal = view.lastSteal;
   const stealNote =
-    steal && steal.resource && (steal.thief === myPlayerId || steal.victim === myPlayerId)
+    steal && steal.resource && steal.turn === view.turnCount && (steal.thief === myPlayerId || steal.victim === myPlayerId)
       ? steal.thief === myPlayerId
         ? `You stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from ${nameOf(steal.victim)}`
         : `${nameOf(steal.thief)} stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from you`
@@ -1039,9 +1039,16 @@ export default function BoardGame({
         </button>
 
         <div className="round-indicator">
-          <span>{phase === 'setup' ? 'Set-up' : 'Turn'}</span>
-          <strong>{phase === 'setup' ? `${view.setup.step + 1}/${view.setup.order.length}` : view.turnCount}</strong>
-          <span>first to {WINNING_POINTS}</span>
+          {phase === 'setup' && view.setup ? (
+            <>
+              <span>Set-up</span>
+              <strong>{`${view.setup.step + 1}/${view.setup.order.length}`}</strong>
+              <span>·</span>
+            </>
+          ) : null}
+          <span>First to</span>
+          <strong>{WINNING_POINTS}</strong>
+          <span>victory points wins</span>
           <button
             type="button"
             className="match-info-button"
@@ -1117,7 +1124,16 @@ export default function BoardGame({
                         {player.name}
                         {player.id === myPlayerId && <em className="you-chip">You</em>}
                       </strong>
-                      <span>{view.thinking === player.id ? 'Thinking' : active ? 'Taking a turn' : kindLabel(player)}</span>
+                      <span>
+                        {view.thinking === player.id ? 'Asking Claude' : active ? 'Taking a turn' : kindLabel(player)}
+                        {player.kind === 'ai' && view.aiUsage?.[player.id] && (
+                          <em className="ai-usage" title="Claude calls and tokens this game">
+                            {' '}
+                            · {Math.min(view.aiUsage[player.id].calls, AI_CALL_BUDGET)}/{AI_CALL_BUDGET} calls ·{' '}
+                            {Math.round((view.aiUsage[player.id].tokens || 0) / 100) / 10}k tokens
+                          </em>
+                        )}
+                      </span>
                     </div>
 
                     <span className="catan-player-points" title="Victory points">

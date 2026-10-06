@@ -1,3 +1,4 @@
+import { AI_CALL_BUDGET } from '../pages/Game/catanEngine';
 import { PREMIUM_MODEL_LABEL, PREMIUM_PROVIDER } from '../services/premiumAi';
 
 // Explains exactly how a premium AI key is handled, so players can decide
@@ -39,6 +40,16 @@ export default function ApiKeyInfo({ onClose }) {
           <li>The field is masked and cleared the moment you press Use key</li>
           <li>The key is gone when you press Forget key, leave the room, reload or close the tab</li>
           <li>The code is open, see src/services/premiumAi.js in the Catan repository to check every line</li>
+        </ul>
+
+        <h4>How the AI opponent plays, and what it costs</h4>
+        <ul>
+          <li>The built in strategy ranks every legal move first, and Claude is only asked when a choice matters: its two starting settlements, one plan per turn for what to build or buy and in which order, the robber when the best hexes are close, and trade offers from people the computer cannot call clearly, or from anyone close to winning</li>
+          <li>Turns with nothing to decide, discards and simple moves play at once without a request</li>
+          <li>Each request is small: the rules and this game's board are sent once and then read from the prompt cache, followed by a few lines of the current position and a numbered list of options</li>
+          <li>It sees only its own cards, other players appear as card counts and visible points</li>
+          <li>Each AI seat makes at most {AI_CALL_BUDGET} requests per game, and its calls and tokens show under its name at the table</li>
+          <li>If Claude is slow, refuses or runs out of budget, the computer plays that move, so the game never waits</li>
         </ul>
 
         <h4>Good habits for any key</h4>

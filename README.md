@@ -14,6 +14,15 @@ Catan in the browser: settle the island, trade resources and build your way to 1
 
 Each player only receives their own hand and development cards; others see counts. Dice use the browser's cryptographic random generator.
 
+## How the premium AI plays
+
+Premium AI seats use the host's own Claude API key, held only in the tab's memory, and are built to make few, small requests:
+
+- **The heuristic ranks, Claude decides.** The computer strategy lists every legal move, best first. Claude is asked only where it changes the game: the two starting settlements, **one plan per turn** (an ordered list of builds, card plays and bank trades, then end turn), the robber when the best hexes score within 20% of each other, and trade offers from a person when their value is unclear, or from anyone close to winning. Everything else, including turns with fewer than two real options, is played by the strategy for free.
+- **Small, cached prompts.** The rules and the game's board form a fixed system prefix with a cache breakpoint, so after the first request they are read from the prompt cache. Each request then adds only a few compact lines (own hand, opponents' visible points and card counts, robber, last events) and a numbered option list. One JSON schema (`{plan, comment}`) is used for every decision at low effort, so the prefix never changes.
+- **Hidden information stays hidden.** The prompt is built from the seat's redacted view: its own cards only.
+- **Budget and fallback.** Each AI seat makes at most 40 requests per game (`AI_CALL_BUDGET`), and its calls and tokens appear under its name. Errors, refusals, timeouts or a spent budget fall back to the computer's choice.
+
 ## Code map
 
 - `src/pages/Game/catanBoard.js` hex geometry (19 hexes, 54 intersections, 72 paths), the beginners' map and the random map

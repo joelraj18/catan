@@ -72,13 +72,6 @@
   animation-delay: 0.24s;
 }
 
-.hero-kicker {
-  margin-bottom: 6px;
-  color: var(--sage-600);
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
 .hero-title {
   padding-bottom: 0.06em;
   color: transparent;
