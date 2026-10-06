@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { memo, useId } from 'react';
 import { GEOMETRY, PIPS, RESOURCE_LABELS, TERRAINS } from './catanBoard';
 import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
 import './hex-board.css';
@@ -133,7 +133,8 @@ function NumberToken({ number, x, y, hot }) {
   const pips = PIPS[number] || 0;
   return (
     <g className={`number-token ${hot ? 'number-token--hot' : ''}`} transform={`translate(${x} ${y})`}>
-      <circle r="17" />
+      <circle r="17" cy="2" className="number-token-shadow" />
+      <circle r="17" className="number-token-face" />
       <circle r="14.5" className="number-token-ring" />
       <text y="3" textAnchor="middle" dominantBaseline="middle">
         {number}
@@ -162,7 +163,7 @@ function Robber({ x, y }) {
  *   rolled?: number|null, compact?: boolean, className?: string, label?: string,
  * }} props
  */
-export default function HexBoard({
+function HexBoard({
   board,
   buildings = {},
   roads = {},
@@ -204,6 +205,9 @@ export default function HexBoard({
             <stop offset="100%" stopColor={`color-mix(in srgb, var(--terrain-${terrain}) 82%, black)`} />
           </radialGradient>
         ))}
+        <filter id={`glow-${uid}`} x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="4" />
+        </filter>
         {/* Light from the top left, shade to the bottom right, over every tile */}
         <linearGradient id={`shade-${uid}`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
@@ -249,6 +253,19 @@ export default function HexBoard({
           </g>
         );
       })}
+
+      {/* Neon edge for the dark theme: all outlines blurred once */}
+      <g className="hex-glow" filter={`url(#glow-${uid})`} aria-hidden="true">
+        {board.hexes.map((tile) => (
+          <polygon
+            key={tile.id}
+            points={hexPoints(GEOMETRY.hexes[tile.id], 0.02)}
+            fill="none"
+            stroke={`var(--terrain-${tile.terrain})`}
+            strokeWidth="7"
+          />
+        ))}
+      </g>
 
       {/* Terrain */}
       {board.hexes.map((tile) => {
@@ -335,6 +352,7 @@ export default function HexBoard({
             aria-label={upgradable ? 'Upgrade to a city' : undefined}
             onKeyDown={upgradable && onVertex ? (event) => (event.key === 'Enter' || event.key === ' ') && onVertex(Number(vertexId)) : undefined}
           >
+            <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
             <path d={city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
           </g>
         );
@@ -361,3 +379,6 @@ export default function HexBoard({
     </svg>
   );
 }
+
+// Redrawn only when its own props change, not on every tick of the game screen.
+export default memo(HexBoard);

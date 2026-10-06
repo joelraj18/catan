@@ -13,6 +13,15 @@
   height: auto;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  /* Its own layer, so scrolling and sheets never repaint the island */
+  transform: translateZ(0);
+  contain: paint;
+}
+
+/* The dark theme's neon edge: every tile outline, blurred once, in one layer */
+.hex-glow {
+  display: none;
+  pointer-events: none;
 }
 
 .hex-tile {
@@ -61,13 +70,12 @@
   stroke: #f3e7bf;
   stroke-width: 3;
   stroke-linejoin: round;
-  transition: filter 0.3s var(--ease);
 }
 
 .hex-tile--producing .hex-tile-face {
   stroke: #fff6c9;
-  stroke-width: 5;
-  filter: brightness(1.12) drop-shadow(0 0 10px rgba(255, 236, 150, 0.9));
+  stroke-width: 6;
+  filter: brightness(1.12);
 }
 
 .hex-tile--target {
@@ -79,19 +87,12 @@
   stroke: #ffffff;
   stroke-dasharray: 10 6;
   stroke-width: 4;
-  animation: targetDash 1.2s linear infinite;
 }
 
 .hex-tile--target:hover .hex-tile-face,
 .hex-tile--target:focus-visible .hex-tile-face {
   filter: brightness(1.15);
   stroke: var(--accent);
-}
-
-@keyframes targetDash {
-  to {
-    stroke-dashoffset: -32;
-  }
 }
 
 /* Terrain motifs: drawn quietly, so numbers stay the loudest thing */
@@ -164,11 +165,14 @@
   stroke-linecap: round;
 }
 
-.number-token circle:first-child {
+.number-token-shadow {
+  fill: rgba(0, 0, 0, 0.22);
+}
+
+.number-token-face {
   fill: #f8f0d8;
   stroke: #c8b27a;
   stroke-width: 1.5;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
 }
 
 .number-token text {
@@ -246,24 +250,21 @@
   animation: pieceIn 0.35s var(--ease-out);
 }
 
-.building path {
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+.building-shadow {
+  fill: rgba(0, 0, 0, 0.28);
 }
 
 .building--upgradable {
   cursor: pointer;
 }
 
-.building--upgradable path {
+.building--upgradable path:last-child {
   stroke: #ffffff;
-  stroke-width: 2.4;
-  animation: upgradePulse 1.1s ease-in-out infinite alternate;
+  stroke-width: 2.6;
 }
 
-@keyframes upgradePulse {
-  to {
-    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.95));
-  }
+.building--upgradable {
+  animation: spotFade 0.9s ease-in-out infinite alternate;
 }
 
 @keyframes pieceIn {
@@ -278,19 +279,17 @@
 }
 
 .spot--vertex {
-  fill: rgba(255, 255, 255, 0.9);
+  fill: rgba(255, 255, 255, 0.92);
   stroke: var(--accent);
   stroke-width: 3;
-  animation: spotPulse 1s ease-in-out infinite alternate;
-  transform-box: fill-box;
-  transform-origin: center;
+  animation: spotFade 0.9s ease-in-out infinite alternate;
 }
 
 .spot--edge {
   stroke: rgba(255, 255, 255, 0.85);
   stroke-width: 9;
   stroke-linecap: round;
-  animation: spotFade 1s ease-in-out infinite alternate;
+  animation: spotFade 0.9s ease-in-out infinite alternate;
 }
 
 .spot--vertex:hover,
@@ -304,15 +303,10 @@
   stroke: var(--accent);
 }
 
-@keyframes spotPulse {
-  to {
-    transform: scale(1.25);
-  }
-}
-
+/* Only opacity animates on the island: the cheapest thing to redraw */
 @keyframes spotFade {
   to {
-    stroke-opacity: 0.55;
+    opacity: 0.55;
   }
 }
 
@@ -322,20 +316,32 @@
 [data-theme='dark'] .hex-board-sea {
   stroke: rgba(57, 255, 136, 0.35);
   stroke-width: 2;
-  filter: drop-shadow(0 0 10px rgba(57, 255, 136, 0.18));
+}
+
+[data-theme='dark'] .hex-glow {
+  display: inline;
+  opacity: 0.75;
 }
 
 [data-theme='dark'] .hex-board-sand {
   fill: #a8976a;
   stroke: rgba(120, 230, 255, 0.45);
   stroke-width: 2.5;
-  filter: drop-shadow(0 0 8px rgba(90, 210, 255, 0.28));
+  filter: none;
+}
+
+[data-theme='dark'] .hex-board {
+  --terrain-hills: #b65a32;
+  --terrain-forest: #2f7038;
+  --terrain-mountains: #7a828c;
+  --terrain-fields: #d4a935;
+  --terrain-pasture: #86bd52;
+  --terrain-desert: #cdb683;
 }
 
 [data-theme='dark'] .hex-tile-face {
   stroke: color-mix(in srgb, var(--glow) 55%, #c9ffe0);
   stroke-width: 2.4;
-  filter: brightness(0.92) saturate(1.12) drop-shadow(0 0 3px color-mix(in srgb, var(--glow) 55%, transparent));
 }
 
 [data-theme='dark'] .hex-tile-bevel {
@@ -345,32 +351,21 @@
 
 [data-theme='dark'] .hex-tile--producing .hex-tile-face {
   stroke: #eafff2;
-  stroke-width: 4;
-  filter: brightness(1.15) saturate(1.2) drop-shadow(0 0 10px color-mix(in srgb, var(--glow) 80%, white));
-}
-
-[data-theme='dark'] .number-token circle:first-child {
-  filter: drop-shadow(0 0 4px rgba(255, 240, 200, 0.35));
+  stroke-width: 5;
+  filter: brightness(1.15);
 }
 
 [data-theme='dark'] .harbor circle {
-  stroke: rgba(120, 230, 255, 0.8);
-  filter: drop-shadow(0 0 4px rgba(90, 210, 255, 0.45));
-}
-
-[data-theme='dark'] .road line:last-child,
-[data-theme='dark'] .building path {
-  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35));
+  stroke: rgba(120, 230, 255, 0.85);
+  stroke-width: 2.4;
 }
 
 [data-theme='dark'] .spot--vertex {
   stroke: var(--neon);
-  filter: drop-shadow(0 0 4px var(--neon));
 }
 
 [data-theme='dark'] .spot--edge {
   stroke: color-mix(in srgb, var(--neon) 70%, white);
-  filter: drop-shadow(0 0 4px var(--neon));
 }
 
 [data-theme='dark'] .hex-tile--target .hex-tile-face {
@@ -379,7 +374,7 @@
 
 [data-theme='dark'] .robber path {
   fill: #6b7079;
-  filter: drop-shadow(0 0 4px rgba(255, 90, 90, 0.45));
+  stroke: rgba(255, 120, 120, 0.7);
 }
 
 @media (prefers-reduced-motion: reduce) {

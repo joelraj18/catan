@@ -216,10 +216,8 @@
   display: grid;
   padding: 20px;
   place-items: center;
-  background: rgba(29, 33, 24, 0.32);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  animation: fadeIn 0.3s var(--ease);
+  background: rgba(22, 26, 18, 0.46);
+  animation: fadeIn 0.16s ease-out;
 }
 
 .key-info-sheet {

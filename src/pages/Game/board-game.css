@@ -21,10 +21,11 @@
   align-items: center;
   height: 52px;
   padding: 0 max(22px, calc((100vw - 1480px) / 2));
-  background: rgba(250, 251, 247, 0.72);
+  background: rgba(250, 251, 247, 0.9);
   border-bottom: 1px solid var(--hairline);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  /* A light blur: the board scrolls under this bar */
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 
 .board-topbar .lobby-brand {
@@ -125,8 +126,8 @@
 
 .player-list {
   display: grid;
-  gap: 6px;
-  margin: 4px 0 20px;
+  gap: 8px;
+  margin: 8px 0 14px;
 }
 
 .game-player {
@@ -330,10 +331,16 @@
   display: grid;
   padding: 20px;
   place-items: center;
-  background: rgba(29, 33, 24, 0.32);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  animation: fadeIn 0.3s var(--ease);
+  /* A plain dim, no backdrop blur: blurring the board behind a sheet makes
+     every frame of the opening animation redraw the whole page. */
+  background: rgba(22, 26, 18, 0.46);
+  animation: overlayIn 0.16s ease-out;
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
 }
 
 .property-card {
@@ -344,7 +351,8 @@
   background: var(--surface);
   border-radius: 26px;
   box-shadow: 0 30px 70px rgba(20, 26, 14, 0.28);
-  animation: sheetUp 0.5s var(--ease-out);
+  animation: sheetUp 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  contain: layout paint;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--sage-300) transparent;
@@ -353,7 +361,7 @@
 @keyframes sheetUp {
   from {
     opacity: 0;
-    transform: translateY(28px) scale(0.98);
+    transform: translate3d(0, 16px, 0);
   }
 
   to {
@@ -367,10 +375,8 @@
   top: 0;
   z-index: 2;
   padding: 26px 64px 18px 28px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--surface);
   border-bottom: 1px solid var(--hairline);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .property-card-kicker {
@@ -581,15 +587,19 @@
     overflow: hidden;
   }
 
+  /* The table comes first: it may take most of the column, chat and the
+     log share the rest */
   .board-side .player-panel {
-    flex: 0 0 auto;
-    max-height: 42%;
+    flex: 0 1 auto;
+    max-height: 64%;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
 
   .board-side .chat-panel {
     flex: 1 1 0;
-    min-height: 170px;
+    min-height: 150px;
   }
 
   .board-side .chat-panel--compact .chat-list {
@@ -600,7 +610,7 @@
 
   .board-side .activity-log {
     flex: 1 1 0;
-    min-height: 140px;
+    min-height: 120px;
   }
 
   .turn-panel {
@@ -1138,6 +1148,8 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: content;
   list-style: none;
   scrollbar-width: thin;
 }
@@ -2117,4 +2129,349 @@
   font-size: 0.7rem;
   font-style: normal;
   font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* The table: one card per seat with coloured, illustrated tags       */
+/* ------------------------------------------------------------------ */
+
+.player-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.player-panel-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  color: #8a5a07;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #fbefd2;
+  border-radius: var(--radius-pill);
+}
+
+.table-icon {
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.seat-card {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px 9px 12px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  transition:
+    box-shadow 0.25s var(--ease),
+    background-color 0.25s var(--ease);
+}
+
+.seat-card::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 4px;
+  content: '';
+  background: var(--seat);
+  border-radius: 0 4px 4px 0;
+}
+
+.seat-card--active {
+  background: color-mix(in srgb, var(--seat) 7%, var(--surface));
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--seat) 65%, transparent),
+    0 6px 18px color-mix(in srgb, var(--seat) 14%, transparent);
+}
+
+.seat-card--away {
+  opacity: 0.72;
+}
+
+.seat-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.seat-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  background: color-mix(in srgb, var(--seat) 10%, var(--surface));
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--seat) 55%, transparent);
+}
+
+.seat-avatar .piece-mark {
+  width: 58%;
+  height: 58%;
+}
+
+.seat-card-name {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.seat-card-name strong {
+  overflow: hidden;
+  color: var(--seat);
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.seat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 2px 5px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.4;
+  border-radius: var(--radius-pill);
+}
+
+.seat-tag--you {
+  padding: 2px 7px;
+  color: #ffffff;
+  background: var(--seat);
+}
+
+.seat-tag--human { color: #2f5d36; background: #e1f0df; }
+.seat-tag--bot { color: #2e4a78; background: #e3ebf8; }
+.seat-tag--ai { color: #8a3a17; background: #fbe3d6; }
+.seat-tag--away { color: #5d636b; background: #eceef0; }
+
+.seat-tag--status {
+  padding: 2px 7px;
+}
+
+.seat-tag--turn {
+  color: #6b4b0c;
+  background: #fbefd2;
+}
+
+.seat-tag--alert {
+  color: #8e2219;
+  background: #fbe1de;
+}
+
+.seat-tag--thinking {
+  color: #8a3a17;
+  background: #fbe3d6;
+  animation: thinkingFade 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes thinkingFade {
+  to {
+    opacity: 0.55;
+  }
+}
+
+/* Victory points: a medal whose ring fills toward the goal */
+.vp-medal {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-content: center;
+  justify-items: center;
+  color: var(--seat);
+  line-height: 1;
+}
+
+.vp-medal svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.vp-medal-track {
+  fill: color-mix(in srgb, var(--seat) 8%, var(--surface));
+  stroke: color-mix(in srgb, var(--seat) 16%, transparent);
+  stroke-width: 3.5;
+}
+
+.vp-medal-fill {
+  fill: none;
+  stroke: var(--seat);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: calc(var(--vp) * 100) 100;
+  transition: stroke-dasharray 0.6s var(--ease-out);
+}
+
+.vp-medal strong {
+  position: relative;
+  font-size: 0.98rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.vp-medal span {
+  position: relative;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.stat-tags {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stat-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 4px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  border-radius: 9px;
+}
+
+/* The word is for screen readers; the icon and tooltip say it on screen */
+.stat-tag em {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.stat-tag--cards { background: #fdf3da; color: #6b4b0c; }
+.stat-tag--dev { background: #f1eafd; color: #4c2c86; }
+.stat-tag--knights { background: #fbe6e3; color: #7d1f16; }
+.stat-tag--road { background: #f4ebdf; color: #5b3d22; }
+
+.seat-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pieces-left {
+  display: inline-flex;
+  gap: 7px;
+  margin-right: auto;
+  color: color-mix(in srgb, var(--seat) 75%, var(--ink));
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.pieces-left > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.award-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  color: #6b4b0c;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #fdf0c8, #f6dc93);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px rgba(166, 120, 20, 0.35);
+}
+
+.seat-card .ai-usage {
+  margin: -4px 0 0;
+}
+
+.bank-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.bank-row-label {
+  margin-right: 2px;
+  color: var(--ink-tertiary);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.bank-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 2px 5px;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  background: color-mix(in srgb, currentColor 11%, var(--surface));
+  border-radius: var(--radius-pill);
+}
+
+.bank-chip--dev {
+  color: #4c2c86;
+}
+
+[data-theme='dark'] .player-panel-goal,
+[data-theme='dark'] .seat-tag--turn,
+[data-theme='dark'] .award-pill {
+  color: #f6dc93;
+  background: rgba(246, 220, 147, 0.14);
+  box-shadow: none;
+}
+
+[data-theme='dark'] .seat-tag--human { color: #a9dfa9; background: rgba(120, 200, 120, 0.14); }
+[data-theme='dark'] .seat-tag--bot { color: #a8c4f2; background: rgba(110, 150, 230, 0.16); }
+[data-theme='dark'] .seat-tag--ai,
+[data-theme='dark'] .seat-tag--thinking { color: #f5b393; background: rgba(232, 131, 90, 0.16); }
+[data-theme='dark'] .seat-tag--away { color: #b3b9c0; background: rgba(170, 176, 184, 0.14); }
+[data-theme='dark'] .seat-tag--alert { color: #ffb0a8; background: rgba(226, 87, 76, 0.18); }
+[data-theme='dark'] .stat-tag--cards { background: rgba(243, 201, 104, 0.13); color: #f6dc93; }
+[data-theme='dark'] .stat-tag--dev { background: rgba(155, 123, 216, 0.17); color: #d6c2fb; }
+[data-theme='dark'] .stat-tag--knights { background: rgba(226, 87, 76, 0.15); color: #ffb0a8; }
+[data-theme='dark'] .stat-tag--road { background: rgba(201, 160, 106, 0.15); color: #e6c9a0; }
+[data-theme='dark'] .bank-chip--dev { color: #d6c2fb; }
+[data-theme='dark'] .seat-card--active {
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--seat) 70%, transparent),
+    0 0 18px color-mix(in srgb, var(--seat) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-tag--thinking,
+  .vp-medal-fill {
+    animation: none;
+    transition: none;
+  }
 }

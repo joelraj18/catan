@@ -20,8 +20,8 @@
   padding: 0 var(--gutter);
   background: rgba(250, 251, 247, 0.72);
   border-bottom: 1px solid var(--hairline);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 
 .waiting-topbar .lobby-brand {

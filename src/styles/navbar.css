@@ -81,16 +81,15 @@
   background: var(--canvas);
   border-bottom: 1px solid transparent;
   transition:
-    background 0.5s var(--ease),
-    border-color 0.5s var(--ease),
-    backdrop-filter 0.5s var(--ease);
+    background 0.3s var(--ease),
+    border-color 0.3s var(--ease);
 }
 
 .local-nav--stuck {
-  background: color-mix(in srgb, var(--canvas) 74%, transparent);
+  background: color-mix(in srgb, var(--canvas) 88%, transparent);
   border-bottom-color: var(--hairline);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 
 .local-nav-inner {
