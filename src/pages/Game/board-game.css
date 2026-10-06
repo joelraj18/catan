@@ -2544,3 +2544,183 @@
     transition: none;
   }
 }
+
+/* Side notes: what just happened to you, and offers waiting on your answer */
+
+.game-toasts {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(330px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.game-toast {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px 12px 16px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-left: 4px solid var(--toast-tone, var(--accent));
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(16, 24, 20, 0.18);
+  pointer-events: auto;
+  animation: toastIn 0.32s var(--ease-out) both;
+}
+
+.game-toast--leaving {
+  animation: toastOut 0.24s var(--ease) forwards;
+}
+
+.game-toast--gain {
+  --toast-tone: #2f9e5b;
+}
+
+.game-toast--loss {
+  --toast-tone: #d1503f;
+}
+
+.game-toast--trade {
+  --toast-tone: #3d7be0;
+}
+
+.game-toast--info {
+  --toast-tone: var(--ink-quaternary);
+}
+
+.game-toast--offer {
+  --toast-tone: #d99a1e;
+}
+
+.game-toast-title {
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.game-toast-text {
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.game-toast-swap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--ink-tertiary);
+  font-size: 0.74rem;
+}
+
+.toast-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.toast-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 2px 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 999px;
+}
+
+.game-toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.game-toast-actions .property-action-btn {
+  min-height: 34px;
+  padding: 6px 14px;
+}
+
+.game-toast-time {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: var(--hairline);
+  border-radius: 3px;
+}
+
+.game-toast-time > span {
+  display: block;
+  height: 100%;
+  background: var(--toast-tone, var(--accent));
+  transform-origin: left center;
+  animation: toastTime linear forwards;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateX(24px) scale(0.98);
+  }
+}
+
+@keyframes toastTime {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Phones: the notes sit at the top, under the bar, clear of the hand */
+@media (max-width: 620px) {
+  .game-toasts {
+    top: 64px;
+    right: 16px;
+    bottom: auto;
+  }
+}
+
+/* Chat in the side column: the box keeps its whole form inside its border
+   at any window height (125% and 150% display scaling make short windows),
+   and the column scrolls rather than clipping when there is no room. */
+@media (min-width: 1101px) {
+  .board-side {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .board-side .chat-panel {
+    flex: 1 1 0;
+    min-height: 190px;
+    overflow: hidden;
+  }
+
+  .board-side .chat-panel--compact .chat-list {
+    min-height: 48px;
+  }
+
+  .board-side .chat-panel .chat-form {
+    flex: 0 0 auto;
+  }
+
+}

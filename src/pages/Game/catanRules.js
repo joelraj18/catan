@@ -368,6 +368,17 @@ const seatsFor = (players, viewerId) => {
   return views.get(viewerId);
 };
 
+// The event feed one seat may see: a stolen card shows only to the thief and
+// the victim, and a discard shows only its size to everyone else.
+const eventsFor = (state, viewerId) => {
+  if (!Array.isArray(state.events) || state.gameOver) return state.events;
+  return state.events.map((event) => {
+    if (event.type === 'steal' && event.actor !== viewerId && event.victim !== viewerId) return { ...event, resource: null };
+    if (event.type === 'discard' && event.actor !== viewerId) return { ...event, bundle: null };
+    return event;
+  });
+};
+
 // What one seat may see: their own hand and development cards, and only the
 // counts of everyone else's. The deck shows only how many cards are left.
 export const redactFor = (state, viewerId) => {
@@ -396,6 +407,7 @@ export const redactFor = (state, viewerId) => {
     hands,
     devCards,
     lastSteal,
+    events: eventsFor(state, viewerId),
     devDeck: Array.isArray(state.devDeck) ? state.devDeck.length : state.devDeck,
     redacted: true,
   };

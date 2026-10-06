@@ -60,10 +60,12 @@ export const DEFAULT_TIMING = {
   robber: 60000, // to move the robber and pick who to rob
   turn: 240000, // the trade and build phase of a person's turn
   tradeWait: 9000, // a computer's offer to the table stays open this long
+  acceptWindow: 2500, // after a first yes to an open offer, others may still say yes this long
   advisor: 15000, // premium AI must answer within this
 };
 
 const LOG_LIMIT = 50;
+const EVENT_LIMIT = 30;
 const MAX_TRADES = 6;
 const BOT_TURN_STEPS = 24;
 // Most Claude calls one premium AI seat makes in a game; after that the
@@ -221,6 +223,10 @@ export const createInitialState = (players, { board = 'beginner', pickIndex = se
     log: [],
     logCounter: 0,
     lastSteal: null, // { id, thief, victim, resource } — only the two of them see the resource
+    // What just happened, as data the board can animate and announce:
+    // { id, type, turn, actor, ... } newest last; see event() for the types.
+    events: [],
+    eventCounter: 0,
     trades: [], // open offers in this turn's trade phase
     tradeCounter: 0,
     endVote: null, // { proposerId, agreed: [ids], passed }
@@ -308,6 +314,8 @@ export default class GameEngine {
       sfx: null,
       log: Array.isArray(saved.log) ? saved.log : [],
       logCounter: saved.logCounter || 0,
+      events: Array.isArray(saved.events) ? saved.events : [],
+      eventCounter: saved.eventCounter || 0,
     };
   }
 
@@ -396,6 +404,15 @@ export default class GameEngine {
 
   note(text, playerId = null, patch = {}) {
     this.set({ ...patch, ...this.record(text, playerId) });
+  }
+
+  // Records one thing that happened, for animations and the side notes:
+  // roll, produce, build, buyDev, playDev, yop, monopoly, steal, discard,
+  // robber, trade, maritime, win. Who may see what is settled in redactFor.
+  event(type, fields = {}) {
+    const eventCounter = (this.state.eventCounter || 0) + 1;
+    const entry = { id: eventCounter, type, turn: this.state.turnCount, ...fields };
+    this.set({ events: [...(this.state.events || []), entry].slice(-EVENT_LIMIT), eventCounter });
   }
 
   sound(key) {
@@ -958,6 +975,7 @@ export default class GameEngine {
       `${this.nameOf(playerId)} founded a settlement`,
       playerId,
     );
+    this.event('build', { actor: playerId, piece: 'settlement', at: vertexId, free: true });
 
     if (second) {
       const start = {};
@@ -967,6 +985,7 @@ export default class GameEngine {
       if (bundleSize(start)) {
         this.give(playerId, start);
         this.note(`${this.nameOf(playerId)} collected ${listResources(start)}`, playerId);
+        this.event('produce', { gains: { [playerId]: start }, hexes: GEOMETRY.vertices[vertexId].hexes });
       }
     }
 
@@ -981,6 +1000,7 @@ export default class GameEngine {
     if (!canPlaceRoad(this.state, playerId, edgeId, { fromVertex: setup.vertexId })) return false;
 
     this.setBoard({ roads: { ...this.state.roads, [edgeId]: playerId } });
+    this.event('build', { actor: playerId, piece: 'road', at: edgeId, free: true });
 
     const step = setup.step + 1;
     if (step >= setup.order.length) {
@@ -1023,6 +1043,7 @@ export default class GameEngine {
       `${this.nameOf(playerId)} built a settlement`,
       playerId,
     );
+    this.event('build', { actor: playerId, piece: 'settlement', at: vertexId, paid: COSTS.settlement });
     this.sound('build');
     this.afterAction();
     return true;
@@ -1042,6 +1063,7 @@ export default class GameEngine {
         `${this.nameOf(playerId)} placed a free road`,
         playerId,
       );
+      this.event('build', { actor: playerId, piece: 'road', at: edgeId, free: true });
       this.sound('build');
       if (remaining <= 0 || !legalRoadSpots(this.state, playerId).length) this.finishRoadBuilding();
       this.afterAction();
@@ -1054,6 +1076,7 @@ export default class GameEngine {
 
     this.pay(playerId, COSTS.road);
     this.setBoard({ roads: { ...this.state.roads, [edgeId]: playerId } }, `${this.nameOf(playerId)} built a road`, playerId);
+    this.event('build', { actor: playerId, piece: 'road', at: edgeId, paid: COSTS.road });
     this.sound('build');
     this.afterAction();
     return true;
@@ -1072,6 +1095,7 @@ export default class GameEngine {
     this.pay(playerId, COSTS.city);
     this.set({ buildings: { ...this.state.buildings, [vertexId]: { owner: playerId, type: 'city' } } });
     this.note(`${this.nameOf(playerId)} upgraded a settlement to a city`, playerId);
+    this.event('build', { actor: playerId, piece: 'city', at: vertexId, paid: COSTS.city });
     this.sound('build');
     this.afterAction();
     return true;
@@ -1093,6 +1117,7 @@ export default class GameEngine {
       },
     });
     this.note(`${this.nameOf(playerId)} bought a development card`, playerId);
+    this.event('buyDev', { actor: playerId, paid: COSTS.dev });
     this.sound('card');
     this.afterAction();
     return true;
@@ -1145,6 +1170,7 @@ export default class GameEngine {
     }
 
     this.set({ rolling: false, busy: false, trades: [], ...this.record(`${this.nameOf(playerId)} rolled ${total}`, playerId) });
+    this.event('roll', { actor: playerId, dice });
 
     if (total === 7) {
       const pendingDiscards = {};
@@ -1183,6 +1209,14 @@ export default class GameEngine {
     });
     this.set({ hands, bank });
 
+    const gains = Object.fromEntries(Object.entries(paid).filter(([, bundle]) => handSize(bundle) > 0));
+    if (Object.keys(gains).length) {
+      const hexes = this.state.board.hexes
+        .filter((hex) => hex.number === total && hex.id !== this.state.board.robber)
+        .map((hex) => hex.id);
+      this.event('produce', { gains, hexes, total });
+    }
+
     const lines = Object.entries(paid)
       .filter(([, bundle]) => handSize(bundle) > 0)
       .map(([id, bundle]) => `${this.nameOf(id)} +${listResources(bundle)}`);
@@ -1208,6 +1242,7 @@ export default class GameEngine {
     delete pendingDiscards[playerId];
     this.set({ pendingDiscards });
     this.note(`${this.nameOf(playerId)} discarded ${owed} cards`, playerId);
+    this.event('discard', { actor: playerId, bundle: clean, count: owed });
 
     if (!Object.keys(pendingDiscards).length) {
       this.set({ turnPhase: 'robber', activity: `${this.activePlayer.name} moves the robber` });
@@ -1222,7 +1257,9 @@ export default class GameEngine {
     if (!Number.isInteger(hexId) || !this.state.board.hexes[hexId] || hexId === this.state.board.robber) return false;
 
     const hex = this.state.board.hexes[hexId];
+    const from = this.state.board.robber;
     this.set({ board: { ...this.state.board, robber: hexId } });
+    this.event('robber', { actor: playerId, from, to: hexId });
     this.note(`${this.nameOf(playerId)} moved the robber to the ${hex.terrain}${hex.number ? ` ${hex.number}` : ''}`, playerId);
     this.sound('robber');
 
@@ -1257,6 +1294,7 @@ export default class GameEngine {
       this.move(victimId, playerId, { [resource]: 1 });
       this.set({ lastSteal: { id: this.state.logCounter + 1, turn: this.state.turnCount, thief: playerId, victim: victimId, resource } });
       this.note(`${this.nameOf(playerId)} stole a card from ${this.nameOf(victimId)}`, playerId);
+      this.event('steal', { actor: playerId, victim: victimId, resource });
     }
 
     this.set({ turnPhase: back, stealFrom: [], activity: this.phaseActivity(back) });
@@ -1276,6 +1314,8 @@ export default class GameEngine {
     const phase = this.state.turnPhase;
     if (phase !== 'pre-roll' && phase !== 'actions') return false;
     if (!DEV_CARDS[type] || type === 'victoryPoint') return false;
+    // Only a Knight may be played before the dice; progress cards wait for the roll.
+    if (phase === 'pre-roll' && type !== 'knight') return false;
 
     const cards = this.state.devCards[playerId];
     const card = cards.find((entry) => entry.type === type && entry.boughtTurn !== this.state.turnCount);
@@ -1301,6 +1341,7 @@ export default class GameEngine {
       devCards: { ...this.state.devCards, [playerId]: cards.filter((entry) => entry.id !== card.id) },
     });
     this.sound('card');
+    this.event('playDev', { actor: playerId, card: type });
     const name = this.nameOf(playerId);
 
     if (type === 'knight') {
@@ -1333,21 +1374,29 @@ export default class GameEngine {
       });
       this.give(playerId, want);
       this.note(`${name} played Year of Plenty and took ${listResources(want)}`, playerId);
+      this.event('yop', { actor: playerId, bundle: want });
     } else if (type === 'monopoly') {
       const resource = details.resource;
       const hands = { ...this.state.hands };
       let taken = 0;
+      const from = {};
       this.state.players.forEach((player) => {
         if (player.id === playerId) return;
         const count = hands[player.id][resource];
         if (count) {
           taken += count;
+          from[player.id] = count;
           hands[player.id] = { ...hands[player.id], [resource]: 0 };
         }
       });
       hands[playerId] = { ...hands[playerId], [resource]: hands[playerId][resource] + taken };
       this.set({ hands });
-      this.note(`${name} played Monopoly on ${RESOURCE_LABELS[resource].toLowerCase()} and took ${taken}`, playerId);
+      const each = Object.entries(from).map(([id, count]) => `${count} from ${this.nameOf(id)}`);
+      this.note(
+        `${name} played Monopoly on ${RESOURCE_LABELS[resource].toLowerCase()} and took ${taken}${each.length ? ` (${each.join(', ')})` : ''}`,
+        playerId,
+      );
+      this.event('monopoly', { actor: playerId, resource, from, total: taken });
     }
 
     this.afterAction();
@@ -1386,6 +1435,9 @@ export default class GameEngine {
       give: cleanGive,
       get: cleanGet,
       responses: {},
+      accepted: [],
+      closesAt: null,
+      choosing: false,
       createdAt: Date.now(),
     };
     this.set({ tradeCounter, trades: [...this.state.trades, trade] });
@@ -1413,9 +1465,15 @@ export default class GameEngine {
       return this.executeTrade(trade, playerId);
     }
 
+    // Who said yes, in the order they said it: the first one gets the deal
+    // when the offering player does not choose.
+    const accepted = (trade.accepted || []).filter((id) => id !== playerId);
+    if (accept) accepted.push(playerId);
     this.set({
       trades: this.state.trades.map((entry) =>
-        entry.id === tradeId ? { ...entry, responses: { ...entry.responses, [playerId]: Boolean(accept) } } : entry,
+        entry.id === tradeId
+          ? { ...entry, accepted, responses: { ...entry.responses, [playerId]: Boolean(accept) } }
+          : entry,
       ),
     });
     if (!quiet || accept) {
@@ -1427,8 +1485,54 @@ export default class GameEngine {
       this.set({ trades: this.state.trades.filter((entry) => entry.id !== tradeId) });
     }
 
+    this.watchOpenTrade(tradeId);
     this.afterAction();
     return true;
+  }
+
+  // An open offer needs no second confirmation. Once someone says yes, the
+  // others have a moment to say yes too: a single taker gets the deal
+  // straight away, and only when several said yes does the offering player
+  // pick one (or the first taker gets it when they do not pick in time).
+  watchOpenTrade(tradeId) {
+    const trade = this.state.trades.find((entry) => entry.id === tradeId);
+    if (!trade || trade.to || trade.choosing || !(trade.accepted || []).length) return;
+
+    const others = this.tradeParties(trade).filter((id) => id !== trade.from);
+    if (others.every((id) => trade.responses[id] !== undefined)) {
+      this.settleTrade(tradeId, 'window');
+      return;
+    }
+    if (trade.closesAt) return;
+
+    const closesAt = Date.now() + this.timing.acceptWindow;
+    this.set({ trades: this.state.trades.map((entry) => (entry.id === tradeId ? { ...entry, closesAt } : entry)) });
+    this.later(() => this.settleTrade(tradeId, 'window'), this.timing.acceptWindow);
+  }
+
+  settleTrade(tradeId, stage) {
+    if (this.destroyed || this.state.gameOver || this.state.turnPhase !== 'actions') return;
+    const trade = this.state.trades.find((entry) => entry.id === tradeId);
+    if (!trade || trade.to) return;
+    if (stage === 'window' && trade.choosing) return;
+    if (stage === 'choice' && !trade.choosing) return;
+
+    const takers = (trade.accepted || []).filter(
+      (id) => trade.responses[id] === true && hasResources(this.state.hands[id], trade.get),
+    );
+    if (!takers.length) return;
+
+    if (takers.length === 1 || stage === 'choice' || this.isAuto(trade.from)) {
+      this.executeTrade(trade, takers[0]);
+      return;
+    }
+
+    const choiceEndsAt = Date.now() + this.timing.tradeWait;
+    this.set({
+      trades: this.state.trades.map((entry) => (entry.id === tradeId ? { ...entry, choosing: true, choiceEndsAt } : entry)),
+    });
+    this.later(() => this.settleTrade(tradeId, 'choice'), this.timing.tradeWait);
+    this.afterAction();
   }
 
   // The offering player picks one of the players who accepted an open offer.
@@ -1457,6 +1561,7 @@ export default class GameEngine {
       `${this.nameOf(from)} traded ${listResources(trade.give)} to ${this.nameOf(partnerId)} for ${listResources(trade.get)}`,
       from,
     );
+    this.event('trade', { actor: from, partner: partnerId, give: trade.give, get: trade.get });
     this.sound('trade');
     this.afterAction();
     return true;
@@ -1481,6 +1586,7 @@ export default class GameEngine {
     hands[playerId] = addResources(addResources(hands[playerId], { [give]: rate }, -1), { [get]: 1 });
     const bank = addResources(addResources(this.state.bank, { [give]: rate }), { [get]: 1 }, -1);
     this.set({ hands, bank });
+    this.event('maritime', { actor: playerId, give: { [give]: rate }, get: { [get]: 1 } });
     this.note(`${this.nameOf(playerId)} traded ${rate} ${RESOURCE_LABELS[give].toLowerCase()} with the bank for 1 ${RESOURCE_LABELS[get].toLowerCase()}`, playerId);
     this.sound('trade');
     this.afterAction();
@@ -1558,6 +1664,7 @@ export default class GameEngine {
         ? `${names} wins with ${totalPoints(this.state, winners[0])} victory points`
         : `Game over, ${names} ${winners.length > 1 ? 'share the win' : 'wins'} with ${top} points`,
     );
+    this.event('win', { winners, reason });
     this.sound('winner');
   }
 

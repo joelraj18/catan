@@ -26,6 +26,7 @@ import {
   tradeShapeProblem,
   visibleHandSize,
 } from './catanRules';
+import GameToasts from './GameToasts.jsx';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
 import {
   ArmyIcon,
@@ -511,8 +512,13 @@ export default function BoardGame({
   const deckLeft = typeof view.devDeck === 'number' ? view.devDeck : view.devDeck?.length || 0;
   const left = me ? piecesLeft(view, myPlayerId) : { road: 0, settlement: 0, city: 0 };
   const rates = me ? maritimeRates(view, myPlayerId) : {};
+  // Before the roll only a Knight may be played; progress cards wait for it.
   const playableDev = myDev.filter(
-    (card) => card.type && card.type !== 'victoryPoint' && card.boughtTurn !== view.turnCount,
+    (card) =>
+      card.type &&
+      card.type !== 'victoryPoint' &&
+      card.boughtTurn !== view.turnCount &&
+      (phase === 'actions' || card.type === 'knight'),
   );
   const canPlayDev = isMyTurn && !view.busy && !over && !view.devPlayedThisTurn && (phase === 'pre-roll' || phase === 'actions');
   const myPoints = me ? publicPoints(view, myPlayerId) + hiddenPoints(view, myPlayerId) : 0;
@@ -580,9 +586,12 @@ export default function BoardGame({
   const waitingOnVote = endVote ? voters.filter((player) => !endVote.agreed.includes(player.id)) : [];
   const mustVote = endVote && !endVote.passed && iAmVoter && !endVote.agreed.includes(myPlayerId);
 
-  // Offers this player should see.
+  // Offers this player made or already answered. Offers waiting on their
+  // answer pop up at the side (GameToasts) with Accept and Decline.
   const trades = (view.trades || []).filter(
-    (trade) => trade.from === myPlayerId || trade.to === myPlayerId || (!trade.to && trade.from !== myPlayerId),
+    (trade) =>
+      trade.from === myPlayerId ||
+      ((trade.to === myPlayerId || !trade.to) && trade.responses?.[myPlayerId] !== undefined),
   );
   const canTrade = me && phase === 'actions' && !over && !view.busy;
 
@@ -635,7 +644,7 @@ export default function BoardGame({
       return activePlayer.away ? 'Away, the computer is playing' : `${kindLabel(activePlayer)} is playing`;
     }
     if (view.rolling) return 'Rolling';
-    if (phase === 'pre-roll') return 'Roll the dice, or play a development card first';
+    if (phase === 'pre-roll') return playableDev.some((card) => card.type === 'knight') ? 'Roll the dice, or play a Knight first' : 'Roll the dice';
     if (phase === 'robber') return 'Move the robber: click any other hex';
     if (phase === 'steal') return 'Choose who to rob';
     if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}`;
@@ -1126,14 +1135,6 @@ export default function BoardGame({
     return null;
   };
 
-  const steal = view.lastSteal;
-  const stealNote =
-    steal && steal.resource && steal.turn === view.turnCount && (steal.thief === myPlayerId || steal.victim === myPlayerId)
-      ? steal.thief === myPlayerId
-        ? `You stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from ${nameOf(steal.victim)}`
-        : `${nameOf(steal.thief)} stole 1 ${RESOURCE_LABELS[steal.resource].toLowerCase()} from you`
-      : null;
-
   return (
     <main className="board-game-page">
       <header className="board-topbar">
@@ -1203,6 +1204,10 @@ export default function BoardGame({
           <span className="waiting-pulse" aria-hidden="true" />
           Reconnecting to the table with your Player ID {myCode}
         </div>
+      )}
+
+      {me && (
+        <GameToasts view={view} myPlayerId={myPlayerId} act={act} players={players} myHand={myHand} localTime={localTime} />
       )}
 
       <section className="board-game-layout">
@@ -1505,8 +1510,6 @@ export default function BoardGame({
             </GoldButton>
           )}
 
-          {stealNote && <p className="private-note">{stealNote}</p>}
-
           {me && (
             <section className="hand-panel" aria-label="Your cards">
               <div className="hand-head">
@@ -1581,7 +1584,8 @@ export default function BoardGame({
                 {myDev.map((card) => {
                   const info = DEV_CARDS[card.type];
                   const fresh = card.boughtTurn === view.turnCount;
-                  const playable = canPlayDev && card.type !== 'victoryPoint' && !fresh && playableDev.includes(card);
+                  const playable = canPlayDev && playableDev.includes(card);
+                  const waitsForRoll = !fresh && phase === 'pre-roll' && card.type !== 'knight' && isMyTurn;
                   return (
                     <li key={card.id} className={`dev-card dev-card--${info?.kind}`}>
                       <div>
@@ -1596,9 +1600,11 @@ export default function BoardGame({
                           className="text-link"
                           disabled={!playable}
                           onClick={() => playDev(card.type)}
-                          aria-label={fresh ? `${info?.label}, playable next turn` : `Play ${info?.label}`}
+                          aria-label={
+                            fresh ? `${info?.label}, playable next turn` : waitsForRoll ? `${info?.label}, playable after the roll` : `Play ${info?.label}`
+                          }
                         >
-                          {fresh ? 'Next turn' : 'Play'}
+                          {fresh ? 'Next turn' : waitsForRoll ? 'After roll' : 'Play'}
                         </button>
                       )}
                     </li>
@@ -1637,6 +1643,9 @@ export default function BoardGame({
                             <span className="trade-note">
                               {Object.values(trade.responses || {}).length ? 'Declined so far' : 'Waiting for answers'}
                             </span>
+                          )}
+                          {accepters.length === 1 && !trade.to && !trade.choosing && (
+                            <span className="trade-note">Trading in a moment</span>
                           )}
                           <button type="button" className="text-link" onClick={() => act({ type: 'trade-cancel', tradeId: trade.id })}>
                             Withdraw
