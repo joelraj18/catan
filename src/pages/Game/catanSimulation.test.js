@@ -125,7 +125,9 @@ simulate('long simulation', async () => {
     const board = g % 3 ? 'random' : 'beginner';
     let kinds = Array(size).fill('bot');
     
-    jobs.push({ kinds, board, seed: 1000 + g * 7, away: g % 7 === 3 ? ['p2'] : g % 5 === 1 ? ['p1'] : [] });
+    // People who are away are played by the computer; nobody idles at the table.
+    const away = [...(g % 5 === 1 ? ['p1'] : []), ...(g % 7 === 3 ? ['p2'] : [])];
+    jobs.push({ kinds, board, seed: 1000 + g * 7, away });
     if (g % 5 === 1) jobs[jobs.length - 1].kinds[0] = 'human';
     if (g % 7 === 3) jobs[jobs.length - 1].kinds[1] = 'human';
   }
