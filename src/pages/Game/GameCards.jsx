@@ -100,23 +100,38 @@ export function DevRow({ cards, turnCount, canPlay, playable, onPlay, selected =
   return (
     <ul className="card-row card-row--dev" aria-label="Development cards">
       {deck && (
-        <li className={`game-card game-card--deck ${deck.left > 1 ? 'game-card--stack' : ''}`}>
-          <button
-            type="button"
-            className={`game-card-face game-card-button ${deck.selected ? 'game-card-button--selected' : ''}`}
-            disabled={!deck.ready}
-            onClick={deck.onBuy}
-            title="Buy a development card: 1 ore, 1 wool, 1 grain"
-            aria-label={`Buy a development card, ${deck.left} left. Costs 1 ore, 1 wool and 1 grain${deck.selected ? '. Tap again to buy' : ''}`}
-          >
-            <span className="game-card-art">
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" className="deck-plus" />
-              </svg>
-            </span>
-            <em className="game-card-note">{deck.selected ? 'Tap again' : deck.ready ? 'Buy' : `${deck.left} left`}</em>
-          </button>
-          <span className="game-card-name">Buy card</span>
+        <li className="deck-slot">
+          <div className={`game-card game-card--deck ${deck.left > 1 ? 'game-card--stack' : ''}`}>
+            <button
+              type="button"
+              className={`game-card-face game-card-button ${deck.selected ? 'game-card-button--selected' : ''}`}
+              disabled={!deck.ready}
+              onClick={deck.onBuy}
+              title="Buy a development card: 1 ore, 1 wool, 1 grain"
+              aria-label={`Buy a development card, ${deck.left} left. Costs 1 ore, 1 wool and 1 grain${deck.note ? `. ${deck.note}` : ''}${deck.selected ? '. Tap again to buy' : ''}`}
+            >
+              <span className="game-card-art">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" className="deck-plus" />
+                </svg>
+              </span>
+              <em className="game-card-note">{deck.selected ? 'Tap again' : deck.ready ? 'Buy' : deck.note || `${deck.left} left`}</em>
+            </button>
+            <span className="game-card-name">Buy card</span>
+          </div>
+          {deck.cost && (
+            <ul className="deck-cost" aria-hidden="true">
+              {Object.entries(deck.cost).map(([resource, count]) => {
+                const have = (deck.hand?.[resource] || 0) >= count;
+                return (
+                  <li key={resource} className={`deck-cost-card game-card--${resource} ${have ? 'deck-cost-card--have' : ''}`}>
+                    <ResourceIcon resource={resource} size={12} />
+                    <span>{have ? '✓' : count}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </li>
       )}
       {groups.map(({ type, count, ready, fresh }) => {

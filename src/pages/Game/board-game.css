@@ -3513,3 +3513,112 @@
     flex: 0 0 auto;
   }
 }
+
+/* "+N" beside a seat as its harvest lands */
+.gain-pop {
+  position: fixed;
+  z-index: 96;
+  padding: 2px 9px;
+  color: #3d2c00;
+  font-size: 0.86rem;
+  font-weight: 800;
+  background: linear-gradient(160deg, #ffe9a3, #f2c230);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 6px 14px rgba(120, 80, 0, 0.3);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* The deck in the hand, with what a development card costs beside it */
+
+.deck-slot {
+  display: grid;
+  grid-column: span 2;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.deck-slot .game-card--deck {
+  width: 100%;
+}
+
+.deck-cost {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deck-cost-card {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 3px;
+  min-width: 34px;
+  padding: 3px 6px 3px 4px;
+  color: var(--card-ink);
+  font-size: 0.66rem;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--card) 30%, var(--surface));
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card) 55%, transparent);
+  opacity: 0.6;
+}
+
+.deck-cost-card--have {
+  opacity: 1;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--card) 85%, #000000);
+}
+
+[data-theme='dark'] .deck-cost-card {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--card) 45%, var(--surface));
+}
+
+/* "You can build now": ready chips pulse softly and say so */
+
+.build-chip--ready {
+  position: relative;
+  animation: readyGlow 2.4s ease-in-out infinite;
+}
+
+.build-chip--ready::after {
+  position: absolute;
+  top: -7px;
+  right: 10px;
+  padding: 1px 7px;
+  color: #ffffff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--accent);
+  border-radius: 999px;
+  content: attr(data-ready);
+}
+
+@keyframes readyGlow {
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+}
+
+.hand-hint {
+  margin: 2px 0 6px;
+  padding: 6px 10px;
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+  background: var(--accent-soft);
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .build-chip--ready {
+    animation: none;
+  }
+}

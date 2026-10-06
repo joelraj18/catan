@@ -191,10 +191,11 @@ export function ResourceIcon({ resource, size = 18, className = '' }) {
   );
 }
 
-function NumberToken({ number, x, y, hot, blocked = false }) {
+function NumberToken({ number, x, y, hot, blocked = false, pop = null }) {
   const pips = PIPS[number] || 0;
   return (
     <g className={`number-token ${hot ? 'number-token--hot' : ''} ${blocked ? 'number-token--blocked' : ''}`} transform={`translate(${x} ${y})`}>
+      <g key={pop ?? 'still'} className={pop ? 'number-token-pop' : undefined}>
       <circle r="19.5" cy="2" className="number-token-shadow" />
       <circle r="19.5" className="number-token-face" />
       <text y="-1" textAnchor="middle" dominantBaseline="middle">
@@ -203,6 +204,7 @@ function NumberToken({ number, x, y, hot, blocked = false }) {
       {Array.from({ length: pips }, (_, i) => (
         <circle key={i} className="number-token-pip" cx={(i - (pips - 1) / 2) * 4.4} cy="12" r="1.6" />
       ))}
+      </g>
     </g>
   );
 }
@@ -344,6 +346,7 @@ function HexBoard({
   selected = null,
   myPiece = null,
   rolled = null,
+  harvest = null,
   compact = false,
   className = '',
   label = 'Catan board',
@@ -452,11 +455,40 @@ function HexBoard({
                 y={px(hex.y) + 13}
                 hot={tile.number === 6 || tile.number === 8}
                 blocked={board.robber === tile.id}
+                pop={harvest?.hexes.includes(tile.id) ? harvest.key : null}
               />
             )}
           </g>
         );
       })}
+
+      {/* The roll that just landed: paying tiles glow and send up sparks, a
+          tile under the dragon greys out with a cross */}
+      {harvest &&
+        harvest.hexes.map((hexId) => {
+          const hex = geo.hexes[hexId];
+          if (!hex) return null;
+          return (
+            <g key={`harvest-${harvest.key}-${hexId}`} className="harvest" aria-hidden="true">
+              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-glow" />
+              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-ring" />
+              {[-22, -6, 10, 24].map((dx, i) => (
+                <circle key={dx} className="harvest-mote" cx={px(hex.x) + dx} cy={px(hex.y) + 10 - (i % 2) * 14} r={2.2 + (i % 2)} style={{ animationDelay: `${0.15 + i * 0.12}s` }} />
+              ))}
+            </g>
+          );
+        })}
+      {harvest &&
+        harvest.blocked.map((hexId) => {
+          const hex = geo.hexes[hexId];
+          if (!hex) return null;
+          return (
+            <g key={`blocked-${harvest.key}-${hexId}`} className="harvest-blocked" aria-hidden="true">
+              <polygon points={hexPoints(geo, hex, 0.03)} />
+              <path d={`M${px(hex.x) - 12} ${px(hex.y) + 1}l24 24m0 -24l-24 24`} transform="translate(0 0)" />
+            </g>
+          );
+        })}
 
       {/* Roads */}
       {Object.entries(roads).map(([edgeId, owner]) => {

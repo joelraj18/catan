@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RESOURCE_LABELS, geometryOf } from './catanBoard';
 import { hasResources } from './catanRules';
 import { ResourceIcon } from './hexArt.jsx';
@@ -83,10 +83,32 @@ export const describeEvent = (event, { me, nameOf, board, buildings }) => {
 
 // Small notes that slide in at the side: what just happened to you, and
 // offers waiting for your answer, with the buttons right on them.
-export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime }) {
+export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime, notice = null }) {
   const [toasts, setToasts] = useState([]);
   const seen = useRef(null);
   const timers = useRef(new Set());
+
+  // Shows notes, each leaving on its own after a few seconds.
+  const show = useCallback((notes) => {
+    setToasts((current) => [...current.filter((toast) => !notes.some((note) => note.id === toast.id)), ...notes].slice(-MAX_TOASTS));
+    notes.forEach((note) => {
+      const leave = setTimeout(() => {
+        timers.current.delete(leave);
+        setToasts((current) => current.map((toast) => (toast.id === note.id ? { ...toast, leaving: true } : toast)));
+        const drop = setTimeout(() => {
+          timers.current.delete(drop);
+          setToasts((current) => current.filter((toast) => toast.id !== note.id));
+        }, LEAVE_MS);
+        timers.current.add(drop);
+      }, note.ms || TOAST_MS);
+      timers.current.add(leave);
+    });
+  }, []);
+
+  // A note from the board itself, such as what you can build now.
+  useEffect(() => {
+    if (notice?.id) show([notice]);
+  }, [notice, show]);
 
   const nameOf = (id) => players.find((player) => player.id === id)?.name || 'someone';
   const events = view.events;
@@ -107,19 +129,7 @@ export default function GameToasts({ view, myPlayerId, act, players, myHand, loc
     const notes = fresh.map((event) => ({ id: event.id, ...describeEvent(event, context) })).filter((note) => note.title);
     if (!notes.length) return;
 
-    setToasts((current) => [...current, ...notes].slice(-MAX_TOASTS));
-    notes.forEach((note) => {
-      const leave = setTimeout(() => {
-        timers.current.delete(leave);
-        setToasts((current) => current.map((toast) => (toast.id === note.id ? { ...toast, leaving: true } : toast)));
-        const drop = setTimeout(() => {
-          timers.current.delete(drop);
-          setToasts((current) => current.filter((toast) => toast.id !== note.id));
-        }, LEAVE_MS);
-        timers.current.add(drop);
-      }, TOAST_MS);
-      timers.current.add(leave);
-    });
+    show(notes);
     // Only new events matter; names and the board are read as they are now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, myPlayerId]);
@@ -215,6 +225,13 @@ export default function GameToasts({ view, myPlayerId, act, players, myHand, loc
           <strong className="game-toast-title">{toast.title}</strong>
           {toast.text && <span className="game-toast-text">{toast.text}</span>}
           {toast.bundle && <Cards bundle={toast.bundle} />}
+          {toast.action && (
+            <div className="game-toast-actions">
+              <button type="button" className="property-action-btn" onClick={toast.action.run}>
+                {toast.action.label}
+              </button>
+            </div>
+          )}
           {(toast.gave || toast.got) && (
             <span className="game-toast-swap">
               <span>Gave</span>

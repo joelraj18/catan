@@ -12,8 +12,11 @@ import { ResourceIcon } from './hexArt.jsx';
 // rather than replayed. With reduced motion nothing flies.
 
 const FLIGHT_MS = 720;
+const HARVEST_MS = 1250; // a harvest card rises from its tile, then flies
+const HARVEST_DELAY_MS = 260; // the tiles glow first
 const STAGGER_MS = 90;
 const MAX_CARDS = 4; // per sender and kind of card in one move
+const MAX_HARVEST = 6; // a big harvest still shows every card, up to this
 const MAX_BACKLOG = 6;
 
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -26,14 +29,18 @@ export const flightsFor = (event, me, board) => {
   const trips = [];
   const send = (from, to, bundle, extra = {}) =>
     Object.entries(bundle || {}).forEach(([card, count]) => {
-      for (let i = 0; i < Math.min(count, MAX_CARDS); i += 1) {
+      for (let i = 0; i < Math.min(count, extra.rise ? MAX_HARVEST : MAX_CARDS); i += 1) {
         trips.push({ from: typeof from === 'function' ? from(card) : from, to: typeof to === 'function' ? to(card) : to, card, ...extra });
       }
     });
 
   switch (event.type) {
     case 'produce':
-      Object.entries(event.gains || {}).forEach(([id, bundle]) =>
+      // Cards rise out of each paying tile and fly to whoever collects
+      // them; the last card to reach a player carries the total for a
+      // "+N" on their seat.
+      Object.entries(event.gains || {}).forEach(([id, bundle]) => {
+        const before = trips.length;
         send(
           (card) => {
             const hexId = (event.hexes || []).find((hex) => resourceOfHex(board, hex) === card);
@@ -41,8 +48,11 @@ export const flightsFor = (event, me, board) => {
           },
           (card) => at(id, card),
           bundle,
-        ),
-      );
+          { rise: true },
+        );
+        const total = Object.values(bundle || {}).reduce((sum, n) => sum + n, 0);
+        if (trips.length > before) trips[trips.length - 1].gain = { seat: `seat-${id}`, total };
+      });
       break;
     case 'steal': {
       const card = event.resource || 'back';
@@ -90,7 +100,29 @@ const centre = (element) => {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 };
 
-export default function CardFlights({ events, me, board }) {
+// A "+N" that pops beside a player's seat when their harvest lands.
+const popGain = (layer, anchorName, total) => {
+  const rect = anchor(anchorName)?.getBoundingClientRect();
+  if (!rect || !rect.width || !layer) return;
+  const badge = document.createElement('div');
+  badge.className = 'gain-pop';
+  badge.textContent = `+${total}`;
+  badge.style.left = `${Math.min(window.innerWidth - 30, rect.right - 22)}px`;
+  badge.style.top = `${rect.top + 14}px`;
+  layer.appendChild(badge);
+  const pop = badge.animate(
+    [
+      { transform: 'translate(-50%, 6px) scale(0.6)', opacity: 0 },
+      { transform: 'translate(-50%, -4px) scale(1.15)', opacity: 1, offset: 0.25 },
+      { transform: 'translate(-50%, -10px) scale(1)', opacity: 1, offset: 0.75 },
+      { transform: 'translate(-50%, -22px) scale(0.95)', opacity: 0 },
+    ],
+    { duration: 1100, easing: 'ease-out' },
+  );
+  pop.onfinish = () => badge.remove();
+};
+
+export default function CardFlights({ events, me, board, onLand = null }) {
   const layer = useRef(null);
   const templates = useRef(null);
   const seen = useRef(null);
@@ -98,6 +130,8 @@ export default function CardFlights({ events, me, board }) {
   const busy = useRef(false);
   const boardRef = useRef(board);
   boardRef.current = board;
+  const landRef = useRef(onLand);
+  landRef.current = onLand;
 
   useEffect(() => {
     const list = Array.isArray(events) ? events : [];
@@ -110,7 +144,9 @@ export default function CardFlights({ events, me, board }) {
     seen.current = newest;
     if (!fresh.length || reduced() || document.hidden) return;
 
+    // A harvest goes first, so the cards rise while the tiles still glow.
     queue.current.push(...fresh);
+    queue.current.sort((a, b) => (a.type === 'produce' ? 0 : 1) - (b.type === 'produce' ? 0 : 1) || a.id - b.id);
     if (queue.current.length > MAX_BACKLOG) queue.current = queue.current.slice(-2);
 
     const fly = (trip, delay) => {
@@ -127,18 +163,30 @@ export default function CardFlights({ events, me, board }) {
       const dx = to.x - from.x;
       const dy = to.y - from.y;
       const lift = Math.min(90, 30 + Math.hypot(dx, dy) * 0.18);
-      const flight = card.animate(
-        [
-          { transform: 'translate(-50%, -50%) scale(0.55) rotate(-10deg)', opacity: 0 },
-          { transform: 'translate(-50%, -50%) scale(1) rotate(-4deg)', opacity: 1, offset: 0.15 },
-          { transform: `translate(calc(-50% + ${dx * 0.5}px), calc(-50% + ${dy * 0.5 - lift}px)) scale(1.06) rotate(6deg)`, opacity: 1, offset: 0.55 },
-          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.72) rotate(0deg)`, opacity: 1, offset: 0.9 },
-          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.5)`, opacity: 0 },
-        ],
-        { duration: FLIGHT_MS, delay, easing: 'cubic-bezier(0.3, 0.6, 0.3, 1)', fill: 'both' },
-      );
+      const at = (x, y) => `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+      const frames = trip.rise
+        ? [
+            // Out of the tile: up from the glow, a little turn, a pause.
+            { transform: `${at(0, 6)} scale(0.35) rotate(-14deg)`, opacity: 0 },
+            { transform: `${at(0, -26)} scale(1.12) rotate(-6deg)`, opacity: 1, offset: 0.2 },
+            { transform: `${at(0, -32)} scale(1.1) rotate(4deg)`, opacity: 1, offset: 0.36 },
+            { transform: `${at(dx * 0.5, dy * 0.5 - 32 - lift)} scale(1.04) rotate(8deg)`, opacity: 1, offset: 0.68 },
+            { transform: `${at(dx, dy)} scale(0.72) rotate(0deg)`, opacity: 1, offset: 0.92 },
+            { transform: `${at(dx, dy)} scale(0.5)`, opacity: 0 },
+          ]
+        : [
+            { transform: `${at(0, 0)} scale(0.55) rotate(-10deg)`, opacity: 0 },
+            { transform: `${at(0, 0)} scale(1) rotate(-4deg)`, opacity: 1, offset: 0.15 },
+            { transform: `${at(dx * 0.5, dy * 0.5 - lift)} scale(1.06) rotate(6deg)`, opacity: 1, offset: 0.55 },
+            { transform: `${at(dx, dy)} scale(0.72) rotate(0deg)`, opacity: 1, offset: 0.9 },
+            { transform: `${at(dx, dy)} scale(0.5)`, opacity: 0 },
+          ];
+      const duration = trip.rise ? HARVEST_MS : FLIGHT_MS;
+      const flight = card.animate(frames, { duration, delay, easing: 'cubic-bezier(0.3, 0.6, 0.3, 1)', fill: 'both' });
       flight.onfinish = () => {
         card.remove();
+        landRef.current?.(trip);
+        if (trip.gain) popGain(layer.current, trip.gain.seat, trip.gain.total);
         toElement?.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(1.07)' }, { transform: 'scale(1)' }], {
           duration: 280,
           easing: 'ease-out',
@@ -156,7 +204,7 @@ export default function CardFlights({ events, me, board }) {
           { duration: 360, delay },
         );
       }
-      return delay + FLIGHT_MS;
+      return delay + duration;
     };
 
     const next = () => {
@@ -167,7 +215,8 @@ export default function CardFlights({ events, me, board }) {
       }
       busy.current = true;
       const trips = flightsFor(event, me, boardRef.current);
-      const ends = trips.map((trip, index) => fly(trip, index * STAGGER_MS));
+      const start = event.type === 'produce' ? HARVEST_DELAY_MS : 0;
+      const ends = trips.map((trip, index) => fly(trip, start + index * (event.type === 'produce' ? 110 : STAGGER_MS)));
       const longest = Math.max(0, ...ends);
       // The next move starts as this one's cards come in to land.
       window.setTimeout(next, longest ? longest * 0.7 : 0);
