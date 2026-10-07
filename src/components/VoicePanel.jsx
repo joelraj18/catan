@@ -45,6 +45,13 @@ export default function VoicePanel({ session, compact = false }) {
   const [creating, setCreating] = useState(false);
   const [picked, setPicked] = useState([]);
   const [name, setName] = useState('');
+  const [tradeMode, setTradeMode] = useState(() => session?.tradeMode || null);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    setTradeMode(session.tradeMode || null);
+    return session.on('trade-mode', (trade) => setTradeMode(trade));
+  }, [session]);
 
   if (!voice) return null;
 
@@ -53,18 +60,36 @@ export default function VoicePanel({ session, compact = false }) {
   const people = roster.people || {};
   const others = Object.keys(people).filter((id) => id !== me);
   const inChannel = roster.channels.find((channel) => channel.id === voice.channel);
-  const visible = roster.channels.filter((channel) => !channel.invited || channel.invited.includes(me));
+  // A trade channel shows only to its traders; the rest see who is trading.
+  const visible = roster.channels.filter(
+    (channel) => !channel.hidden && (!channel.invited || channel.invited.includes(me) || channel.members.includes(me)),
+  );
   const walkie = voice.walkiePeers().length > 0;
   const supported = voiceSupported();
 
   const person = (id) => people[id] || { name: id === me ? 'You' : 'Someone', pieceKey: null };
+  const playerName = (id) => session.players?.find((player) => player.id === id)?.name || 'Someone';
+  const myTrade = tradeMode && tradeMode.members.includes(session.myPlayerId);
+  const traders = tradeMode ? tradeMode.members.map(playerName) : [];
+  const tradingWith = tradeMode ? tradeMode.members.filter((id) => id !== session.myPlayerId).map(playerName) : [];
+  const andList = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
   return (
     <section className={`voice-panel ${compact ? 'voice-panel--compact' : ''}`} aria-label="Voice chat">
       <div className="voice-head">
         <p className="eyebrow">Voice</p>
-        {inChannel ? <span className="voice-live">● In {inChannel.name}</span> : <span>{supported ? 'Off' : 'Not available here'}</span>}
+        {inChannel?.trade ? (
+          <span className="voice-live">🔒 In Trade{tradingWith.length ? ` with ${tradingWith.join(', ')}` : ''}</span>
+        ) : inChannel ? (
+          <span className="voice-live">● In {inChannel.name}</span>
+        ) : (
+          <span>{supported ? 'Off' : 'Not available here'}</span>
+        )}
       </div>
+
+      {tradeMode && !myTrade && traders.length > 0 && (
+        <p className="voice-note voice-trade-note">🔒 {andList(traders)} are trading privately</p>
+      )}
 
       {voice.invites.map((invite) => (
         <div key={invite.channel} className="voice-invite" role="status">

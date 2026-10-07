@@ -31,6 +31,7 @@ import CardFlights from './CardFlights.jsx';
 import Dice3D, { DiceThrow } from './Dice3D.jsx';
 import { DeckCard, DevRow, ResourceRow } from './GameCards.jsx';
 import { DiceChart, GameStatsTable } from './StatsPanels.jsx';
+import CostsCard from './CostsCard.jsx';
 import EmoteBar from './EmoteBar.jsx';
 import GameToasts from './GameToasts.jsx';
 import useFreshEvent from './useFreshEvent';
@@ -343,6 +344,10 @@ export default function BoardGame({
   const [pending, setPending] = useState(null);
   const pendingRef = useRef(null);
   const [focus, setFocus] = useState(null); // 'road' | 'settlement' | 'city': only those spots
+  const [placing, setPlacing] = useState(null); // the piece in your hand, following the cursor
+  const [dragging, setDragging] = useState(false); // ... dragged in from the bar
+  const dragStart = useRef(null);
+  const pickUpRef = useRef(null);
   const [tradeDraft, setTradeDraft] = useState(null); // { give, get, to }
   const [discardDraft, setDiscardDraft] = useState(emptyBundle);
   const [devPick, setDevPick] = useState(null); // { card, resources: [] , resource }
@@ -549,6 +554,7 @@ export default function BoardGame({
         pendingRef.current = null;
         setPending(null);
         setFocus(null);
+        setPlacing(null);
         setTradeDraft(null);
         setDevPick(null);
       }
@@ -605,9 +611,11 @@ export default function BoardGame({
       id: `build-${view.turnCount}-${buildKey}`,
       tone: 'gain',
       title: `You can build ${listBuilds(buildKey.split(','))}`,
-      text: pieces.length ? 'The spots glow on the board: tap one, then tap again' : 'Tap the deck in your hand, then tap again',
+      text: pieces.length
+        ? 'Pick it up from the bar or the costs card, then place it next to your settlements or roads'
+        : 'Tap the development card deck, then tap again',
       ms: 5200,
-      action: pieces.length === 1 ? { label: 'Show me', run: () => setFocus(pieces[0]) } : null,
+      action: pieces.length === 1 ? { label: 'Pick up', run: () => pickUpRef.current?.(pieces[0]) } : null,
     });
     // Only a change in what can be built is news.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -623,6 +631,8 @@ export default function BoardGame({
   useEffect(() => {
     pick(null);
     setFocus(null);
+    setPlacing(null);
+    setDragging(false);
   }, [momentKey, pick]);
 
   useEffect(() => {
@@ -678,6 +688,7 @@ export default function BoardGame({
       choose(city ? 'city' : 'settlement', vertexId, () => {
         act({ type: city ? 'build-city' : 'place-settlement', vertexId });
         setFocus(null);
+        setPlacing(null);
       });
     },
     [act, choose, citySpots],
@@ -688,6 +699,7 @@ export default function BoardGame({
       choose('road', edgeId, () => {
         act({ type: 'place-road', edgeId });
         setFocus(null);
+        setPlacing(null);
       }),
     [act, choose],
   );
@@ -756,14 +768,88 @@ export default function BoardGame({
     if (!canPlayDev) setDevPick(null);
   }, [canPlayDev]);
 
-  const copyMyId = async () => {
+  // Everything needed to get back into this game after dropping out: the
+  // room code, your Player ID and the link that opens the room.
+  const rejoinText = session
+    ? `Catan room ${session.code} \u00b7 Player ID ${myCode} \u00b7 rejoin at ${window.location.origin}${window.location.pathname}?join=${session.code}`
+    : '';
+  const copyRejoin = async () => {
     try {
-      await navigator.clipboard.writeText(myCode);
+      await navigator.clipboard.writeText(rejoinText);
       setCopiedId(true);
       window.setTimeout(() => setCopiedId(false), 2000);
+      return true;
     } catch {
       setCopiedId(false);
+      return false;
     }
+  };
+
+  // At the start of a game: one place to save your way back in.
+  const rejoinKey = session && myCode ? `catan-seen-${session.gameId || session.code}-${myPlayerId}` : null;
+  const [showRejoin, setShowRejoin] = useState(false);
+  const [rejoinCopy, setRejoinCopy] = useState('idle'); // 'idle' | 'copied' | 'failed'
+  useEffect(() => {
+    if (!rejoinKey) return;
+    try {
+      if (window.sessionStorage.getItem(rejoinKey)) return;
+    } catch {
+      // Storage may be blocked; show it once for this page.
+    }
+    setShowRejoin(true);
+  }, [rejoinKey]);
+  const closeRejoin = () => {
+    setShowRejoin(false);
+    try {
+      window.sessionStorage.setItem(rejoinKey, '1');
+    } catch {
+      // Nothing to remember it in; it simply shows again after a reload.
+    }
+  };
+
+  const renderRejoin = () => {
+    if (!showRejoin || !session || !myCode || over) return null;
+    return (
+      <div className="property-card-overlay rejoin-overlay">
+        <div className="property-card rejoin-sheet" role="dialog" aria-modal="true" aria-labelledby="rejoin-title">
+          <header className="property-card-header">
+            <p className="property-card-kicker">Before you start</p>
+            <h3 id="rejoin-title">Save your way back in</h3>
+          </header>
+          <div className="property-card-body">
+            <p className="end-sheet-text">If your connection drops, these two codes put you back in your seat</p>
+            <div className="rejoin-codes">
+              <span>
+                <em>Room</em>
+                <code>{session.code}</code>
+              </span>
+              <span>
+                <em>Player ID</em>
+                <code>{myCode}</code>
+              </span>
+            </div>
+            {rejoinCopy === 'failed' && (
+              <textarea className="rejoin-text" readOnly value={rejoinText} onFocus={(event) => event.target.select()} aria-label="Rejoin details" />
+            )}
+            <div className="purchase-offer-actions">
+              <GoldButton
+                onClick={async () => {
+                  const ok = await copyRejoin();
+                  setRejoinCopy(ok ? 'copied' : 'failed');
+                  if (ok) window.setTimeout(closeRejoin, 900);
+                }}
+              >
+                {rejoinCopy === 'copied' ? 'Copied' : 'Copy now to join later'}
+              </GoldButton>
+              <GoldButton variant="ghost" onClick={closeRejoin}>
+                Got it
+              </GoldButton>
+            </div>
+            {rejoinCopy === 'failed' && <p className="trade-note">Copying is blocked here: select the text above and copy it yourself</p>}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // A counter-offer: say no to theirs, then open the trade window with it
@@ -788,8 +874,8 @@ export default function BoardGame({
       const round = view.setup.step < players.length ? 'first' : 'second';
       if (placer.id !== myPlayerId) return `${placer.name} is placing their ${round} ${view.setup.expect}`;
       return view.setup.expect === 'settlement'
-        ? `Tap a glowing intersection for your ${round} settlement, then tap it again`
-        : 'Tap a path next to your new settlement, then tap it again';
+        ? `Place your ${round} settlement on an open corner, then tap it again to confirm`
+        : 'Place a road next to your new settlement, then tap it again to confirm';
     }
     if (phase === 'discard') {
       if (iOweDiscard) return `A 7 was rolled, discard ${iOweDiscard} cards`;
@@ -803,10 +889,13 @@ export default function BoardGame({
     if (phase === 'pre-roll') return playableDev.some((card) => card.type === 'knight') ? 'Roll the dice, or play a Knight first' : 'Roll the dice';
     if (phase === 'robber') return pending?.kind === 'robber' ? 'Tap the same hex again to send the robber there' : 'Tap a hex for the robber, then tap it again';
     if (phase === 'steal') return 'Choose who to rob';
-    if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'}: tap a path, then tap it again`;
-    if (pending && ['road', 'settlement', 'city'].includes(pending.kind)) return `Tap again to build the ${pending.kind}, or tap elsewhere to cancel`;
+    if (phase === 'road-building') return `Place ${view.roadBuilding?.remaining} free road${view.roadBuilding?.remaining === 1 ? '' : 's'} next to your roads, then tap again to confirm`;
+    if (pending && ['road', 'settlement', 'city'].includes(pending.kind)) return `Tap the ${pending.kind} again to build it, or place it somewhere else`;
+    if (placing === 'road') return 'Place the road next to your settlements, cities or roads';
+    if (placing === 'settlement') return 'Place the settlement on an open corner along your roads';
+    if (placing === 'city') return 'Place the city on one of your settlements';
     const pieces = buildNow.filter((kind) => kind !== 'dev');
-    if (pieces.length) return `You have the cards for ${listBuilds(pieces)}: tap a glowing spot, then tap again`;
+    if (pieces.length) return `You have the cards for ${listBuilds(pieces)}: pick it up and place it next to your settlements or roads`;
     if (buildNow.includes('dev')) return 'You can buy a development card: tap the deck in your hand';
     return 'Trade, or end your turn';
   })();
@@ -1200,17 +1289,40 @@ export default function BoardGame({
   };
 
   const renderInfoSheet = () => {
-    if (!['rules', 'costs', 'dice'].includes(sheet)) return null;
+    if (!['rules', 'costs', 'dice', 'dicestats'].includes(sheet)) return null;
     const close = () => setSheet(null);
+    const TABS = [
+      ['rules', 'How a turn works'],
+      ['dicestats', 'Dice so far'],
+      ['dice', 'Fair play'],
+    ];
     return (
       <div className="property-card-overlay" onClick={close}>
         <div className="property-card dice-info-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="info-title">
           <header className="property-card-header">
-            <p className="property-card-kicker">{sheet === 'dice' ? 'Fair play' : 'Reference'}</p>
-            <h3 id="info-title">{sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : 'Dice and island'}</h3>
+            <p className="property-card-kicker">Game info</p>
+            <h3 id="info-title">
+              {sheet === 'rules' ? 'How a turn works' : sheet === 'costs' ? 'Building costs' : sheet === 'dicestats' ? 'Dice so far' : 'Dice and island'}
+            </h3>
             <button type="button" className="property-card-close" onClick={close} aria-label="Close">
               ✕
             </button>
+            {sheet !== 'costs' && (
+              <div className="info-tabs" role="tablist" aria-label="Game info">
+                {TABS.map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={sheet === key}
+                    className={`info-tab ${sheet === key ? 'info-tab--on' : ''}`}
+                    onClick={() => setSheet(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </header>
           <div className="property-card-body dice-info-body">
             {sheet === 'rules' && (
@@ -1284,6 +1396,31 @@ export default function BoardGame({
                   </ul>
                 </div>
               </>
+            )}
+            {sheet === 'dicestats' && (
+              <>
+                <DiceChart stats={view.stats} highlight={rolledTotal} />
+                <p className="dice-info-intro">
+                  Each bar is how often that total has been rolled this game; the dashed line is how often the odds say it
+                  should have been by now
+                </p>
+              </>
+            )}
+            {sheet === 'rules' && session && (
+              <div className="property-card-section">
+                <h4>Your way back in</h4>
+                <p>If you drop out, rejoin with the room code {session.code} and your Player ID {myCode}</p>
+                <div className="info-actions">
+                  <button type="button" className="property-action-btn" onClick={copyRejoin}>
+                    {copiedId ? 'Copied' : 'Copy rejoin details'}
+                  </button>
+                  {notifyState === 'default' && (
+                    <button type="button" className="property-action-btn property-action-btn--ghost" onClick={async () => setNotifyState(await askToNotify())}>
+                      Notify me on my turn
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
             {sheet === 'costs' && (
               <ul className="costs-list">
@@ -1362,6 +1499,68 @@ export default function BoardGame({
                 ? 'Waiting for discards'
                 : `Waiting for ${phase === 'setup' ? players[view.setup.order[view.setup.step]]?.name : activePlayer.name}`;
 
+  // Picking up a piece: from the bar under the board, the building costs
+  // card or a key. The cursor becomes that piece until it is built, put back
+  // (Esc, a right click, the same button again) or the moment passes.
+  const pickUp = (kind) => {
+    if (kind === 'dev') {
+      choose('dev', 'deck', () => act({ type: 'buy-dev' }));
+      return;
+    }
+    pick(null);
+    setPlacing((current) => (current === kind ? null : kind));
+    setFocus((current) => (current === kind && placing === kind ? null : kind));
+  };
+
+  pickUpRef.current = pickUp;
+
+  // Pressing a bar button and dragging carries the piece onto the board;
+  // letting go over a spot sets it down there, ready to confirm.
+  const startDrag = (kind, event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    // Let the board see the pointer, not the button it started on.
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    dragStart.current = { kind, x: event.clientX, y: event.clientY, fresh: placing !== kind };
+    pick(null);
+    setPlacing(kind);
+    setFocus(kind);
+    setDragging(true);
+  };
+  const endDrag = useCallback((placed) => {
+    const start = dragStart.current;
+    setDragging(false);
+    // A press without a drag is a click: the piece stays in hand. A drag that
+    // ended away from every spot puts it back.
+    if (!placed && start?.moved) {
+      setPlacing(null);
+      setFocus(null);
+    }
+  }, []);
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const onMove = (event) => {
+      const start = dragStart.current;
+      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) start.moved = true;
+    };
+    document.addEventListener('pointermove', onMove);
+    return () => document.removeEventListener('pointermove', onMove);
+  }, [dragging]);
+
+  // The piece the cursor carries right now. Set-up and Road Building hand
+  // you the piece automatically.
+  const placeKind =
+    !me || over || view.busy
+      ? null
+      : setupTurn
+        ? view.setup.expect === 'settlement'
+          ? 'settlement'
+          : 'road'
+        : isMyTurn && phase === 'road-building'
+          ? 'road'
+          : canBuildNow
+            ? placing
+            : null;
+
   const renderDock = () => {
     const builds = [
       ['road', 'Road', COSTS.road, left.road, legalRoadSpots(view, myPlayerId).length],
@@ -1420,17 +1619,26 @@ export default function BoardGame({
                     : !canBuildNow
                       ? 'On your turn, after the roll'
                       : focus === key
-                        ? 'Showing where it can go'
-                        : 'Tap to see where it can go';
+                        ? 'In your hand: place it on the board'
+                        : 'Pick it up, or drag it onto the board';
               return (
                 <button
                   key={key}
                   type="button"
-                  className={`action-btn ${ready ? 'action-btn--ready' : ''} ${focus === key ? 'action-btn--focus' : ''}`}
+                  className={`action-btn ${ready ? 'action-btn--ready' : ''} ${focus === key || placing === key ? 'action-btn--focus' : ''}`}
                   disabled={!ready}
-                  aria-pressed={focus === key}
+                  aria-pressed={placing === key}
                   aria-label={`${label}: ${piecesRemaining} left. ${reason}`}
-                  onClick={() => setFocus((current) => (current === key ? null : key))}
+                  onPointerDown={ready ? (event) => startDrag(key, event) : undefined}
+                  onClick={(event) => {
+                    // A mouse or finger press already picked it up; a key press lands here.
+                    if (event.detail === 0) pickUp(key);
+                    else if (dragStart.current && !dragStart.current.fresh && !dragStart.current.moved) {
+                      setPlacing(null);
+                      setFocus(null);
+                    }
+                    dragStart.current = null;
+                  }}
                 >
                   <BuildArt kind={key} size={24} />
                   <span className="action-btn-count">{piecesRemaining}</span>
@@ -1511,8 +1719,7 @@ export default function BoardGame({
       event.preventDefault();
       act({ type: 'roll' });
     } else if (canBuildNow && ['r', 's', 'c'].includes(key)) {
-      const kind = { r: 'road', s: 'settlement', c: 'city' }[key];
-      setFocus((current) => (current === kind ? null : kind));
+      pickUp({ r: 'road', s: 'settlement', c: 'city' }[key]);
     } else if (key === 'd' && canBuildNow && hasResources(myHand, COSTS.dev) && deckLeft > 0) {
       choose('dev', 'deck', () => act({ type: 'buy-dev' }));
     } else if (key === 't' && canTrade) {
@@ -1761,7 +1968,16 @@ export default function BoardGame({
 
 
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-        <section className="game-board-area catan-board-area table-board" aria-label="Catan game board" onClick={onBoardClick}>
+        <section className="game-board-area catan-board-area table-board" onContextMenu={
+            placing
+              ? (event) => {
+                  event.preventDefault();
+                  setPlacing(null);
+                  setFocus(null);
+                  pick(null);
+                }
+              : undefined
+          } aria-label="Catan game board" onClick={onBoardClick}>
           <p className="board-prompt" aria-live="polite">
             {prompt}
           </p>
@@ -1780,6 +1996,9 @@ export default function BoardGame({
             harvest={harvest}
             rollCounts={view.stats?.rolls}
             victims={victims}
+            placing={placeKind}
+            dragging={dragging}
+            onDragEnd={endDrag}
             onVictim={(playerId) => act({ type: 'steal', victimId: playerId })}
           />
 
@@ -1803,6 +2022,7 @@ export default function BoardGame({
           {renderTradeSheet()}
           {renderInfoSheet()}
           {renderResults()}
+          {renderRejoin()}
 
           {sheet === 'end' && canProposeEnd && (
             <div className="property-card-overlay end-overlay" onClick={() => setSheet(null)}>
@@ -1900,8 +2120,6 @@ export default function BoardGame({
             />
           )}
 
-          {view.stats && <DiceChart stats={view.stats} highlight={rolledTotal} />}
-
           {trades.length > 0 && !over && (
             <section className="trade-pending" aria-label="Trade offers">
               <p className="eyebrow">Trade offers</p>
@@ -1984,52 +2202,34 @@ export default function BoardGame({
             </button>
           )}
 
-          {session && <VoicePanel session={session} compact />}
-          {session && <ChatPanel session={session} compact />}
-
-          <div className="dice-info-row">
-            <button type="button" className="dice-info-button" onClick={() => setSheet('costs')}>
-              Building costs
-            </button>
-            {notifyState === 'default' && session && (
-              <button type="button" className="dice-info-button" onClick={async () => setNotifyState(await askToNotify())}>
-                Notify me on my turn
-              </button>
-            )}
-            <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
-              Fair play{view.boardId ? ` · Island ${view.boardId.slice(0, 4)}` : ''}
-            </button>
-            {/* Phones hide the top bar's goal pill, so the turn guide lives here too */}
-            <button type="button" className="dice-info-button dice-info-button--rules" onClick={() => setSheet('rules')}>
-              How a turn works
-            </button>
-          </div>
-
-          {session && (
-            <section className="player-ids" aria-label="Player IDs">
-              <div className="player-ids-head">
-                <p className="eyebrow">Player IDs</p>
-                {myCode && (
-                  <button type="button" className="text-link" onClick={copyMyId}>
-                    {copiedId ? 'Copied' : 'Copy mine'}
-                  </button>
-                )}
-              </div>
-              <ul>
-                {/* The host keeps every Player ID to help a friend back in; a guest sees only their own. */}
-                {(isHost ? state.players : players)
-                  .filter((player) => player.code)
-                  .map((player) => (
-                    <li key={player.id} className={`seat-${player.pieceKey} ${player.id === myPlayerId ? 'is-mine' : ''}`}>
-                      <PieceMark piece={player.pieceKey} variant="token" />
-                      <span>{player.id === myPlayerId ? 'You' : player.name}</span>
-                      <code>{player.code}</code>
-                    </li>
-                  ))}
-              </ul>
-              <p className="player-ids-note">Dropped out? Open Catan, choose Rejoin and enter the room code with your Player ID</p>
-            </section>
+          {me && (
+            <CostsCard
+              hand={myHand}
+              piece={me.pieceKey}
+              ready={{
+                road: buildNow.includes('road'),
+                settlement: buildNow.includes('settlement'),
+                city: buildNow.includes('city'),
+                dev: buildNow.includes('dev'),
+              }}
+              active={pending?.kind === 'dev' ? 'dev' : placing || focus}
+              onPick={canBuildNow ? pickUp : null}
+            />
           )}
+
+          {session && <VoicePanel session={session} compact />}
+          {session && (
+            <ChatPanel
+              session={session}
+              compact
+              myPlayerId={myPlayerId}
+              canStartTrade={Boolean(isMyTurn && phase === 'actions' && !over)}
+              tradeCandidates={players
+                .filter((player) => player.id !== myPlayerId && player.kind === 'human')
+                .map(({ id, name, pieceKey }) => ({ id, name, pieceKey }))}
+            />
+          )}
+
         </aside>
       </section>
     </main>

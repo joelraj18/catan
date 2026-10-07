@@ -97,6 +97,9 @@ export default class RoomSession {
     this.hostHeardAt = 0; // guest: last message from the host
     this.beatTimer = null;
     this.route = null; // the route a guest joined by: 'direct' | 'relay' | 'local'
+    this.trade = null; // host: the open trade talk, { id, owner, members, startedAt, turn }
+    this.tradeMode = null; // everyone: { id, owner, members } while a trade talk is open
+    this.tradeChat = []; // the trade talk's messages, kept only while it lasts
   }
 
   // --------------------------------------------------------------- events
@@ -374,7 +377,8 @@ export default class RoomSession {
 
         this.transport.send(peerId, { t: 'welcome', clientId: peerId, code: this.code });
         this.transport.send(peerId, { t: 'chat-log', chat: this.chat });
-        this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster() });
+        this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster(peerId) });
+        this.transport.send(peerId, { t: 'trade-mode', trade: this.tradeMode });
         this.publishLobby();
         this.postSystem(`${name} joined the table`);
         break;
@@ -402,6 +406,18 @@ export default class RoomSession {
       case 'voice-signal':
       case 'voice-clip':
         if (seat) this.handleVoice(peerId, message);
+        break;
+
+      case 'trade-open':
+        if (seat) this.handleTradeOpen(this.playerOfClient(peerId), message.members);
+        break;
+
+      case 'trade-close':
+        if (seat && this.trade && this.playerOfClient(peerId) === this.trade.owner) this.endTrade();
+        break;
+
+      case 'trade-chat':
+        if (seat) this.handleTradeChat(this.playerOfClient(peerId), message.text);
         break;
 
       default:
@@ -441,7 +457,10 @@ export default class RoomSession {
 
     this.transport.send(peerId, { t: 'welcome', clientId: peerId, code: this.code });
     this.transport.send(peerId, { t: 'chat-log', chat: this.chat });
-    this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster() });
+    this.transport.send(peerId, { t: 'trade-mode', trade: this.tradeMode });
+    // A trader who comes back is let into the trade channel on their new link.
+    if (this.trade) this.syncTradeVoice({ publish: false });
+    this.transport.send(peerId, { t: 'voice-roster', roster: this.voiceRoster(peerId) });
     this.transport.send(peerId, { t: 'start', players: this.playersFor(player.id), gameId: this.gameId, rejoin: true });
 
     if (this.lastGameState) {
@@ -453,6 +472,8 @@ export default class RoomSession {
   }
 
   handleGuestLeft(peerId) {
+    // The trade talk ends with its owner's link.
+    if (this.trade && this.playerOfClient(peerId) === this.trade.owner) this.endTrade();
     this.leaveVoice(peerId);
     const seat = this.lobby.seats.find((entry) => entry.clientId === peerId);
 
@@ -572,6 +593,7 @@ export default class RoomSession {
   }
 
   announceStart(resume = null) {
+    if (this.trade) this.endTrade();
     this.gameId = Date.now().toString(36);
     this.lastGameState = resume;
     writeStore(SEAT_KEY, { code: this.code, playerCode: this.players[0].code, name: this.players[0].name });
@@ -718,6 +740,7 @@ export default class RoomSession {
 
     this.lastGameState = state;
     this.viewFor = viewFor;
+    this.checkTrade(state);
 
     if (!viewFor) {
       this.broadcast({ t: 'game', state, sentAt: Date.now(), gameId: this.gameId });
@@ -866,6 +889,14 @@ export default class RoomSession {
         this.emit(message.t, message);
         break;
 
+      case 'trade-mode':
+        this.setTradeMode(message.trade || null);
+        break;
+
+      case 'trade-chat':
+        this.addTradeChat(message.message);
+        break;
+
       default:
         break;
     }
@@ -923,7 +954,9 @@ export default class RoomSession {
     return seat ? { name: seat.name, pieceKey: seat.pieceKey } : null;
   }
 
-  voiceRoster() {
+  // The roster as `viewer` may see it: a trade channel shows who is invited
+  // and who is in it only to its own traders. Without a viewer, everything.
+  voiceRoster(viewer = undefined) {
     const voice = this.voiceChannels();
     const people = {};
     this.lobby.seats
@@ -931,13 +964,28 @@ export default class RoomSession {
       .forEach((seat) => {
         people[seat.clientId] = { name: seat.name, pieceKey: seat.pieceKey, key: voice.keys[seat.clientId] || null };
       });
-    return { channels: voice.channels.map((channel) => ({ ...channel, members: [...channel.members] })), people };
+    const channels = voice.channels.map((channel) =>
+      channel.trade && viewer !== undefined && !channel.invited.includes(viewer) && !channel.members.includes(viewer)
+        ? { id: channel.id, name: 'Trade', owner: null, trade: true, hidden: true, invited: [], members: [] }
+        : { ...channel, members: [...channel.members], invited: channel.invited && [...channel.invited] },
+    );
+    return { channels, people };
   }
 
   publishVoice() {
-    const roster = this.voiceRoster();
+    const voice = this.voiceChannels();
+    const roster = this.voiceRoster(this.myClientId);
     this.voiceRosterCache = roster;
-    this.broadcast({ t: 'voice-roster', roster });
+
+    if (voice.channels.some((channel) => channel.trade)) {
+      // While a trade channel is open each person gets their own view.
+      this.lobby.seats
+        .filter((seat) => seat.kind === 'human' && seat.clientId && seat.clientId !== this.myClientId)
+        .forEach((seat) => this.transport?.send(seat.clientId, { t: 'voice-roster', roster: this.voiceRoster(seat.clientId) }));
+    } else {
+      this.broadcast({ t: 'voice-roster', roster });
+    }
+
     this.emit('voice-roster', roster);
   }
 
@@ -950,9 +998,10 @@ export default class RoomSession {
         changed = true;
       }
     });
-    // A private channel closes when its last member leaves.
+    // A private channel closes when its last member leaves. A trade channel
+    // lasts as long as its trade talk.
     const before = voice.channels.length;
-    voice.channels = voice.channels.filter((channel) => channel.id === 'table' || channel.members.length);
+    voice.channels = voice.channels.filter((channel) => channel.id === 'table' || channel.trade || channel.members.length);
     if ((changed || before !== voice.channels.length) && publish) this.publishVoice();
   }
 
@@ -1015,6 +1064,198 @@ export default class RoomSession {
   sendVoice(message) {
     if (this.isHost) this.handleVoice(this.myClientId, message);
     else this.transport?.send(message);
+  }
+
+  // -------------------------------------------------------- trade talk
+
+  // During their turn, the player whose turn it is can talk trades with a
+  // few people they pick: a private chat that vanishes when the talk ends,
+  // and a private voice channel those already in voice are moved into.
+
+  // The client id a player is reached on: 'host' for the host's own seat.
+  clientOf(playerId) {
+    if (playerId && playerId === this.myPlayerId) return this.myClientId;
+    return this.players?.find((player) => player.id === playerId)?.clientId || null;
+  }
+
+  playerOfClient(clientId) {
+    if (clientId && clientId === this.myClientId) return this.myPlayerId;
+    return this.players?.find((player) => player.clientId === clientId)?.id || null;
+  }
+
+  // Opens the trade talk, or changes who is in it when it is already open.
+  handleTradeOpen(playerId, members) {
+    const state = this.lastGameState;
+    const active = state?.players?.[state.activeIndex];
+
+    if (!this.isHost || !playerId || active?.id !== playerId || state.turnPhase !== 'actions' || state.gameOver) {
+      return false;
+    }
+
+    const humans = (this.players || []).filter((player) => player.kind === 'human' && player.id !== playerId);
+    const kept = humans.map((player) => player.id).filter((id) => Array.isArray(members) && members.includes(id));
+
+    if (!kept.length) {
+      this.endTrade();
+      return false;
+    }
+
+    if (this.trade && this.trade.owner !== playerId) this.endTrade();
+
+    this.trade = this.trade
+      ? { ...this.trade, members: [playerId, ...kept] }
+      : { id: `trade-${chatId()}`, owner: playerId, members: [playerId, ...kept], startedAt: Date.now(), turn: state.turnCount };
+    this.syncTradeVoice();
+    this.publishTrade();
+    return true;
+  }
+
+  endTrade() {
+    if (!this.trade) return;
+    this.trade = null;
+    this.syncTradeVoice();
+    this.publishTrade();
+  }
+
+  // Runs on each new engine state: the talk ends with the turn or the match,
+  // not with a robber or road building moment inside the turn.
+  checkTrade(state) {
+    if (!this.trade) return;
+    const active = state?.players?.[state.activeIndex];
+    if (!state || state.gameOver || active?.id !== this.trade.owner || state.turnCount !== this.trade.turn) {
+      this.endTrade();
+    }
+  }
+
+  publishTrade() {
+    const trade = this.trade ? { id: this.trade.id, owner: this.trade.owner, members: [...this.trade.members] } : null;
+    this.broadcast({ t: 'trade-mode', trade });
+    this.setTradeMode(trade);
+  }
+
+  // Everyone's copy of the trade talk. Its messages go with it.
+  setTradeMode(trade) {
+    if (!trade || trade.id !== this.tradeMode?.id) {
+      this.tradeChat = [];
+      this.emit('trade-chat', this.tradeChat);
+    }
+
+    this.tradeMode = trade;
+    this.emit('trade-mode', trade);
+  }
+
+  addTradeChat(message) {
+    if (!message || !this.tradeMode || message.tradeId !== this.tradeMode.id) return;
+    this.tradeChat = [...this.tradeChat, message].slice(-MAX_CHAT);
+    this.emit('trade-chat', this.tradeChat);
+  }
+
+  // A trade message goes to the traders only. It is never kept in the
+  // table chat, its log or the saved game.
+  handleTradeChat(playerId, text) {
+    const trade = this.trade;
+    const clean = cleanText(text);
+
+    if (!trade || !clean || !trade.members.includes(playerId)) {
+      return;
+    }
+
+    const player = this.players?.find((entry) => entry.id === playerId);
+    const message = {
+      id: chatId(),
+      name: player?.name || 'Player',
+      pieceKey: player?.pieceKey || null,
+      text: clean,
+      ts: Date.now(),
+      tradeId: trade.id,
+      playerId,
+    };
+    trade.members.forEach((id) => {
+      const client = this.clientOf(id);
+      if (client && client !== this.myClientId) this.transport?.send(client, { t: 'trade-chat', message });
+    });
+
+    if (trade.members.includes(this.myPlayerId)) this.addTradeChat(message);
+  }
+
+  // Moves someone into a voice channel. Like a join, but without the
+  // message: the host does it for them.
+  moveVoice(clientId, channel) {
+    const voice = this.voiceChannels();
+    this.leaveVoice(clientId, { publish: false });
+    if (!voice.channels.includes(channel)) voice.channels.push(channel);
+    if (!channel.members.includes(clientId)) channel.members.push(clientId);
+  }
+
+  // Back to the channel they were in before the trade talk, or the table.
+  returnFromTrade(clientId) {
+    const voice = this.voiceChannels();
+    const before = voice.channels.find((channel) => channel.id === voice.returnTo?.[clientId] && !channel.trade);
+    const back = before && (!before.invited || before.invited.includes(clientId)) ? before : voice.channels.find((channel) => channel.id === 'table');
+    delete voice.returnTo?.[clientId];
+    this.moveVoice(clientId, back);
+  }
+
+  // Makes the trade channel match the trade talk: opens it, moves traders
+  // already in voice straight in, invites the rest, sends the removed back,
+  // and closes it with the talk.
+  syncTradeVoice({ publish = true } = {}) {
+    const voice = this.voiceChannels();
+    voice.returnTo = voice.returnTo || {};
+    let channel = voice.channels.find((entry) => entry.trade);
+
+    if (!this.trade) {
+      if (!channel) return;
+      [...channel.members].forEach((id) => this.returnFromTrade(id));
+      voice.channels = voice.channels.filter((entry) => entry !== channel);
+      voice.returnTo = {};
+      if (publish) this.publishVoice();
+      return;
+    }
+
+    const owner = this.clientOf(this.trade.owner);
+    const clients = this.trade.members.map((id) => this.clientOf(id)).filter(Boolean);
+
+    if (!channel) {
+      voice.counter += 1;
+      channel = { id: `trade-${voice.counter}`, name: 'Trade', owner, invited: [], members: [], trade: true };
+      voice.channels.push(channel);
+    }
+
+    const before = channel.invited;
+    channel.owner = owner;
+    channel.invited = clients;
+    channel.members.filter((id) => !clients.includes(id)).forEach((id) => this.returnFromTrade(id));
+    clients
+      .filter((id) => !before.includes(id))
+      .forEach((id) => {
+        const current = voice.channels.find((entry) => entry.members.includes(id));
+        if (current) {
+          if (current !== channel) voice.returnTo[id] = current.id;
+          this.moveVoice(id, channel);
+        } else if (id !== owner) {
+          this.deliverVoice(id, { t: 'voice-invite', channel: channel.id, name: 'Trade', from: owner });
+        }
+      });
+
+    if (publish) this.publishVoice();
+  }
+
+  openTrade(members) {
+    if (this.isHost) this.handleTradeOpen(this.myPlayerId, members);
+    else this.transport?.send({ t: 'trade-open', members: Array.isArray(members) ? members : [] });
+  }
+
+  closeTrade() {
+    if (!this.isHost) this.transport?.send({ t: 'trade-close' });
+    else if (this.trade?.owner === this.myPlayerId) this.endTrade();
+  }
+
+  sendTradeChat(text) {
+    const clean = cleanText(text);
+    if (!clean) return;
+    if (this.isHost) this.handleTradeChat(this.myPlayerId, clean);
+    else this.transport?.send({ t: 'trade-chat', text: clean });
   }
 
   // ------------------------------------------------------------- shared

@@ -679,20 +679,50 @@
   fill: #c0392b;
 }
 
+.game-card--deck {
+  container-type: inline-size;
+}
+
 .dev-back-ribbon {
   position: absolute;
-  top: 6%;
-  left: 50%;
-  padding: 0 4px;
-  color: #3a2068;
-  font-size: 0.42rem;
+  top: 5%;
+  right: 6%;
+  left: 6%;
+  height: 17%;
+}
+
+.dev-back-ribbon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dev-back-ribbon path {
+  fill: #e2b84f;
+  stroke: #9a7424;
+  stroke-width: 1.2;
+}
+
+.dev-back-ribbon text {
+  fill: #3a2068;
+  font-family: var(--font);
+  font-size: 15px;
   font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  background: #e2b84f;
-  border-radius: 3px;
-  transform: translateX(-50%);
+}
+
+.dev-back-ribbon-short {
+  display: none !important;
+}
+
+@container (max-width: 45px) {
+  .dev-back-ribbon-long {
+    display: none !important;
+  }
+
+  .dev-back-ribbon-short {
+    display: block !important;
+  }
 }
 
 /* A slow sheen when you can afford one */
@@ -829,9 +859,6 @@
       0 -6px 24px rgba(20, 24, 30, 0.16);
   }
 
-  .game-toasts {
-    bottom: 140px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -874,9 +901,6 @@
     font-size: 0.78rem;
   }
 
-  .game-toasts {
-    bottom: 190px;
-  }
 }
 
 @media (max-width: 620px) {
@@ -1302,4 +1326,267 @@
   color: var(--ink-secondary);
   background: transparent;
   border-color: var(--hairline-strong);
+}
+
+/* Side notes at the top right, under the top bar, newest at the top edge */
+.game-toasts {
+  top: 64px;
+  right: 18px;
+  bottom: auto;
+}
+
+@media (max-width: 620px) {
+  .game-toasts {
+    top: 60px;
+    right: 8px;
+  }
+}
+
+/* ---------------------------------------------- the building costs card */
+
+.costs-card {
+  --parchment: #ebdfc4;
+  --parchment-ink: #3b2a17;
+  --parchment-rule: #8a6a3e;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 10px;
+  color: var(--parchment-ink);
+  background:
+    radial-gradient(120% 90% at 20% 10%, rgba(255, 255, 255, 0.35), transparent 60%),
+    var(--parchment);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 0 1.5px var(--parchment-rule),
+    inset 0 0 0 4px var(--parchment),
+    inset 0 0 0 5px rgba(138, 106, 62, 0.55),
+    0 0 0 3px #3e8f4a,
+    0 4px 12px rgba(20, 24, 30, 0.14);
+}
+
+.costs-card-title {
+  margin: 0 0 2px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.02rem;
+  font-variant: small-caps;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  border-bottom: 2px solid var(--parchment-rule);
+}
+
+.costs-card-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.costs-card-rows li + li {
+  border-top: 1.5px solid rgba(138, 106, 62, 0.6);
+}
+
+.costs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 4px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  transition:
+    background-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+button.costs-row {
+  cursor: pointer;
+}
+
+button.costs-row:hover,
+button.costs-row:focus-visible {
+  background: rgba(255, 255, 255, 0.4);
+  outline: none;
+}
+
+.costs-row--ready {
+  box-shadow: inset 3px 0 0 #3e8f4a;
+  background: rgba(62, 143, 74, 0.1);
+}
+
+.costs-row--active {
+  background: rgba(62, 143, 74, 0.22);
+  box-shadow: inset 3px 0 0 #2d6e38, inset 0 0 0 1px rgba(45, 110, 56, 0.5);
+}
+
+.costs-row-name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.costs-row-name strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.92rem;
+  line-height: 1.05;
+}
+
+.costs-row--dev .costs-row-name strong {
+  font-size: 0.82rem;
+}
+
+.costs-row-worth {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.costs-row-cards {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.costs-tile {
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 24px;
+  place-items: center;
+  background: #fbf6ea;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, currentColor 45%, #fbf6ea),
+    0 1px 2px rgba(60, 40, 10, 0.25);
+}
+
+.costs-tile--have::after {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  width: 11px;
+  height: 11px;
+  place-items: center;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  background: #3e8f4a;
+  border-radius: 50%;
+  content: '\2713';
+}
+
+.costs-card-notes {
+  margin: 2px 0 0;
+  padding: 4px 0 0 14px;
+  color: #6b5236;
+  font-size: 0.64rem;
+  line-height: 1.3;
+  border-top: 2px solid var(--parchment-rule);
+}
+
+[data-theme='dark'] .costs-card {
+  --parchment: #3a3324;
+  --parchment-ink: #efe3c6;
+  --parchment-rule: #8a734a;
+}
+
+[data-theme='dark'] .costs-tile {
+  background: #f1e8d2;
+}
+
+[data-theme='dark'] .costs-card-notes {
+  color: #cdbd98;
+}
+
+/* Saving your way back in, at the start of a game */
+.rejoin-sheet {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.rejoin-codes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.rejoin-codes span {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border-radius: 12px;
+}
+
+.rejoin-codes em {
+  color: var(--ink-tertiary);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rejoin-codes code {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.rejoin-text {
+  width: 100%;
+  min-height: 64px;
+  margin-bottom: 10px;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+}
+
+/* Game info: tabs under the title */
+.info-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 3px;
+  background: rgba(120, 120, 128, 0.12);
+  border-radius: 10px;
+}
+
+.info-tab {
+  flex: 1;
+  padding: 6px 8px;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.info-tab--on {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }

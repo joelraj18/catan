@@ -81,6 +81,171 @@ describe('voice channels on the host', () => {
   });
 });
 
+// A match under way: the host is p1, Anu p2, Ravi p3 and a computer p4.
+const tradingTable = ({ active = 0, turnPhase = 'actions' } = {}) => {
+  const session = hostWithGuests();
+  session.started = true;
+  session.myPlayerId = 'p1';
+  session.players = [
+    { id: 'p1', name: 'Host', pieceKey: 'red', kind: 'human', clientId: null },
+    { id: 'p2', name: 'Anu', pieceKey: 'blue', kind: 'human', clientId: 'a' },
+    { id: 'p3', name: 'Ravi', pieceKey: 'white', kind: 'human', clientId: 'b' },
+    { id: 'p4', name: 'Computer 1', pieceKey: 'orange', kind: 'bot', clientId: null },
+  ];
+  session.lastGameState = { players: session.players, activeIndex: active, turnPhase, turnCount: 7, gameOver: null };
+  return session;
+};
+
+const tradeModes = (session) => session.transport.broadcast.mock.calls.filter(([message]) => message.t === 'trade-mode');
+
+describe('trade talk', () => {
+  test('only the player whose turn it is can open it, and only after the roll', () => {
+    const session = tradingTable({ active: 1 });
+    session.openTrade(['p2']); // the host, but it is Anu's turn
+    session.handleGuestMessage('b', { t: 'trade-open', members: ['p2'] }); // Ravi, not his turn
+    expect(session.trade).toBeNull();
+
+    session.lastGameState = { ...session.lastGameState, turnPhase: 'pre-roll' };
+    session.handleGuestMessage('a', { t: 'trade-open', members: ['p1'] });
+    expect(session.trade).toBeNull();
+
+    session.lastGameState = { ...session.lastGameState, turnPhase: 'actions' };
+    // Computers and unknown seats are dropped; the owner is always in.
+    session.handleGuestMessage('a', { t: 'trade-open', members: ['p1', 'p4', 'p9'] });
+    expect(session.trade).toMatchObject({ owner: 'p2', members: ['p2', 'p1'] });
+    expect(tradeModes(session).at(-1)[0].trade).toEqual({ id: session.trade.id, owner: 'p2', members: ['p2', 'p1'] });
+    expect(session.tradeMode.owner).toBe('p2');
+
+    // Re-sending changes who is in; nobody left closes it. Only the owner can end it.
+    session.handleGuestMessage('a', { t: 'trade-open', members: ['p3'] });
+    expect(session.trade.members).toEqual(['p2', 'p3']);
+    session.handleGuestMessage('b', { t: 'trade-close' });
+    expect(session.trade).not.toBeNull();
+    session.handleGuestMessage('a', { t: 'trade-open', members: [] });
+    expect(session.trade).toBeNull();
+    expect(tradeModes(session).at(-1)[0].trade).toBeNull();
+  });
+
+  test('trade chat reaches the traders only and never the table chat', () => {
+    const session = tradingTable();
+    const heard = [];
+    session.on('trade-chat', (chat) => heard.push(chat));
+    session.openTrade(['p2']);
+    session.handleGuestMessage('a', { t: 'trade-chat', text: '  wool for   ore? ' });
+    session.handleGuestMessage('b', { t: 'trade-chat', text: 'let me in' }); // Ravi is not trading
+
+    expect(sentTo(session, 'a', 'trade-chat')).toHaveLength(1);
+    expect(sentTo(session, 'a', 'trade-chat')[0][1].message).toMatchObject({ name: 'Anu', text: 'wool for ore?', playerId: 'p2', tradeId: session.trade.id });
+    expect(sentTo(session, 'b', 'trade-chat')).toHaveLength(0);
+    expect(session.transport.broadcast.mock.calls.some(([message]) => message.t === 'trade-chat')).toBe(false);
+    expect(session.tradeChat.map((message) => message.text)).toEqual(['wool for ore?']);
+    expect(heard.at(-1)).toHaveLength(1);
+
+    session.sendTradeChat('deal');
+    expect(sentTo(session, 'a', 'trade-chat')).toHaveLength(2);
+    expect(session.chat.some((message) => /wool|deal|let me in/.test(message.text))).toBe(false);
+
+    // The save carries none of it, nor does a joiner's chat log.
+    session.saveHostGame({ gameOver: null });
+    expect(window.localStorage.getItem('catan-host-game')).not.toMatch(/wool|deal/);
+    expect(window.localStorage.getItem('catan-host-game')).toContain('"chat"');
+    window.localStorage.removeItem('catan-host-game');
+    session.started = false;
+    session.handleGuestMessage('c', { t: 'hello', name: 'Late' });
+    const log = sentTo(session, 'c', 'chat-log')[0][1].chat;
+    expect(log.some((message) => /wool|deal/.test(message.text))).toBe(false);
+  });
+
+  test("a guest's trade chat clears when the trade talk ends", () => {
+    const guest = new RoomSession('guest');
+    guest.myClientId = 'a';
+    guest.myPlayerId = 'p2';
+    const heard = [];
+    guest.on('trade-chat', (chat) => heard.push(chat));
+    guest.handleHostMessage({ t: 'trade-mode', trade: { id: 't1', owner: 'p1', members: ['p1', 'p2'] } });
+    guest.handleHostMessage({ t: 'trade-chat', message: { id: 'm1', text: 'hi', tradeId: 't1' } });
+    guest.handleHostMessage({ t: 'trade-chat', message: { id: 'm2', text: 'old', tradeId: 't0' } }); // another talk
+    expect(guest.tradeChat.map((message) => message.id)).toEqual(['m1']);
+
+    // The same talk with new members keeps its messages.
+    guest.handleHostMessage({ t: 'trade-mode', trade: { id: 't1', owner: 'p1', members: ['p1', 'p2', 'p3'] } });
+    expect(guest.tradeChat).toHaveLength(1);
+
+    guest.handleHostMessage({ t: 'trade-mode', trade: null });
+    expect(guest.tradeChat).toEqual([]);
+    expect(guest.tradeMode).toBeNull();
+    expect(heard.at(-1)).toEqual([]);
+  });
+
+  test('traders in voice move into the trade channel and back; outsiders cannot reach them', () => {
+    const session = tradingTable();
+    ['a', 'b'].forEach((id) => session.handleGuestMessage(id, { t: 'voice-join', channel: 'table' }));
+    session.sendVoice({ t: 'voice-join', channel: 'table' });
+    session.openTrade(['p2']);
+
+    const trade = session.voiceRoster().channels.find((channel) => channel.trade);
+    expect(trade).toMatchObject({ name: 'Trade', owner: 'host', invited: ['host', 'a'], members: ['host', 'a'] });
+    expect(session.voiceRoster().channels[0].members).toEqual(['b']);
+
+    // Ravi stayed at the table and cannot reach the traders.
+    session.handleGuestMessage('b', { t: 'voice-signal', to: 'a', data: { sdp: 1 } });
+    expect(sentTo(session, 'a', 'voice-signal')).toHaveLength(0);
+    session.handleGuestMessage('b', { t: 'voice-join', channel: trade.id });
+    expect(session.voiceRoster().channels.find((channel) => channel.trade).members).toEqual(['host', 'a']);
+
+    // Adding Ravi moves him in; the end sends everyone back to the table.
+    session.openTrade(['p2', 'p3']);
+    expect(session.voiceRoster().channels.find((channel) => channel.trade).members).toEqual(['host', 'a', 'b']);
+    session.closeTrade();
+    expect(session.voiceRoster().channels.map((channel) => channel.id)).toEqual(['table']);
+    expect(session.voiceRoster().channels[0].members.sort()).toEqual(['a', 'b', 'host']);
+  });
+
+  test('someone not in voice gets an invite to the trade channel', () => {
+    const session = tradingTable();
+    session.openTrade(['p2']);
+    const trade = session.voiceRoster().channels.find((channel) => channel.trade);
+    expect(sentTo(session, 'a', 'voice-invite')).toEqual([['a', { t: 'voice-invite', channel: trade.id, name: 'Trade', from: 'host' }]]);
+    session.handleGuestMessage('a', { t: 'voice-join', channel: trade.id });
+    expect(session.voiceRoster().channels.find((channel) => channel.trade).members).toEqual(['a']);
+  });
+
+  test('the talk ends with the turn, not with the robber inside it', () => {
+    const session = tradingTable();
+    session.openTrade(['p2', 'p3']);
+    session.broadcastGame({ ...session.lastGameState, turnPhase: 'robber' });
+    session.broadcastGame({ ...session.lastGameState, turnPhase: 'road-building' });
+    expect(session.trade).not.toBeNull();
+    session.broadcastGame({ ...session.lastGameState, activeIndex: 1, turnCount: 8, turnPhase: 'pre-roll' });
+    expect(session.trade).toBeNull();
+    expect(session.tradeMode).toBeNull();
+
+    // And when its owner drops out.
+    session.broadcastGame({ ...session.lastGameState, activeIndex: 1, turnPhase: 'actions' });
+    session.handleGuestMessage('a', { t: 'trade-open', members: ['p1'] });
+    expect(session.trade.owner).toBe('p2');
+    session.handleGuestLeft('a');
+    expect(session.trade).toBeNull();
+  });
+
+  test('outsiders see neither who is invited nor who is in the trade channel', () => {
+    const session = tradingTable();
+    ['a', 'b'].forEach((id) => session.handleGuestMessage(id, { t: 'voice-join', channel: 'table' }));
+    session.transport.send.mockClear();
+    session.openTrade(['p2']);
+
+    const forRavi = sentTo(session, 'b', 'voice-roster').at(-1)[1].roster;
+    const hidden = forRavi.channels.find((channel) => channel.trade);
+    expect(hidden).toMatchObject({ name: 'Trade', hidden: true, invited: [], members: [] });
+    expect(JSON.stringify(forRavi.channels)).not.toContain('"a"');
+
+    const forAnu = sentTo(session, 'a', 'voice-roster').at(-1)[1].roster;
+    expect(forAnu.channels.find((channel) => channel.trade)).toMatchObject({ invited: ['host', 'a'], members: ['a'] });
+    // The host's own view, as its voice client sees it.
+    expect(session.voiceRosterCache.channels.find((channel) => channel.trade).invited).toEqual(['host', 'a']);
+  });
+});
+
 describe('voice security', () => {
   test('a clip sealed for one listener opens only with their key', async () => {
     const alice = newVoiceKeys();

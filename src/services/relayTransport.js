@@ -57,8 +57,11 @@ const BATCH_CHARS = 40000;
 // Joining is a short back and forth, so those steps skip the tick.
 const TICK_URGENT = 120;
 const URGENT_KINDS = ['probe', 'here', 'join', 'accepted', 'host-gone'];
-// Voice set-up and walkie-talkie clips go out at once too.
-const URGENT_MESSAGES = ['hello', 'welcome', 'reject', 'chat-log', 'start', 'voice-signal', 'voice-clip', 'voice-roster', 'voice-invite', 'emote'];
+// Voice set-up, walkie-talkie clips and trade talk go out at once too.
+const URGENT_MESSAGES = [
+  'hello', 'welcome', 'reject', 'chat-log', 'start', 'voice-signal', 'voice-clip', 'voice-roster', 'voice-invite', 'emote',
+  'trade-open', 'trade-close', 'trade-mode', 'trade-chat',
+];
 const isUrgent = (item) => URGENT_KINDS.includes(item.kind) || URGENT_MESSAGES.includes(item.payload?.t);
 
 const encoder = new TextEncoder();

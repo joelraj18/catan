@@ -1220,3 +1220,36 @@
 :root[data-motion='off'] .victim-badge-pin {
   animation: none;
 }
+
+/* Placing: the cursor is the piece itself */
+.hex-board--placing {
+  cursor: none;
+}
+
+.piece-cursor {
+  pointer-events: none;
+  transition: transform 0.06s linear;
+}
+
+.piece-cursor--snapped {
+  transition: transform 0.12s var(--ease-out);
+}
+
+.piece-cursor-shadow {
+  fill: rgba(0, 0, 0, 0.25);
+}
+
+.piece-cursor--loose {
+  opacity: 0.75;
+  filter: saturate(0.6);
+}
+
+.piece-cursor--loose .piece-cursor-shadow {
+  fill: rgba(150, 20, 20, 0.3);
+}
+
+@media (hover: none) {
+  .hex-board--placing {
+    cursor: auto;
+  }
+}
