@@ -1586,13 +1586,11 @@
 
 /* Reduced motion */
 
-@media (prefers-reduced-motion: reduce) {
-
-  .dice-display--rolling .die-face,
-  .dice-display .die-face,
-  .game-player--active {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .dice-display--rolling .die-face,
+:root[data-motion='off'] .dice-display .die-face,
+:root[data-motion='off'] .game-player--active {
+  animation: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2543,12 +2541,11 @@
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--seat) 60%, transparent);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .seat-tag--thinking,
-  .vp-medal-fill {
-    animation: none;
-    transition: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .seat-tag--thinking,
+:root[data-motion='off'] .vp-medal-fill {
+  animation: none;
+  transition: none;
 }
 
 /* Side notes: what just happened to you, and offers waiting on your answer */
@@ -2863,11 +2860,10 @@
   box-shadow: inset 0 0 0 1px var(--sage-200);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .turn-clock--urgent.turn-clock--mine strong,
-  .seat-clock {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .turn-clock--urgent.turn-clock--mine strong,
+:root[data-motion='off'] .seat-clock {
+  animation: none;
 }
 
 /* Cards in the hand: upright, coloured like their terrain, with the symbol
@@ -3099,10 +3095,9 @@
   opacity: 0.3;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .game-card-face {
-    transition: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .game-card-face {
+  transition: none;
 }
 
 .game-card--deck {
@@ -3399,16 +3394,15 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .die3d-cube {
-    transition: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .die3d-cube {
+  transition: none;
+}
 
-  .dice3d--rolling .die3d,
-  .dice3d--rolling .die3d-shadow,
-  .dice-total-badge {
-    animation: none;
-  }
+:root[data-motion='off'] .dice3d--rolling .die3d,
+:root[data-motion='off'] .dice3d--rolling .die3d-shadow,
+:root[data-motion='off'] .dice-total-badge {
+  animation: none;
 }
 
 /* A tile pays out: one gentle pulse when its number comes up */
@@ -3617,8 +3611,7 @@
   border-radius: 10px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .build-chip--ready {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .build-chip--ready {
+  animation: none;
 }

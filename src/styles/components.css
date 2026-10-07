@@ -444,6 +444,34 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mixer-segments {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: rgba(120, 120, 128, 0.16);
+  border-radius: 9px;
+}
+
+.mixer-segment {
+  padding: 5px 0;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.mixer-segment--on {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
 /* iOS style switch */
 .mixer-switch {
   position: relative;
@@ -532,4 +560,29 @@
     width: auto;
     transform-origin: top center;
   }
+}
+
+/* A table where not everyone runs the same build of the game */
+.version-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  width: min(760px, calc(100% - 32px));
+  margin: 10px auto;
+  padding: 9px 16px;
+  color: #6b4a07;
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-align: center;
+  background: #fdf1cf;
+  border: 1px solid #f0d58a;
+  border-radius: 14px;
+}
+
+[data-theme='dark'] .version-notice {
+  color: #f6dc97;
+  background: #3a3018;
+  border-color: #5c4a20;
 }

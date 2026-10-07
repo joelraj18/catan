@@ -1,6 +1,7 @@
 import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PIPS, RESOURCE_LABELS, TERRAINS, geometryOf } from './catanBoard';
 import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
+import { scaled } from '../../services/motion';
 import './hex-board.css';
 
 // The island drawn as one SVG: sea, terrain hexes with their number tokens,
@@ -229,44 +230,106 @@ const robberSpot = (geo, hexId) => {
   return { x: px(hex.x) + 2, y: px(hex.y) - 10 };
 };
 
-const reducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+// Where the dragon last slept on each island, kept outside the component so
+// a redraw of the board (a new layout, a rejoin) still flies it from there.
+const lastLair = new Map();
+const lairKey = (geo, board) => `${geo.hexes.length}:${(board?.hexes || []).map((hex) => hex.number || 0).join('')}`;
 
-function Dragon({ hexId, geo }) {
+const DRAGON_MS = 2300;
+const WAKE = 0.13; // share of the flight spent waking and stretching
+
+// A path for the dragon from a to b: up off its tile, out in a wide curve
+// (over the sea when the two tiles are close, so even a short hop is a real
+// flight), banking along the way, then a glide in to land.
+export const dragonPath = (a, b, steps = 26) => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  // Bend to one side; short hops swing further out.
+  const swing = Math.max(70, 150 - dist * 0.25);
+  const nx = -dy / dist;
+  const ny = dx / dist;
+  const side = a.x + b.x > 0 ? -1 : 1; // swing toward the open sea
+  const up = 60 + Math.min(70, dist * 0.15);
+  const c1 = { x: a.x + dx * 0.2 + nx * swing * side, y: a.y + dy * 0.2 + ny * swing * side - up };
+  const c2 = { x: a.x + dx * 0.8 + nx * swing * side * 0.6, y: a.y + dy * 0.8 + ny * swing * side * 0.6 - up * 0.8 };
+  const point = (t) => {
+    const u = 1 - t;
+    return {
+      x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x,
+      y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y,
+    };
+  };
+  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+  const frames = [
+    { offset: 0, transform: `translate(${a.x}px, ${a.y}px) scale(1)` },
+    { offset: WAKE * 0.5, transform: `translate(${a.x}px, ${a.y - 4}px) scale(1.08, 0.94)` },
+    { offset: WAKE, transform: `translate(${a.x}px, ${a.y - 10}px) scale(1.04)` },
+  ];
+  for (let i = 1; i <= steps; i += 1) {
+    const t = ease(i / steps);
+    const p = point(t);
+    const ahead = point(Math.min(1, t + 0.04));
+    // Face the way it flies (the head is drawn on the left), and bank.
+    const heading = ahead.x - p.x;
+    const flip = heading > 0.5 ? -1 : 1;
+    const bank = Math.max(-22, Math.min(22, (ahead.y - p.y) * 2.2)) * -flip;
+    const lift = Math.sin(Math.PI * (i / steps));
+    const size = 1 + 0.38 * lift;
+    frames.push({
+      offset: WAKE + (1 - WAKE) * (i / steps),
+      transform: `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) rotate(${(i === steps ? 0 : bank).toFixed(1)}deg) scale(${(
+        flip * size
+      ).toFixed(3)}, ${size.toFixed(3)})`,
+    });
+  }
+  frames[frames.length - 1].transform = `translate(${b.x}px, ${b.y}px) scale(1)`;
+  return frames;
+};
+
+function Dragon({ hexId, geo, board }) {
   const ref = useRef(null);
-  const last = useRef(hexId);
+  const shadowRef = useRef(null);
+  const key = lairKey(geo, board);
   const [flying, setFlying] = useState(false);
+  const [landing, setLanding] = useState(0);
   const { x, y } = robberSpot(geo, hexId);
 
   useLayoutEffect(() => {
-    const from = last.current;
-    last.current = hexId;
+    const from = lastLair.get(key);
+    lastLair.set(key, hexId);
     const node = ref.current;
-    if (from === hexId || from === null || from === undefined || !node?.animate || reducedMotion()) return undefined;
+    if (from === hexId || from === null || from === undefined || !geo.hexes[from] || !node?.animate) return undefined;
+    const duration = scaled(DRAGON_MS);
+    if (!duration) return undefined;
     const a = robberSpot(geo, from);
-    const lift = Math.min(90, 40 + Math.hypot(x - a.x, y - a.y) * 0.25);
-    const midX = (a.x + x) / 2;
-    const midY = Math.min(a.y, y) - lift;
     setFlying(true);
-    const flight = node.animate(
+    const flight = node.animate(dragonPath(a, { x, y }), { duration, easing: 'linear' });
+    // Its shadow keeps to the ground, shrinking and fading as it climbs.
+    const shadow = shadowRef.current?.animate?.(
       [
-        { transform: `translate(${a.x}px, ${a.y}px) scale(1)` },
-        { transform: `translate(${a.x}px, ${a.y - 18}px) scale(1.12)`, offset: 0.15 },
-        { transform: `translate(${midX}px, ${midY}px) scale(1.22)`, offset: 0.55 },
-        { transform: `translate(${x}px, ${y - 10}px) scale(1.08)`, offset: 0.88 },
-        { transform: `translate(${x}px, ${y}px) scale(1)` },
+        { transform: `translate(${a.x}px, ${a.y + 4}px) scale(1)`, opacity: 0.5 },
+        { transform: `translate(${(a.x + x) / 2}px, ${(a.y + y) / 2 + 4}px) scale(0.45)`, opacity: 0.18, offset: 0.55 },
+        { transform: `translate(${x}px, ${y + 4}px) scale(1)`, opacity: 0.5 },
       ],
-      { duration: 1050, easing: 'cubic-bezier(0.45, 0, 0.3, 1)' },
+      { duration, easing: 'ease-in-out' },
     );
-    flight.onfinish = () => setFlying(false);
+    flight.onfinish = () => {
+      setFlying(false);
+      setLanding((count) => count + 1);
+    };
     return () => {
       flight.onfinish = null;
       flight.cancel();
+      shadow?.cancel();
       setFlying(false);
     };
-  }, [hexId, x, y, geo]);
+  }, [hexId, x, y, geo, key]);
 
   return (
+    <>
+    {flying && <ellipse ref={shadowRef} className="dragon-ground-shadow" cx="0" cy="0" rx="22" ry="5" />}
+    {landing > 0 && !flying && <circle key={landing} className="dragon-dust" cx={x} cy={y + 4} r="14" />}
     <g
       ref={ref}
       className={`dragon ${flying ? 'dragon--flying' : 'dragon--asleep'}`}
@@ -300,6 +363,7 @@ function Dragon({ hexId, geo }) {
       </g>
       </g>
     </g>
+    </>
   );
 }
 
@@ -536,8 +600,6 @@ function HexBoard({
         );
       })}
 
-      {/* Robber */}
-      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} />}
 
       {/* Settlements and cities */}
       {Object.entries(buildings).map(([vertexId, building]) => {
@@ -605,6 +667,9 @@ function HexBoard({
           />
         );
       })}
+
+      {/* The robber flies over everything, then sleeps on its tile */}
+      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} board={board} />}
 
       {selected && <ConfirmChip selected={selected} geo={geo} />}
     </svg>

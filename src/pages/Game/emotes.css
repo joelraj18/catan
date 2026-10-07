@@ -194,10 +194,9 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .emote-bubble,
-  .emote-bubble .emote-portrait,
-  .emote-picker {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .emote-bubble,
+:root[data-motion='off'] .emote-bubble .emote-portrait,
+:root[data-motion='off'] .emote-picker {
+  animation: none;
 }

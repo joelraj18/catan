@@ -3,6 +3,7 @@ import ApiKeyInfo from '../../components/ApiKeyInfo';
 import BrandLogo from '../../components/BrandLogo';
 import ChatPanel from '../../components/ChatPanel';
 import VoicePanel from '../../components/VoicePanel';
+import VersionNotice from '../../components/VersionNotice';
 import GoldButton from '../../components/GoldButton';
 import ThemeToggle from '../../components/ThemeToggle';
 import {
@@ -179,6 +180,8 @@ export default function RoomWaiting({ session, onLeave }) {
           </button>
         </div>
       </header>
+
+      <VersionNotice session={session} />
 
       <section className="waiting-room-layout">
         <div className="waiting-room-intro">

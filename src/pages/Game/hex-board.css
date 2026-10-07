@@ -362,13 +362,12 @@
 }
 
 
-@media (prefers-reduced-motion: reduce) {
-  .spot--vertex,
-  .spot--edge,
-  .hex-tile--target .hex-tile-face,
-  .building--upgradable path {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .spot--vertex,
+:root[data-motion='off'] .spot--edge,
+:root[data-motion='off'] .hex-tile--target .hex-tile-face,
+:root[data-motion='off'] .building--upgradable path {
+  animation: none;
 }
 
 [data-theme='dark'] {
@@ -527,13 +526,12 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ghost,
-  .spot--ghost,
-  .building--picked,
-  .confirm-chip {
-    animation: none !important;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .ghost,
+:root[data-motion='off'] .spot--ghost,
+:root[data-motion='off'] .building--picked,
+:root[data-motion='off'] .confirm-chip {
+  animation: none !important;
 }
 
 /* The robber: a small dragon, asleep on the hex it blocks */
@@ -647,11 +645,41 @@
 }
 
 .dragon--flying .dragon-wing {
-  animation: dragonFlap 0.26s ease-in-out infinite alternate;
+  animation: dragonFlap 0.22s ease-in-out infinite alternate;
 }
 
 .dragon--flying .dragon-shadow {
-  opacity: 0.35;
+  opacity: 0;
+}
+
+/* While it flies its shadow keeps to the ground */
+.dragon-ground-shadow {
+  fill: rgba(10, 20, 30, 0.45);
+  pointer-events: none;
+}
+
+/* A puff of dust where it lands */
+.dragon-dust {
+  fill: none;
+  stroke: rgba(255, 246, 220, 0.85);
+  stroke-width: 3;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dragonDust 0.7s var(--ease-out) forwards;
+}
+
+@keyframes dragonDust {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 0;
+    stroke-width: 0.5;
+    transform: scale(2.2);
+  }
 }
 
 @keyframes dragonBreathe {
@@ -799,21 +827,20 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dragon--asleep .dragon-body,
-  .dragon-zzz text,
-  .dragon--flying .dragon-wing,
-  .road--new line,
-  .building-body,
-  .building-dust,
-  .building-shine {
-    animation: none !important;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .dragon--asleep .dragon-body,
+:root[data-motion='off'] .dragon-zzz text,
+:root[data-motion='off'] .dragon--flying .dragon-wing,
+:root[data-motion='off'] .road--new line,
+:root[data-motion='off'] .building-body,
+:root[data-motion='off'] .building-dust,
+:root[data-motion='off'] .building-shine {
+  animation: none !important;
+}
 
-  .building-dust,
-  .building-shine {
-    display: none;
-  }
+:root[data-motion='off'] .building-dust,
+:root[data-motion='off'] .building-shine {
+  display: none;
 }
 
 /* The harvest: a roll lands, every paying tile glows gold, a ring blooms
@@ -938,15 +965,14 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .harvest-ring,
-  .harvest-mote,
-  .number-token-pop {
-    animation: none;
-    opacity: 0;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'] .harvest-ring,
+:root[data-motion='off'] .harvest-mote,
+:root[data-motion='off'] .number-token-pop {
+  animation: none;
+  opacity: 0;
+}
 
-  .number-token-pop {
-    opacity: 1;
-  }
+:root[data-motion='off'] .number-token-pop {
+  opacity: 1;
 }

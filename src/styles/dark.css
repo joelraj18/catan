@@ -218,10 +218,9 @@
   filter: drop-shadow(0 0 12px rgba(95, 211, 148, 0.55));
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-theme='dark'] .game-player--active {
-    animation: none;
-  }
+/* Motion turned off in the game's settings */
+:root[data-motion='off'][data-theme='dark'] .game-player--active {
+  animation: none;
 }
 
 /* --------------------------------------------- page chrome and glows */
