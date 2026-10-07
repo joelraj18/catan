@@ -8,6 +8,7 @@
 // feeds into the public methods below, each of which checks that the move
 // is legal for that player right now and returns false when it is not.
 
+import { tallyEvent } from './gameStats';
 import {
   BEGINNER_COLOURS,
   BEGINNER_SETTLEMENTS,
@@ -53,6 +54,7 @@ import {
   vertexResources,
 } from './catanRules';
 import * as Bot from './catanBot';
+import { trackEvent } from './botModel';
 
 export const DEFAULT_TIMING = {
   roll: 650, // dice tumble before the result shows
@@ -301,6 +303,7 @@ export default class GameEngine {
     this.stepping = false;
     this.emitQueued = false;
     this.botMemory = {};
+    this.botGoals = {}; // each computer seat's goal, kept from turn to turn
     this.deadlineKey = null;
 
     if (initialState) {
@@ -427,10 +430,17 @@ export default class GameEngine {
   // Records one thing that happened, for animations and the side notes:
   // roll, produce, build, buyDev, playDev, yop, monopoly, steal, discard,
   // robber, trade, maritime, win. Who may see what is settled in redactFor.
+  // The public card tracker the computer opponents read follows every event
+  // (it uses only what the whole table sees, see botModel.js).
   event(type, fields = {}) {
     const eventCounter = (this.state.eventCounter || 0) + 1;
     const entry = { id: eventCounter, type, turn: this.state.turnCount, ...fields };
-    this.set({ events: [...(this.state.events || []), entry].slice(-EVENT_LIMIT), eventCounter });
+    this.set({
+      events: [...(this.state.events || []), entry].slice(-EVENT_LIMIT),
+      eventCounter,
+      tracker: trackEvent(this.state.tracker, entry, this.state),
+      stats: tallyEvent(this.state.stats, entry),
+    });
   }
 
   // Sounds for the board to play. Several within one move travel together
@@ -709,7 +719,7 @@ export default class GameEngine {
       } else {
         const waiting = this.waitingOn().filter((id) => this.isAuto(id));
         if (this.state.turnPhase === 'discard') {
-          waiting.forEach((id) => this.discard(id, Bot.chooseDiscard(this.state, id)));
+          waiting.forEach((id) => this.discard(id, Bot.chooseDiscard(this.state, id, this.botGoals[id])));
         } else if (waiting.length) {
           await this.autoMove(waiting[0]);
         }
@@ -743,7 +753,7 @@ export default class GameEngine {
     }
 
     if (phase === 'discard') {
-      this.discard(id, Bot.chooseDiscard(state, id));
+      this.discard(id, Bot.chooseDiscard(state, id, this.botGoals[id]));
       return;
     }
 
@@ -783,7 +793,7 @@ export default class GameEngine {
   }
 
   async botTurnStep(id) {
-    const memory = this.botMemory[this.state.turnCount] || { steps: 0, maritime: 0, offered: false };
+    const memory = this.botMemory[this.state.turnCount] || { steps: 0, maritime: 0, offered: false, goal: this.botGoals[id] || null };
     this.botMemory = { [this.state.turnCount]: memory };
     memory.steps += 1;
 
@@ -822,6 +832,7 @@ export default class GameEngine {
     }
 
     const action = Bot.nextAction(this.state, id, memory);
+    this.botGoals[id] = memory.goal || null;
 
     if (!action) {
       this.endTurn(id);
@@ -1521,7 +1532,7 @@ export default class GameEngine {
       `${this.nameOf(playerId)} offers ${listResources(cleanGive)} for ${listResources(cleanGet)}${target ? ` to ${this.nameOf(target)}` : ''}`,
       playerId,
     );
-    this.sound('trade');
+    // No sound for the table: the players asked hear their own ping.
     this.afterAction(playerId);
     return true;
   }

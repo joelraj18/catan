@@ -16,7 +16,7 @@ const ROUTE_LABEL = { direct: 'Direct', turn: 'Relay', walkie: 'Walkie-talkie' }
 const ROUTE_TITLE = {
   direct: 'Browser to browser, encrypted',
   turn: 'Through a TURN relay on port 443, still encrypted end to end',
-  walkie: 'This network blocks live audio: hold Talk and your clip is sent, sealed for this person only',
+  walkie: 'This network blocks live audio: your voice goes through the room relay in short clips, sealed for this person only',
 };
 
 function MicIcon({ off }) {
@@ -119,7 +119,7 @@ export default function VoicePanel({ session, compact = false }) {
                             {ROUTE_LABEL[route] || 'Connecting'}
                           </span>
                         )}
-                        {peer && peer.mode !== 'walkie' && (
+                        {peer && (
                           <input
                             className="voice-volume"
                             type="range"
@@ -163,19 +163,7 @@ export default function VoicePanel({ session, compact = false }) {
             <EarIcon off={voice.deafened} />
             {voice.deafened ? 'Deafened' : 'Hearing'}
           </button>
-          {walkie && (
-            <button
-              type="button"
-              className={`voice-talk ${voice.talking ? 'voice-talk--on' : ''}`}
-              onPointerDown={() => voice.startTalking()}
-              onPointerUp={() => voice.stopTalking()}
-              onPointerLeave={() => voice.talking && voice.stopTalking()}
-              onKeyDown={(event) => event.key === ' ' && !event.repeat && voice.startTalking()}
-              onKeyUp={(event) => event.key === ' ' && voice.stopTalking()}
-            >
-              {voice.talking ? 'Talking…' : 'Hold to talk'}
-            </button>
-          )}
+          {walkie && <p className="voice-note voice-relay-note">Voice is going through the room relay — about 1–2 s delay</p>}
         </div>
       )}
 

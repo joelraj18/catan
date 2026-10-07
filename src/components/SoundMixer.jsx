@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MOTION_LEVELS, motionLevel, onMotionChange, setMotion } from '../services/motion';
 
 // One speaker button that opens a small mixer with two independent channels:
 // background music and game sound effects, each with its own switch and
@@ -44,6 +45,35 @@ function Channel({ id, label, hint, enabled, volume, onChange }) {
           onChange({ volume: next, enabled: next > 0 });
         }}
       />
+    </div>
+  );
+}
+
+const MOTION_LABELS = { full: 'Full', gentle: 'Gentle', off: 'Off' };
+
+// Cards, dice and the dragon: full by default, gentler or off by choice.
+function MotionChoice() {
+  const [level, setLevel] = useState(motionLevel);
+  useEffect(() => onMotionChange(setLevel), []);
+  return (
+    <div className="mixer-channel mixer-channel--on mixer-motion">
+      <span className="mixer-label" id="mixer-motion-label">
+        Animations
+      </span>
+      <div className="mixer-segments" role="radiogroup" aria-labelledby="mixer-motion-label">
+        {MOTION_LEVELS.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            role="radio"
+            aria-checked={level === choice}
+            className={`mixer-segment ${level === choice ? 'mixer-segment--on' : ''}`}
+            onClick={() => setMotion(choice)}
+          >
+            {MOTION_LABELS[choice]}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -127,6 +157,8 @@ export default function SoundMixer({ audio, onAudio, className = '', align = 'ri
             })
           }
         />
+
+        <MotionChoice />
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { motionLevel, scaled } from '../../services/motion';
 
 // Two real dice: cubes with six faces that tumble when rolled and come to
 // rest showing the numbers the host rolled. The roll is known the moment it
@@ -77,6 +78,97 @@ export default function Dice3D({ dice, rolling, rollKey }) {
     <div className={`dice3d ${rolling || landing ? 'dice3d--rolling' : ''}`}>
       <Die value={dice?.[0]} spins={spins} delay={0} />
       <Die value={dice?.[1]} spins={spins} delay={90} />
+    </div>
+  );
+}
+
+// The throw: whenever someone rolls, two big dice are thrown onto the
+// middle of the board from that player's side, tumble, bounce twice and
+// come to rest on the faces the host rolled, with the total popping up
+// between them. They then fade, leaving the small pair in the corner.
+const THROW_MS = 950;
+const STAY_MS = 650;
+
+function ThrownDie({ value, index, fromTop }) {
+  const wrap = useRef(null);
+  const cube = useRef(null);
+  const [x, y] = showing(value);
+
+  useLayoutEffect(() => {
+    const duration = scaled(THROW_MS);
+    if (!duration) return undefined;
+    const side = index ? 1 : -1;
+    const startY = fromTop ? -260 : 260;
+    const startX = -200 + side * 30;
+    const path = wrap.current?.animate?.(
+      [
+        { transform: `translate(${startX}px, ${startY}px) scale(0.7)`, opacity: 0, easing: 'cubic-bezier(0.3, 0.1, 0.6, 1)' },
+        { transform: `translate(${startX * 0.7}px, ${startY * 0.7}px) scale(0.85)`, opacity: 1, offset: 0.12, easing: 'cubic-bezier(0.4, 0, 1, 1)' },
+        { transform: 'translate(-34px, 0px) scale(1)', offset: 0.46, easing: 'cubic-bezier(0, 0, 0.4, 1)' },
+        { transform: `translate(-14px, ${-38 - index * 6}px) scale(1.04)`, offset: 0.63, easing: 'cubic-bezier(0.5, 0, 1, 1)' },
+        { transform: 'translate(-2px, 0px) scale(1)', offset: 0.8, easing: 'cubic-bezier(0, 0, 0.4, 1)' },
+        { transform: 'translate(0px, -9px) scale(1)', offset: 0.9, easing: 'cubic-bezier(0.5, 0, 1, 1)' },
+        { transform: 'translate(0px, 0px) scale(1)', offset: 1 },
+      ],
+      { duration, delay: index * 60, fill: 'both' },
+    );
+    // Tumbling all the way, slowing as it settles on the rolled face.
+    const turns = 2 + index;
+    const tumble = cube.current?.animate?.(
+      [
+        { transform: `rotateX(${x + 360 * turns + 40}deg) rotateY(${y - 360 * turns - 70}deg) rotateZ(${index ? -50 : 50}deg)` },
+        { transform: `rotateX(${x + 200}deg) rotateY(${y - 160}deg) rotateZ(${index ? -15 : 15}deg)`, offset: 0.5 },
+        { transform: `rotateX(${x}deg) rotateY(${y}deg) rotateZ(0deg)` },
+      ],
+      { duration: duration * 1.05, delay: index * 60, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'both' },
+    );
+    return () => {
+      path?.cancel();
+      tumble?.cancel();
+    };
+  }, [fromTop, index, x, y]);
+
+  return (
+    <span className="die3d dice-throw-die" ref={wrap}>
+      <span className="die3d-cube" ref={cube} style={{ transform: `rotateX(${x}deg) rotateY(${y}deg)` }}>
+        {FACES.map((face) => (
+          <Face key={face.value} value={face.value} place={face.place} />
+        ))}
+      </span>
+      <span className="die3d-shadow" aria-hidden="true" />
+    </span>
+  );
+}
+
+export function DiceThrow({ dice, rollKey, fromTop = false }) {
+  const [shown, setShown] = useState(null);
+  const lastKey = useRef(rollKey);
+
+  useEffect(() => {
+    if (rollKey === lastKey.current) return undefined;
+    lastKey.current = rollKey;
+    if (!rollKey || !dice || motionLevel() === 'off') return undefined;
+    setShown({ key: rollKey, dice: [...dice], fromTop });
+    const timer = window.setTimeout(() => setShown(null), scaled(THROW_MS) + scaled(STAY_MS) + 400);
+    return () => window.clearTimeout(timer);
+    // A throw belongs to its roll; the dice and side are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rollKey]);
+
+  if (!shown) return null;
+  const total = shown.dice[0] + shown.dice[1];
+  return (
+    <div
+      className="dice-throw"
+      key={shown.key}
+      aria-hidden="true"
+      style={{ '--throw-ms': `${scaled(THROW_MS)}ms`, '--stay-ms': `${scaled(STAY_MS)}ms` }}
+    >
+      <div className="dice-throw-pair">
+        <ThrownDie value={shown.dice[0]} index={0} fromTop={shown.fromTop} />
+        <ThrownDie value={shown.dice[1]} index={1} fromTop={shown.fromTop} />
+      </div>
+      <span className={`dice-throw-total ${total === 7 ? 'dice-throw-total--seven' : ''}`}>{total}</span>
     </div>
   );
 }

@@ -8,16 +8,26 @@
 // network the game itself works on.
 //
 // When a link cannot be made at all (a network that blocks every kind of
-// WebRTC), that listener falls back to walkie-talkie: hold the talk button,
-// and the clip is recorded, sealed for each listener (see voiceCrypto) and
-// sent through the room like any other message.
+// WebRTC), that listener falls back to walkie-talkie: the mic stays open
+// (muting works as before) and is recorded in short clips, each sealed for
+// each listener (see voiceCrypto) and sent through the room like any other
+// message. The listener plays a sender's clips back to back, in order, a
+// second or two behind.
 import { fromBase64, newVoiceKeys, seal, sharedKey, toBase64, unseal } from './voiceCrypto';
 import { voiceIceServers } from './voiceIce';
 
 const CONNECT_TIMEOUT = 9000;
 const CLIP_PART_CHARS = 24000;
-const MAX_CLIP_MS = 20000;
 const LEVEL_EVERY = 120;
+// Walkie-talkie open mic: a new clip every CHUNK_MS, and a clip that stayed
+// below QUIET_LEVEL on the level meter is not sent.
+const CHUNK_MS = 1200;
+const QUIET_LEVEL = 0.06;
+const CHUNKS_PER_SECOND = 2;
+// The listener waits JITTER_MS before playing a sender, and skips ahead when
+// more than MAX_BEHIND_MS is waiting.
+const JITTER_MS = 300;
+const MAX_BEHIND_MS = 3000;
 
 // ?voice=walkie skips live audio and uses walkie-talkie clips, as a network
 // that blocks every kind of WebRTC would. For tests and for trying it out.
@@ -48,6 +58,7 @@ export default class VoiceClient {
     this.keys = newVoiceKeys();
     this.sharedKeys = new Map();
     this.clips = new Map();
+    this.queues = new Map(); // sender clientId -> { items, audio, timer, last }
     this.levels = {};
     this.offs = [
       session.on('voice-roster', (roster) => this.onRoster(roster)),
@@ -69,6 +80,7 @@ export default class VoiceClient {
   }
 
   changed() {
+    this.syncTalking();
     this.listeners.forEach((fn) => fn(this));
   }
 
@@ -139,6 +151,7 @@ export default class VoiceClient {
     this.peers.forEach((peer) => {
       if (peer.audio) peer.audio.muted = deafened;
     });
+    if (deafened) [...this.queues.keys()].forEach((id) => this.stopQueue(id));
     this.changed();
   }
 
@@ -147,6 +160,8 @@ export default class VoiceClient {
     if (!peer) return;
     peer.volume = volume;
     if (peer.audio) peer.audio.volume = volume;
+    const playing = this.queues.get(clientId)?.audio;
+    if (playing) playing.volume = volume;
     this.changed();
   }
 
@@ -321,6 +336,7 @@ export default class VoiceClient {
       peer.audio.pause?.();
     }
     peer.stopLevel?.();
+    this.stopQueue(id);
     this.peers.delete(id);
     delete this.levels[id];
   }
@@ -335,29 +351,62 @@ export default class VoiceClient {
     return [...this.peers.entries()].filter(([, peer]) => peer.mode === 'walkie').map(([id]) => id);
   }
 
+  // The open mic for walkie-talkie listeners runs while it is wanted: a
+  // microphone, not muted, and at least one walkie listener in the channel.
+  // Every change checks.
+  syncTalking() {
+    const wanted = Boolean(this.stream && !this.muted && !this.destroyed && window.MediaRecorder && this.walkiePeers().length);
+    if (wanted && !this.talking) this.startTalking();
+    else if (!wanted && this.talking) this.stopTalking();
+  }
+
+  // A recorder's later timeslices are not whole files on their own, so a
+  // fresh recorder takes over every CHUNK_MS. The new one starts just before
+  // the old one stops, so no sound falls between them.
   startTalking() {
-    if (!this.stream || this.talking || !window.MediaRecorder) return;
-    const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t));
-    const recorder = new MediaRecorder(this.stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24000 });
-    const parts = [];
-    recorder.ondataavailable = (event) => event.data.size && parts.push(event.data);
-    recorder.onstop = async () => {
-      const blob = new Blob(parts, { type: recorder.mimeType });
-      await this.sendClip(new Uint8Array(await blob.arrayBuffer()), recorder.mimeType);
-    };
-    recorder.start();
-    this.recorder = recorder;
     this.talking = true;
-    this.talkTimer = setTimeout(() => this.stopTalking(), MAX_CLIP_MS);
-    this.changed();
+    // Numbers start from the clock, so a sender who reloads still counts up.
+    this.seq = this.seq || Date.now();
+    if (!this.recordChunk()) return;
+    this.chunkTimer = setInterval(() => {
+      const done = this.chunk;
+      if (!this.recordChunk()) clearInterval(this.chunkTimer);
+      if (done?.recorder.state === 'recording') done.recorder.stop();
+    }, CHUNK_MS);
+  }
+
+  recordChunk() {
+    this.chunk = null;
+    try {
+      const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t));
+      const recorder = new MediaRecorder(this.stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24000 });
+      // Without a level meter every clip counts as loud enough.
+      const chunk = { recorder, type, seq: this.seq, at: Date.now(), parts: [], peak: this.stopMyLevel ? 0 : 1 };
+      this.seq += 1;
+      recorder.ondataavailable = (event) => event.data.size && chunk.parts.push(event.data);
+      recorder.onstop = () => this.sendChunk(chunk);
+      recorder.start();
+      this.chunk = chunk;
+      return true;
+    } catch {
+      this.error = 'This browser cannot record voice clips';
+      return false;
+    }
   }
 
   stopTalking() {
-    clearTimeout(this.talkTimer);
-    if (this.recorder?.state === 'recording') this.recorder.stop();
-    this.recorder = null;
+    clearInterval(this.chunkTimer);
+    if (this.chunk?.recorder.state === 'recording') this.chunk.recorder.stop();
+    this.chunk = null;
     this.talking = false;
-    this.changed();
+  }
+
+  // A clip that stayed quiet the whole time is not sent.
+  async sendChunk(chunk) {
+    if (chunk.peak < QUIET_LEVEL || !chunk.parts.length) return;
+    const type = chunk.recorder.mimeType || chunk.type || 'audio/webm';
+    const blob = new Blob(chunk.parts, { type });
+    await this.sendClip(new Uint8Array(await blob.arrayBuffer()), type, { seq: chunk.seq, at: chunk.at });
   }
 
   async keyFor(id) {
@@ -367,22 +416,30 @@ export default class VoiceClient {
     return this.sharedKeys.get(theirs);
   }
 
-  async sendClip(bytes, type) {
+  // A clip, with its number and start time, sealed for each walkie listener.
+  // An older client ignores the extra fields and plays it as a clip.
+  async sendClip(bytes, type, extra = {}) {
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const now = Date.now();
     await Promise.all(
       this.walkiePeers().map(async (to) => {
+        // Never more than CHUNKS_PER_SECOND clips a second to one listener.
+        const peer = this.peers.get(to);
+        peer.sent = (peer.sent || []).filter((at) => now - at < 1000);
+        if (peer.sent.length >= CHUNKS_PER_SECOND) return;
+        peer.sent.push(now);
         const key = await this.keyFor(to);
         if (!key) return;
         const data = toBase64(await seal(key, bytes));
         const total = Math.ceil(data.length / CLIP_PART_CHARS);
         for (let part = 0; part < total; part += 1) {
-          this.session.sendVoice({ t: 'voice-clip', to, id, part, total, type, data: data.slice(part * CLIP_PART_CHARS, (part + 1) * CLIP_PART_CHARS) });
+          this.session.sendVoice({ t: 'voice-clip', to, id, part, total, type, ...extra, data: data.slice(part * CLIP_PART_CHARS, (part + 1) * CLIP_PART_CHARS) });
         }
       }),
     );
   }
 
-  async onClip({ from, id, part, total, type, data }) {
+  async onClip({ from, id, part, total, type, seq, data }) {
     if (this.deafened || typeof data !== 'string' || !Number.isInteger(total) || total > 200) return;
     const keyName = `${from}:${id}`;
     const clip = this.clips.get(keyName) || { parts: [], got: 0, at: Date.now() };
@@ -398,19 +455,80 @@ export default class VoiceClient {
     try {
       const key = await this.keyFor(from);
       const bytes = await unseal(key, fromBase64(clip.parts.join('')));
-      const audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: type || 'audio/webm' })));
-      audio.volume = this.peers.get(from)?.volume ?? 1;
-      this.levels[from] = 0.6;
-      this.changed();
-      audio.onended = () => {
-        this.levels[from] = 0;
-        URL.revokeObjectURL(audio.src);
-        this.changed();
-      };
-      await audio.play();
+      this.enqueue(from, { bytes, type: type || 'audio/webm', seq: Number.isFinite(seq) ? seq : null });
     } catch {
       // A clip that cannot be opened is skipped.
     }
+  }
+
+  // Each sender's clips play one after another in number order. Playing
+  // starts JITTER_MS after the first clip, so one that arrives a little late
+  // can still take its place.
+  enqueue(from, item) {
+    if (this.deafened) return;
+    const queue = this.queues.get(from) || { items: [], audio: null, timer: null, last: -Infinity };
+    this.queues.set(from, queue);
+    // A later clip has already played: this one is too late.
+    if (item.seq !== null && item.seq <= queue.last) return;
+    // A clip from an older client has no number and goes last.
+    const order = (entry) => (entry.seq === null ? Infinity : entry.seq);
+    const at = queue.items.findIndex((entry) => order(entry) > order(item));
+    queue.items.splice(at < 0 ? queue.items.length : at, 0, item);
+    // Too far behind: skip ahead to the newest clip.
+    if (queue.items.length * CHUNK_MS > MAX_BEHIND_MS) {
+      const skipped = queue.items.splice(0, queue.items.length - 1);
+      skipped.forEach((entry) => {
+        if (entry.seq !== null) queue.last = Math.max(queue.last, entry.seq);
+      });
+    }
+    if (!queue.audio && !queue.timer) {
+      queue.timer = setTimeout(() => {
+        queue.timer = null;
+        this.playNext(from);
+      }, JITTER_MS);
+    }
+  }
+
+  playNext(from) {
+    const queue = this.queues.get(from);
+    if (!queue || queue.audio) return;
+    const item = queue.items.shift();
+    if (!item) {
+      this.levels[from] = 0;
+      this.changed();
+      return;
+    }
+    if (item.seq !== null) queue.last = Math.max(queue.last, item.seq);
+    const audio = new Audio(URL.createObjectURL(new Blob([item.bytes], { type: item.type })));
+    audio.volume = this.peers.get(from)?.volume ?? 1;
+    audio.muted = this.deafened;
+    queue.audio = audio;
+    let done = false;
+    const next = () => {
+      if (done) return;
+      done = true;
+      URL.revokeObjectURL(audio.src);
+      if (queue.audio === audio) queue.audio = null;
+      if (this.queues.get(from) === queue) this.playNext(from);
+    };
+    audio.onended = next;
+    audio.onerror = next;
+    // Their speaking light stays on while their clips play.
+    this.levels[from] = 0.6;
+    this.changed();
+    Promise.resolve(audio.play?.()).catch(next);
+  }
+
+  stopQueue(id) {
+    const queue = this.queues.get(id);
+    if (!queue) return;
+    clearTimeout(queue.timer);
+    if (queue.audio) {
+      queue.audio.pause?.();
+      URL.revokeObjectURL(queue.audio.src);
+    }
+    this.queues.delete(id);
+    this.levels[id] = 0;
   }
 
   // ------------------------------------------------------------- levels
@@ -431,6 +549,8 @@ export default class VoiceClient {
         peak = Math.max(peak, Math.abs(value - 128) / 128);
       });
       const level = id === this.me && this.muted ? 0 : Math.min(1, peak * 2.5);
+      // The loudest moment of the clip being recorded.
+      if (id === this.me && this.chunk) this.chunk.peak = Math.max(this.chunk.peak, level);
       const before = this.levels[id] || 0;
       this.levels[id] = level;
       if ((before > 0.08) !== (level > 0.08)) this.changed();

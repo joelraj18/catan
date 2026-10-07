@@ -9,6 +9,7 @@ import { openGuestTransport, openHostTransport } from './roomTransport';
 import { PIECE_ORDER } from '../pages/Game/pieces.jsx';
 import { DEFAULT_SETTINGS, cleanSettings } from '../pages/Game/gameSettings';
 import { EMOTE_KEYS } from '../pages/Game/emotes.jsx';
+import { BUILD, cleanBuild } from './build';
 
 export const EMOTE_GAP_MS = 2500; // one reaction per player this often
 
@@ -79,7 +80,8 @@ export default class RoomSession {
     this.status = 'connecting'; // 'online' | 'offline' | 'connecting' | 'closed'
     this.transport = null;
     this.myClientId = role === 'host' ? 'host' : null;
-    this.lobby = { tableSize: 3, seats: [], board: 'beginner', settings: { ...DEFAULT_SETTINGS } };
+    this.lobby = { tableSize: 3, seats: [], board: 'beginner', settings: { ...DEFAULT_SETTINGS }, build: BUILD };
+    this.peerBuilds = new Map();
     this.chat = [];
     this.started = false;
     this.players = null;
@@ -240,7 +242,7 @@ export default class RoomSession {
       this.pendingWelcome = { resolve, reject, timer };
     });
 
-    transport.send({ t: 'hello', v: PROTOCOL, ...hello });
+    transport.send({ t: 'hello', v: PROTOCOL, build: BUILD, ...hello });
 
     try {
       await welcome;
@@ -301,6 +303,12 @@ export default class RoomSession {
   }
 
   publishLobby() {
+    // Which build each person's page is, so an old cached page shows up.
+    this.lobby.build = BUILD;
+    this.lobby.seats.forEach((seat) => {
+      if (seat.clientId === 'host') seat.build = BUILD;
+      else if (this.peerBuilds.has(seat.clientId)) seat.build = this.peerBuilds.get(seat.clientId);
+    });
     this.broadcast({ t: 'lobby', lobby: this.lobby });
     this.emit('lobby', this.lobby);
     // Who can be invited to voice follows the seats.
@@ -335,6 +343,8 @@ export default class RoomSession {
           this.transport.send(peerId, { t: 'reject', reason });
           setTimeout(() => this.transport?.kick(peerId), 300);
         };
+
+        this.peerBuilds.set(peerId, cleanBuild(message.build) || 'old');
 
         if (message.rejoin) {
           this.rejoinSeat(peerId, cleanCode(message.rejoin), reject);
@@ -438,6 +448,7 @@ export default class RoomSession {
       this.transport.send(peerId, { t: 'game', state: this.gameFor(player.id), sentAt: Date.now(), gameId: this.gameId });
     }
 
+    this.publishLobby();
     this.emit('peer-rejoined', { clientId: peerId, playerId: player.id });
   }
 

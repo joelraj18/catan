@@ -1,4 +1,5 @@
 import { COSTS, hasResources, legalCitySpots, legalRoadSpots, legalSettlementSpots, piecesLeft } from './catanRules';
+import { RESOURCE_LABELS } from './catanBoard';
 
 export const BUILD_LABELS = { road: 'Road', settlement: 'Settlement', city: 'City', dev: 'Development card' };
 
@@ -29,4 +30,14 @@ export const listBuilds = (kinds) => {
 export const firstMissing = (hand, cost) => {
   const missing = Object.entries(cost).find(([resource, count]) => (hand?.[resource] || 0) < count);
   return missing ? missing[0] : null;
+};
+
+// Everything a cost still needs from this hand: "1 brick and 2 ore".
+export const listMissing = (hand, cost) => {
+  const parts = Object.entries(cost)
+    .map(([resource, count]) => [resource, count - (hand?.[resource] || 0)])
+    .filter(([, short]) => short > 0)
+    .map(([resource, short]) => `${short} ${RESOURCE_LABELS[resource].toLowerCase()}`);
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 };

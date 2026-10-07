@@ -1,0 +1,1305 @@
+/* The table, laid out like colonist: the players in a strip above the
+   board, your hand and every action docked under it, and the talk (turn,
+   offers, voice, chat) in one column at the side. On a laptop the whole
+   table fits the window, so every card that flies lands somewhere you can
+   see. */
+
+.board-banners:empty {
+  display: none;
+}
+
+.table-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+  align-items: start;
+  gap: 16px;
+  width: min(1640px, calc(100% - 28px));
+  margin: 12px auto 0;
+}
+
+.table-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  background: var(--surface);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+}
+
+.side-panel > * {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.side-panel .turn-player {
+  margin: 0;
+}
+
+.side-panel .chat-panel {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+
+/* ------------------------------------------------------------ the players */
+
+.seat-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seat-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.seat-chip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 8px;
+  min-width: 168px;
+  max-width: 280px;
+  padding: 7px 8px 9px 7px;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 1px 3px rgba(20, 24, 30, 0.06);
+  transition:
+    box-shadow 0.3s var(--ease),
+    background-color 0.3s var(--ease),
+    transform 0.3s var(--ease-out);
+}
+
+.seat-chip--active {
+  background: color-mix(in srgb, var(--seat) 8%, var(--surface));
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--seat) 70%, transparent),
+    0 6px 16px color-mix(in srgb, var(--seat) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.seat-chip--away {
+  opacity: 0.68;
+}
+
+.seat-chip--speaking .seat-chip-avatar {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px #39c97a;
+}
+
+.seat-chip-avatar {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  background: color-mix(in srgb, var(--seat) 14%, var(--surface));
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--seat) 55%, transparent);
+  transition: box-shadow 0.15s var(--ease);
+}
+
+.seat-chip-avatar .piece-mark {
+  width: 60%;
+  height: 60%;
+}
+
+.seat-chip-role {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  color: var(--ink-secondary);
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+}
+
+.seat-chip-role svg {
+  width: 11px;
+  height: 11px;
+}
+
+.seat-chip-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.seat-chip-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.seat-chip-name strong {
+  overflow: hidden;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-chip-name .seat-tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-chip-stats {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-secondary);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  list-style: none;
+}
+
+.seat-chip-stats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.seat-chip-stats svg {
+  width: 13px;
+  height: 13px;
+  opacity: 0.75;
+}
+
+.seat-chip-cards {
+  padding: 0 4px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--seat) 10%, var(--canvas));
+  border-radius: 6px;
+}
+
+.seat-chip-award {
+  padding: 0 4px;
+  color: #7a5300;
+  background: #fbe7a4;
+  border-radius: 6px;
+}
+
+.seat-chip-award svg {
+  opacity: 1;
+}
+
+.seat-chip .vp-medal {
+  width: 36px;
+  height: 36px;
+}
+
+/* The move clock: a bar along the bottom of whoever is to move */
+.seat-chip .seat-clock {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  color: var(--seat, var(--accent));
+  border-radius: 0;
+  opacity: 0.85;
+}
+
+.bank-strip {
+  display: grid;
+  flex: 0 0 auto;
+  align-content: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.bank-strip-label {
+  color: var(--ink-tertiary);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bank-strip-cards {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 3px 4px;
+}
+
+.bank-chip--low {
+  color: #b3261e;
+  box-shadow: inset 0 0 0 1px rgba(179, 38, 30, 0.45);
+}
+
+/* -------------------------------------------------------------- the board */
+
+.table-board.game-board-area {
+  order: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(6px, 0.9vw, 12px);
+}
+
+.table-board .board-prompt {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 3;
+  max-width: calc(100% - 200px);
+  padding: 4px 12px;
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(20, 24, 30, 0.1);
+  transform: translateX(-50%);
+}
+
+.table-board .board-prompt:empty {
+  display: none;
+}
+
+/* The dice live in the board's corner; on your turn you tap them to roll */
+.dice-tray {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 10px 6px;
+  color: var(--ink);
+  font: inherit;
+  background: rgba(255, 255, 255, 0.78);
+  border: 0;
+  border-radius: 18px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 4px 14px rgba(20, 24, 30, 0.14);
+  cursor: default;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition:
+    transform 0.3s var(--ease-out),
+    box-shadow 0.3s var(--ease);
+}
+
+.dice-tray .dice3d {
+  --die: 38px;
+  --die-half: 19px;
+  gap: 12px;
+  padding: 2px 0 0;
+}
+
+.dice-tray-label {
+  min-height: 20px;
+  color: var(--ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.dice-tray .dice-total-badge {
+  display: inline-grid;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 7px;
+  place-items: center;
+  color: #ffffff;
+  font-size: 0.82rem;
+  background: var(--ink);
+  border-radius: 999px;
+}
+
+.dice-tray .dice-total-badge--seven {
+  background: #b3261e;
+}
+
+.dice-tray--ready {
+  cursor: pointer;
+  animation: trayCall 1.6s var(--ease) infinite;
+}
+
+.dice-tray--ready .dice-tray-label {
+  color: var(--accent);
+}
+
+.dice-tray--ready:hover,
+.dice-tray--ready:focus-visible {
+  outline: none;
+  transform: translateY(-2px) scale(1.04);
+}
+
+@keyframes trayCall {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+      0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent),
+      0 4px 14px rgba(20, 24, 30, 0.14);
+    transform: translateY(0);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+      0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent),
+      0 8px 18px rgba(20, 24, 30, 0.18);
+    transform: translateY(-3px);
+  }
+}
+
+/* ------------------------------------------------------- your hand, docked */
+
+.hand-dock {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 6px;
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 -2px 14px rgba(20, 24, 30, 0.06);
+}
+
+.hand-dock-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 14px;
+  min-width: 0;
+}
+
+.hand-dock .card-row {
+  display: flex;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 2px 18px;
+}
+
+.hand-dock .card-row--dev {
+  padding-left: 12px;
+  border-left: 1px dashed var(--hairline-strong);
+}
+
+.hand-dock .game-card {
+  flex: 0 0 auto;
+  width: clamp(40px, 3.6vw, 52px);
+}
+
+.hand-dock .game-card-name {
+  font-size: 0.58rem;
+}
+
+.hand-dock .hand-hint {
+  flex-basis: 100%;
+  margin: -10px 0 4px;
+  color: var(--ink-tertiary);
+  font-size: 0.72rem;
+}
+
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.action-bar .deck-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 18px;
+}
+
+.action-bar .game-card--deck {
+  width: clamp(42px, 3.8vw, 54px);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  place-items: center;
+  color: var(--seat, var(--ink));
+  font: inherit;
+  background: var(--canvas);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease),
+    background-color 0.2s var(--ease),
+    opacity 0.2s var(--ease);
+}
+
+.action-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.action-btn--trade {
+  color: var(--ink);
+}
+
+.action-btn--trade svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.action-btn:disabled {
+  cursor: default;
+  opacity: 0.42;
+  filter: grayscale(0.7);
+}
+
+.action-btn--ready {
+  background: color-mix(in srgb, var(--seat, var(--accent)) 12%, var(--surface));
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--seat, var(--accent)) 60%, transparent),
+    0 3px 10px color-mix(in srgb, var(--seat, var(--accent)) 22%, transparent);
+}
+
+.action-btn:not(:disabled):hover,
+.action-btn:not(:disabled):focus-visible {
+  outline: none;
+  transform: translateY(-3px);
+}
+
+.action-btn--focus {
+  background: var(--seat, var(--accent));
+  color: #ffffff;
+  transform: translateY(-3px);
+}
+
+.action-btn-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  color: var(--ink-secondary);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  background: var(--surface);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+}
+
+.action-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 30;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: 190px;
+  padding: 8px 10px;
+  color: var(--ink);
+  font-size: 0.74rem;
+  text-align: center;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 10px 24px rgba(20, 24, 30, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 0.15s var(--ease),
+    transform 0.2s var(--ease-out);
+}
+
+.action-tip em {
+  color: var(--ink-tertiary);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.action-btn:hover .action-tip,
+.action-btn:focus-visible .action-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.action-end {
+  min-width: 112px;
+  height: 48px;
+  padding: 0 18px;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  background: var(--accent);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out), filter 0.2s var(--ease);
+}
+
+.action-end:hover,
+.action-end:focus-visible {
+  filter: brightness(1.06);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.action-status {
+  display: grid;
+  max-width: 150px;
+  min-height: 48px;
+  padding: 0 12px;
+  place-items: center;
+  color: var(--ink-tertiary);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  background: var(--canvas);
+  border-radius: 14px;
+}
+
+.action-status--you {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+/* ------------------------------------------------------- the development card */
+
+.game-card--deck {
+  --card: #4b2a86;
+  --card-ink: #f4d27a;
+}
+
+.game-card--deck .game-card-face {
+  background:
+    radial-gradient(120% 80% at 30% 15%, rgba(255, 255, 255, 0.18), transparent 55%),
+    linear-gradient(160deg, #5b3599 0%, #3d2273 55%, #2a1652 100%);
+  box-shadow:
+    inset 0 0 0 2px #e2b84f,
+    inset 0 0 0 4px #3a2068,
+    inset 0 0 0 5px rgba(226, 184, 79, 0.55),
+    0 2px 6px rgba(20, 24, 30, 0.3);
+}
+
+.game-card--deck.game-card--stack::before {
+  background: #2f1a5c;
+  box-shadow: inset 0 0 0 2px rgba(226, 184, 79, 0.6);
+}
+
+.game-card--deck .game-card-art {
+  width: 74%;
+  background: transparent;
+  box-shadow: none;
+}
+
+.game-card--deck .game-card-art svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dev-back-diamond {
+  fill: rgba(226, 184, 79, 0.16);
+  stroke: #e2b84f;
+  stroke-width: 1.6;
+}
+
+.dev-back-diamond-inner {
+  fill: #4a2b86;
+  stroke: rgba(226, 184, 79, 0.5);
+  stroke-width: 0.8;
+}
+
+.dev-back-scroll {
+  fill: #f6e7bd;
+  stroke: #b8862a;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.dev-back-star {
+  fill: #c0392b;
+}
+
+.dev-back-ribbon {
+  position: absolute;
+  top: 6%;
+  left: 50%;
+  padding: 0 4px;
+  color: #3a2068;
+  font-size: 0.42rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: #e2b84f;
+  border-radius: 3px;
+  transform: translateX(-50%);
+}
+
+/* A slow sheen when you can afford one */
+.game-card--deck-ready .game-card-face::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.38) 50%, transparent 65%);
+  content: '';
+  transform: translateX(-120%);
+  animation: deckSheen 2.8s var(--ease) infinite;
+}
+
+@keyframes deckSheen {
+  60%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.game-card--deck .game-card-note {
+  bottom: 4px;
+}
+
+/* Bought development cards share the frame, with a band per family */
+.game-card--dev .game-card-face {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.55),
+    inset 0 9px 0 0 var(--band, transparent),
+    0 2px 6px rgba(20, 24, 30, 0.22);
+}
+
+.dev-band--knight {
+  --band: #b8323a;
+}
+
+.dev-band--progress {
+  --band: #1f6e5a;
+}
+
+.dev-band--vp {
+  --band: #e2b84f;
+}
+
+.game-card-button--live {
+  animation: devLive 2.4s var(--ease) infinite;
+}
+
+@keyframes devLive {
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 255, 255, 0.9),
+      inset 0 9px 0 0 var(--band, transparent),
+      0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+}
+
+/* -------------------------------------------------------- dark theme */
+
+[data-theme='dark'] .table-board .board-prompt {
+  color: var(--ink);
+  background: rgba(20, 26, 30, 0.82);
+}
+
+[data-theme='dark'] .dice-tray {
+  background: rgba(24, 30, 36, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .seat-chip-award {
+  color: #f6dc93;
+  background: rgba(246, 220, 147, 0.16);
+}
+
+[data-theme='dark'] .bank-chip--low {
+  color: #ff8a80;
+}
+
+/* ------------------------------------------------- laptops and desktops */
+
+@media (min-width: 1101px) {
+  .table-layout {
+    grid-row: 3;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 10px clamp(12px, 1.4vw, 20px) 12px;
+  }
+
+  .table-main {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .table-board.game-board-area {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    place-items: center;
+  }
+
+  /* As large as fits both ways: the island scales to the space left */
+  .table-board .hex-board {
+    width: 100%;
+    height: 100%;
+  }
+
+  .side-panel {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}
+
+/* ------------------------------------------------ tablets and phones */
+
+@media (max-width: 1100px) {
+  .table-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Your hand stays on screen while the page scrolls */
+  .hand-dock {
+    position: sticky;
+    bottom: 8px;
+    box-shadow:
+      inset 0 0 0 1px var(--hairline),
+      0 -6px 24px rgba(20, 24, 30, 0.16);
+  }
+
+  .game-toasts {
+    bottom: 140px;
+  }
+}
+
+@media (max-width: 760px) {
+  .hand-dock {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 6px 8px 8px;
+  }
+
+  .hand-dock-cards {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .action-bar {
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .action-bar .deck-slot {
+    padding: 0;
+  }
+
+  .action-bar .deck-cost {
+    display: none;
+  }
+
+  .action-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .action-end,
+  .action-status {
+    min-width: 0;
+    height: 42px;
+    min-height: 42px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+  }
+
+  .game-toasts {
+    bottom: 190px;
+  }
+}
+
+@media (max-width: 620px) {
+  .table-layout {
+    width: calc(100% - 16px);
+    margin-top: 8px;
+  }
+
+  .seat-chip {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-width: 128px;
+    padding: 6px 7px 8px 6px;
+  }
+
+  .seat-chip .vp-medal {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .seat-chip .vp-medal span {
+    display: none;
+  }
+
+  .seat-chip .vp-medal strong {
+    font-size: 0.78rem;
+  }
+
+  .seat-chip-name {
+    padding-right: 22px;
+  }
+
+  .seat-chip-name .seat-tag,
+  .seat-chip-stats li:nth-child(n + 3) {
+    display: none;
+  }
+
+  .seat-chip-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .bank-strip {
+    display: none;
+  }
+
+  .table-board .board-prompt {
+    top: auto;
+    bottom: 8px;
+    max-width: calc(100% - 24px);
+    font-size: 0.72rem;
+  }
+
+  .dice-tray {
+    top: 6px;
+    right: 6px;
+    padding: 6px 7px 4px;
+  }
+
+  .dice-tray .dice3d {
+    --die: 28px;
+    --die-half: 14px;
+    gap: 8px;
+  }
+
+  .hand-dock .game-card {
+    width: 38px;
+  }
+
+  .side-panel {
+    padding: 14px;
+  }
+}
+
+:root[data-motion='off'] .dice-tray--ready,
+:root[data-motion='off'] .game-card--deck-ready .game-card-face::after,
+:root[data-motion='off'] .game-card-button--live {
+  animation: none;
+}
+
+/* A development card in flight: the same purple and gold back */
+.flight-card--dev {
+  background: linear-gradient(160deg, #5b3599, #2a1652);
+  box-shadow:
+    inset 0 0 0 1.5px #e2b84f,
+    0 6px 14px rgba(20, 24, 30, 0.35);
+}
+
+/* Open water from edge to edge, as on colonist: the island floats in the
+   middle of the table instead of on a framed hexagon of sea */
+.table-board.game-board-area,
+[data-theme='dark'] .table-board.game-board-area {
+  background:
+    radial-gradient(70% 65% at 50% 48%, color-mix(in srgb, var(--sea) 92%, #ffffff) 0%, var(--sea) 55%, var(--sea-deep) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+    inset 0 0 60px rgba(10, 40, 70, 0.25),
+    var(--shadow-card);
+}
+
+.table-board .hex-board-sea {
+  fill: transparent;
+  stroke: none;
+}
+
+/* An offer waiting on you nudges once as it arrives */
+.game-toast--ask {
+  animation:
+    toastIn 0.32s var(--ease-out),
+    askNudge 0.6s 0.35s var(--ease) 1;
+}
+
+@keyframes askNudge {
+  20%,
+  60% {
+    transform: translateX(-6px) rotate(-1deg);
+  }
+
+  40%,
+  80% {
+    transform: translateX(4px) rotate(0.6deg);
+  }
+}
+
+/* The throw: big dice tumbling onto the middle of the board */
+.dice-throw {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  pointer-events: none;
+  animation: throwAway 0.4s calc(var(--throw-ms) + var(--stay-ms)) var(--ease) forwards;
+}
+
+.dice-throw-pair {
+  --die: clamp(46px, 6.5vw, 70px);
+  --die-half: calc(var(--die) / 2);
+  display: flex;
+  gap: calc(var(--die) * 0.45);
+  perspective: 700px;
+}
+
+.dice-throw-die .die3d-face {
+  border-radius: 22%;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dice-throw-die .die3d-shadow {
+  bottom: -14px;
+  height: 12px;
+  background: radial-gradient(closest-side, rgba(5, 25, 45, 0.45), transparent);
+}
+
+.dice-throw-total {
+  display: grid;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  place-items: center;
+  color: #ffffff;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  background: rgba(24, 28, 34, 0.86);
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  animation: throwTotal 0.45s var(--throw-ms) var(--ease-spring) forwards;
+}
+
+.dice-throw-total--seven {
+  background: #b3261e;
+}
+
+@keyframes throwTotal {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes throwAway {
+  to {
+    opacity: 0;
+    transform: translate(28%, -36%) scale(0.45);
+  }
+}
+
+/* Idle dice in the corner: plain white, faint pips */
+.dice-tray .die3d--idle .die3d-face {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.dice-tray .die3d--idle .die3d-face circle {
+  fill: rgba(43, 49, 64, 0.16);
+}
+
+.action-tip kbd,
+.action-end kbd {
+  display: inline-grid;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0 3px;
+  place-items: center;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 800;
+  vertical-align: 1px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px currentColor;
+  opacity: 0.6;
+}
+
+@media (hover: none) {
+  .action-end kbd {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------- dice so far */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dice-chart {
+  display: grid;
+  gap: 8px;
+}
+
+.dice-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.dice-chart-head span {
+  color: var(--ink-tertiary);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-chart-bars {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+  height: 74px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dice-chart-bars li {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.dice-chart-bar {
+  position: relative;
+  display: block;
+  min-height: 2px;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 4px 4px 1px 1px;
+  transition: height 0.5s var(--ease-out);
+}
+
+.dice-chart-bar em {
+  position: absolute;
+  top: -13px;
+  left: 0;
+  right: 0;
+  color: var(--ink-tertiary);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dice-chart-hot .dice-chart-bar {
+  background: color-mix(in srgb, #c0392b 45%, transparent);
+}
+
+.dice-chart-now .dice-chart-bar {
+  background: var(--accent);
+}
+
+.dice-chart-expected {
+  position: absolute;
+  right: 1px;
+  left: 1px;
+  height: 0;
+  margin-bottom: 15px;
+  border-top: 1.5px dashed color-mix(in srgb, var(--ink) 45%, transparent);
+  pointer-events: none;
+}
+
+.dice-chart-bars strong {
+  padding-top: 3px;
+  color: var(--ink-secondary);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ------------------------------------------------- stats after the game */
+
+.results-stats {
+  margin: 4px 24px 0;
+  padding: 10px 14px;
+  background: var(--canvas);
+  border-radius: 14px;
+}
+
+.results-stats summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.results-stats[open] {
+  display: grid;
+  gap: 14px;
+}
+
+.game-stats {
+  overflow-x: auto;
+}
+
+.game-stats table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-stats th,
+.game-stats td {
+  padding: 5px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.game-stats tbody th {
+  color: var(--ink-secondary);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.game-stats thead .piece-mark {
+  width: 20px;
+  height: 20px;
+}
+
+.game-stats-top {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* Choosing who to rob, without covering the board */
+.steal-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 24px);
+  padding: 8px 10px 8px 16px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+  animation: toastIn 0.32s var(--ease-out);
+}
+
+.steal-bar .steal-options {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.steal-bar .steal-option {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 6px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.steal-bar .steal-option .piece-mark {
+  grid-row: span 2;
+  width: 22px;
+  height: 22px;
+}
+
+.steal-bar .steal-option span {
+  font-size: 0.72rem;
+}
+
+.property-action-btn--ghost {
+  color: var(--ink-secondary);
+  background: transparent;
+  border-color: var(--hairline-strong);
+}

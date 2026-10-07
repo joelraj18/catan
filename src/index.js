@@ -5,9 +5,11 @@ import './index.css';
 import Game from './Game';
 import LoadingScreen from './components/LoadingScreen';
 import reportWebVitals from './reportWebVitals';
+import { initMotion } from './services/motion';
 import { initTheme } from './services/theme';
 
 initTheme();
+initMotion();
 
 function CatanApp() {
   const [isLoading, setIsLoading] = useState(true);

@@ -1,6 +1,7 @@
 import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PIPS, RESOURCE_LABELS, TERRAINS, geometryOf } from './catanBoard';
-import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
+import { CITY_PATH, City3D, PIECES, SETTLEMENT_PATH, Settlement3D } from './pieces.jsx';
+import { scaled } from '../../services/motion';
 import './hex-board.css';
 
 // The island drawn as one SVG: sea, terrain hexes with their number tokens,
@@ -36,27 +37,12 @@ const hexPoints = (geo, hex, inset = 0) =>
     })
     .join(' ');
 
-// Island outline for the sand rim: every coastal path, pushed slightly out.
-const coastCache = new Map();
-const coastPointsOf = (geo) => {
-  if (!coastCache.has(geo)) {
-    const points = [];
-    geo.coast.forEach(({ edge }) => {
-      geo.edges[edge].vertices.forEach((vertexId) => {
-        if (!points.includes(vertexId)) points.push(vertexId);
-      });
-    });
-    coastCache.set(
-      geo,
-      points
-        .map((id) => geo.vertices[id])
-        .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x))
-        .map((v) => `${px(v.x * 1.07)},${px(v.y * 1.07)}`)
-        .join(' '),
-    );
-  }
-  return coastCache.get(geo);
-};
+// The gap between two tiles, in hex radii. Every tile is drawn this much
+// smaller, and the island's ground shows through: the same width between
+// two tiles as between a tile and the sea.
+export const GAP = 0.07;
+const HARBOR_R = 16;
+const TILE_INSET = GAP / Math.sqrt(3); // from the centre toward each corner
 
 // Terrain motifs, drawn around (0,0) inside a hex of radius UNIT.
 function TerrainMotif({ terrain }) {
@@ -191,10 +177,16 @@ export function ResourceIcon({ resource, size = 18, className = '' }) {
   );
 }
 
-function NumberToken({ number, x, y, hot, blocked = false, pop = null }) {
+function NumberToken({ number, x, y, hot, blocked = false, pop = null, rolled = null }) {
   const pips = PIPS[number] || 0;
+  const ways = 6 - Math.abs(7 - number);
   return (
     <g className={`number-token ${hot ? 'number-token--hot' : ''} ${blocked ? 'number-token--blocked' : ''}`} transform={`translate(${x} ${y})`}>
+      <title>
+        {`${number}: ${ways} in 36, ${((ways / 36) * 100).toFixed(1)}% a roll${rolled !== null ? ` \u00b7 rolled ${rolled} time${rolled === 1 ? '' : 's'} so far` : ''}${
+          blocked ? ' \u00b7 blocked by the dragon' : ''
+        }`}
+      </title>
       <g key={pop ?? 'still'} className={pop ? 'number-token-pop' : undefined}>
       <circle r="19.5" cy="2" className="number-token-shadow" />
       <circle r="19.5" className="number-token-face" />
@@ -229,44 +221,106 @@ const robberSpot = (geo, hexId) => {
   return { x: px(hex.x) + 2, y: px(hex.y) - 10 };
 };
 
-const reducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+// Where the dragon last slept on each island, kept outside the component so
+// a redraw of the board (a new layout, a rejoin) still flies it from there.
+const lastLair = new Map();
+const lairKey = (geo, board) => `${geo.hexes.length}:${(board?.hexes || []).map((hex) => hex.number || 0).join('')}`;
 
-function Dragon({ hexId, geo }) {
+const DRAGON_MS = 2300;
+const WAKE = 0.13; // share of the flight spent waking and stretching
+
+// A path for the dragon from a to b: up off its tile, out in a wide curve
+// (over the sea when the two tiles are close, so even a short hop is a real
+// flight), banking along the way, then a glide in to land.
+export const dragonPath = (a, b, steps = 26) => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  // Bend to one side; short hops swing further out.
+  const swing = Math.max(70, 150 - dist * 0.25);
+  const nx = -dy / dist;
+  const ny = dx / dist;
+  const side = a.x + b.x > 0 ? -1 : 1; // swing toward the open sea
+  const up = 60 + Math.min(70, dist * 0.15);
+  const c1 = { x: a.x + dx * 0.2 + nx * swing * side, y: a.y + dy * 0.2 + ny * swing * side - up };
+  const c2 = { x: a.x + dx * 0.8 + nx * swing * side * 0.6, y: a.y + dy * 0.8 + ny * swing * side * 0.6 - up * 0.8 };
+  const point = (t) => {
+    const u = 1 - t;
+    return {
+      x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x,
+      y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y,
+    };
+  };
+  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+  const frames = [
+    { offset: 0, transform: `translate(${a.x}px, ${a.y}px) scale(1)` },
+    { offset: WAKE * 0.5, transform: `translate(${a.x}px, ${a.y - 4}px) scale(1.08, 0.94)` },
+    { offset: WAKE, transform: `translate(${a.x}px, ${a.y - 10}px) scale(1.04)` },
+  ];
+  for (let i = 1; i <= steps; i += 1) {
+    const t = ease(i / steps);
+    const p = point(t);
+    const ahead = point(Math.min(1, t + 0.04));
+    // Face the way it flies (the head is drawn on the left), and bank.
+    const heading = ahead.x - p.x;
+    const flip = heading > 0.5 ? -1 : 1;
+    const bank = Math.max(-22, Math.min(22, (ahead.y - p.y) * 2.2)) * -flip;
+    const lift = Math.sin(Math.PI * (i / steps));
+    const size = 1 + 0.38 * lift;
+    frames.push({
+      offset: WAKE + (1 - WAKE) * (i / steps),
+      transform: `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) rotate(${(i === steps ? 0 : bank).toFixed(1)}deg) scale(${(
+        flip * size
+      ).toFixed(3)}, ${size.toFixed(3)})`,
+    });
+  }
+  frames[frames.length - 1].transform = `translate(${b.x}px, ${b.y}px) scale(1)`;
+  return frames;
+};
+
+function Dragon({ hexId, geo, board }) {
   const ref = useRef(null);
-  const last = useRef(hexId);
+  const shadowRef = useRef(null);
+  const key = lairKey(geo, board);
   const [flying, setFlying] = useState(false);
+  const [landing, setLanding] = useState(0);
   const { x, y } = robberSpot(geo, hexId);
 
   useLayoutEffect(() => {
-    const from = last.current;
-    last.current = hexId;
+    const from = lastLair.get(key);
+    lastLair.set(key, hexId);
     const node = ref.current;
-    if (from === hexId || from === null || from === undefined || !node?.animate || reducedMotion()) return undefined;
+    if (from === hexId || from === null || from === undefined || !geo.hexes[from] || !node?.animate) return undefined;
+    const duration = scaled(DRAGON_MS);
+    if (!duration) return undefined;
     const a = robberSpot(geo, from);
-    const lift = Math.min(90, 40 + Math.hypot(x - a.x, y - a.y) * 0.25);
-    const midX = (a.x + x) / 2;
-    const midY = Math.min(a.y, y) - lift;
     setFlying(true);
-    const flight = node.animate(
+    const flight = node.animate(dragonPath(a, { x, y }), { duration, easing: 'linear' });
+    // Its shadow keeps to the ground, shrinking and fading as it climbs.
+    const shadow = shadowRef.current?.animate?.(
       [
-        { transform: `translate(${a.x}px, ${a.y}px) scale(1)` },
-        { transform: `translate(${a.x}px, ${a.y - 18}px) scale(1.12)`, offset: 0.15 },
-        { transform: `translate(${midX}px, ${midY}px) scale(1.22)`, offset: 0.55 },
-        { transform: `translate(${x}px, ${y - 10}px) scale(1.08)`, offset: 0.88 },
-        { transform: `translate(${x}px, ${y}px) scale(1)` },
+        { transform: `translate(${a.x}px, ${a.y + 4}px) scale(1)`, opacity: 0.5 },
+        { transform: `translate(${(a.x + x) / 2}px, ${(a.y + y) / 2 + 4}px) scale(0.45)`, opacity: 0.18, offset: 0.55 },
+        { transform: `translate(${x}px, ${y + 4}px) scale(1)`, opacity: 0.5 },
       ],
-      { duration: 1050, easing: 'cubic-bezier(0.45, 0, 0.3, 1)' },
+      { duration, easing: 'ease-in-out' },
     );
-    flight.onfinish = () => setFlying(false);
+    flight.onfinish = () => {
+      setFlying(false);
+      setLanding((count) => count + 1);
+    };
     return () => {
       flight.onfinish = null;
       flight.cancel();
+      shadow?.cancel();
       setFlying(false);
     };
-  }, [hexId, x, y, geo]);
+  }, [hexId, x, y, geo, key]);
 
   return (
+    <>
+    {flying && <ellipse ref={shadowRef} className="dragon-ground-shadow" cx="0" cy="0" rx="22" ry="5" />}
+    {landing > 0 && !flying && <circle key={landing} className="dragon-dust" cx={x} cy={y + 4} r="14" />}
     <g
       ref={ref}
       className={`dragon ${flying ? 'dragon--flying' : 'dragon--asleep'}`}
@@ -300,6 +354,7 @@ function Dragon({ hexId, geo }) {
       </g>
       </g>
     </g>
+    </>
   );
 }
 
@@ -347,6 +402,9 @@ function HexBoard({
   myPiece = null,
   rolled = null,
   harvest = null,
+  rollCounts = null,
+  victims = null,
+  onVictim = null,
   compact = false,
   className = '',
   label = 'Catan board',
@@ -372,6 +430,7 @@ function HexBoard({
     <svg
       className={`hex-board ${compact ? 'hex-board--compact' : ''} ${highlight.browse ? 'hex-board--browse' : ''} ${selected ? 'hex-board--picking' : ''} ${className}`.trim()}
       viewBox={`${-width} ${-height} ${width * 2} ${height * 2}`}
+      style={{ '--mine': mine.fill, '--mine-edge': mine.edge }}
       role="img"
       aria-label={label}
     >
@@ -398,16 +457,44 @@ function HexBoard({
           .join(' ')}
         fill={`url(#sea-${uid})`}
       />
-      <polygon className="hex-board-sand" points={coastPointsOf(geo)} />
+      {/* The island's ground: every tile at full size, edged out by half a
+          gap, so the coast sits one gap from the tiles all the way round.
+          A lighter, wider pass underneath is the surf. */}
+      <g className="hex-board-surf" style={{ strokeWidth: px(GAP) + 9 }}>
+        {board.hexes.map((tile) => (
+          <polygon key={tile.id} points={hexPoints(geo, geo.hexes[tile.id])} />
+        ))}
+      </g>
+      <g className="hex-board-ground" style={{ strokeWidth: px(GAP) }}>
+        {board.hexes.map((tile) => (
+          <polygon key={tile.id} points={hexPoints(geo, geo.hexes[tile.id])} />
+        ))}
+      </g>
 
-      {/* Harbours */}
+      {/* Harbours: a token out in the water, joined to the two corners of
+          its stretch of coast by wooden piers */}
       {board.harbors.map((harbor) => {
         const [a, b] = harbor.vertices.map((id) => geo.vertices[id]);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const piers = [a, b].map((v) => {
+          // From just inside the corner, on the coast, to the token's rim.
+          const start = { x: v.x + (mid.x - v.x) * 0.22, y: v.y + (mid.y - v.y) * 0.22 };
+          const dx = start.x - harbor.x;
+          const dy = start.y - harbor.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const rim = HARBOR_R / UNIT - 0.02;
+          return { x1: px(start.x), y1: px(start.y), x2: px(harbor.x + (dx / length) * rim), y2: px(harbor.y + (dy / length) * rim) };
+        });
         return (
           <g key={harbor.edge} className={`harbor harbor--${harbor.type}`}>
             <title>{harbor.type === 'any' ? 'Harbour: any 3 identical resources for 1' : `Harbour: 2 ${RESOURCE_LABELS[harbor.type].toLowerCase()} for 1`}</title>
-            <path className="harbor-pier" d={`M${px(a.x)} ${px(a.y)}L${px(harbor.x)} ${px(harbor.y)}L${px(b.x)} ${px(b.y)}`} />
-            <circle cx={px(harbor.x)} cy={px(harbor.y)} r="16" />
+            {piers.map((pier, index) => (
+              <g key={index} className="harbor-pier">
+                <line {...pier} className="harbor-pier-base" />
+                <line {...pier} className="harbor-pier-deck" />
+              </g>
+            ))}
+            <circle className="harbor-token" cx={px(harbor.x)} cy={px(harbor.y)} r={HARBOR_R} />
             {harbor.type === 'any' ? (
               <text x={px(harbor.x)} y={px(harbor.y) + 1} textAnchor="middle" dominantBaseline="middle" className="harbor-rate harbor-rate--any">
                 3:1
@@ -443,8 +530,9 @@ function HexBoard({
             aria-label={target ? `Move the robber to ${TERRAINS[tile.terrain].label} ${tile.number || ''}` : undefined}
             onKeyDown={target && onHex ? onPress(() => onHex(tile.id)) : undefined}
           >
-            <polygon points={hexPoints(geo, hex, 0.03)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
-            <polygon points={hexPoints(geo, hex, 0.03)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(geo, hex, TILE_INSET)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
+            <polygon points={hexPoints(geo, hex, TILE_INSET)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(geo, hex, TILE_INSET + 0.035)} className="hex-tile-bevel" />
             <g transform={`translate(${px(hex.x)} ${px(hex.y) + (tile.number ? -25 : 0)})`}>
               <TileArt terrain={tile.terrain} />
             </g>
@@ -456,6 +544,7 @@ function HexBoard({
                 hot={tile.number === 6 || tile.number === 8}
                 blocked={board.robber === tile.id}
                 pop={harvest?.hexes.includes(tile.id) ? harvest.key : null}
+                rolled={rollCounts ? rollCounts[tile.number] || 0 : null}
               />
             )}
           </g>
@@ -470,8 +559,8 @@ function HexBoard({
           if (!hex) return null;
           return (
             <g key={`harvest-${harvest.key}-${hexId}`} className="harvest" aria-hidden="true">
-              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-glow" />
-              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-ring" />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} className="harvest-glow" />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} className="harvest-ring" />
               {[-22, -6, 10, 24].map((dx, i) => (
                 <circle key={dx} className="harvest-mote" cx={px(hex.x) + dx} cy={px(hex.y) + 10 - (i % 2) * 14} r={2.2 + (i % 2)} style={{ animationDelay: `${0.15 + i * 0.12}s` }} />
               ))}
@@ -484,7 +573,7 @@ function HexBoard({
           if (!hex) return null;
           return (
             <g key={`blocked-${harvest.key}-${hexId}`} className="harvest-blocked" aria-hidden="true">
-              <polygon points={hexPoints(geo, hex, 0.03)} />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} />
               <path d={`M${px(hex.x) - 12} ${px(hex.y) + 1}l24 24m0 -24l-24 24`} transform="translate(0 0)" />
             </g>
           );
@@ -501,8 +590,12 @@ function HexBoard({
         const y2 = b.y + (a.y - b.y) * shrink;
         return (
           <g key={`road-${edgeId}`} className={`road ${isNew(`r${edgeId}`) ? 'road--new' : ''}`}>
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.edge} strokeWidth="11" strokeLinecap="round" pathLength="1" />
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.5" strokeLinecap="round" pathLength="1" />
+            {/* A wooden beam: its shadow and dark underside, the painted top, a
+                line of light along the upper edge */}
+            <line x1={px(x1)} y1={px(y1) + 2.5} x2={px(x2)} y2={px(y2) + 2.5} className="road-shadow" strokeWidth="10" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1) + 1.2} x2={px(x2)} y2={px(y2) + 1.2} stroke={colour.edge} strokeWidth="10" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.4" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1) - 1.4} x2={px(x2)} y2={px(y2) - 1.4} stroke={colour.light} strokeWidth="2" strokeLinecap="round" pathLength="1" className="road-light" />
           </g>
         );
       })}
@@ -515,16 +608,24 @@ function HexBoard({
           <React.Fragment key={`edge-${edgeId}`}>
             {picked && (
               <g className="ghost ghost--road" aria-hidden="true">
-                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.edge} strokeWidth="11" strokeLinecap="round" />
+                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18) + 1.2} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18) + 1.2} stroke={mine.edge} strokeWidth="10" strokeLinecap="round" />
                 <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.fill} strokeWidth="7.5" strokeLinecap="round" />
               </g>
             )}
           <line
+            className="spot-edge-under"
+            x1={px(a.x + (b.x - a.x) * 0.26)}
+            y1={px(a.y + (b.y - a.y) * 0.26)}
+            x2={px(b.x + (a.x - b.x) * 0.26)}
+            y2={px(b.y + (a.y - b.y) * 0.26)}
+            aria-hidden="true"
+          />
+          <line
             className={`spot spot--edge ${picked ? 'spot--picked' : ''}`}
-            x1={px(a.x + (b.x - a.x) * 0.2)}
-            y1={px(a.y + (b.y - a.y) * 0.2)}
-            x2={px(b.x + (a.x - b.x) * 0.2)}
-            y2={px(b.y + (a.y - b.y) * 0.2)}
+            x1={px(a.x + (b.x - a.x) * 0.26)}
+            y1={px(a.y + (b.y - a.y) * 0.26)}
+            x2={px(b.x + (a.x - b.x) * 0.26)}
+            y2={px(b.y + (a.y - b.y) * 0.26)}
             onClick={onEdge ? () => onEdge(edgeId) : undefined}
             role="button"
             tabIndex={0}
@@ -536,8 +637,6 @@ function HexBoard({
         );
       })}
 
-      {/* Robber */}
-      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} />}
 
       {/* Settlements and cities */}
       {Object.entries(buildings).map(([vertexId, building]) => {
@@ -551,7 +650,7 @@ function HexBoard({
           <g
             key={`b-${vertexId}`}
             className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''} ${picked ? 'building--picked' : ''} ${arriving ? `building--new-${building.type}` : ''}`}
-            transform={`translate(${px(v.x) - (city ? 14 : 12)} ${px(v.y) - (city ? 15 : 13)}) scale(${city ? 1.15 : 1})`}
+            transform={`translate(${px(v.x) - (city ? 17 : 13.4)} ${px(v.y) - (city ? 17.8 : 14.6)}) scale(${city ? 1.3 : 1.12})`}
             onClick={upgradable && onVertex ? () => onVertex(Number(vertexId)) : undefined}
             role={upgradable ? 'button' : undefined}
             tabIndex={upgradable ? 0 : undefined}
@@ -560,8 +659,8 @@ function HexBoard({
           >
             {arriving && <ellipse className="building-dust" cx="12" cy="22" rx="10" ry="3" />}
             <g className="building-body">
-              <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
-              <path d={picked ? CITY_PATH : city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
+              {city || picked ? <City3D colour={colour} /> : <Settlement3D colour={colour} />}
+              {upgradable && <path d={SETTLEMENT_PATH} className="building-upgrade-ring" />}
               {arriving && city && <path d={CITY_PATH} className="building-shine" />}
             </g>
           </g>
@@ -586,7 +685,7 @@ function HexBoard({
               onKeyDown={onPress(() => onVertex?.(vertexId))}
             >
               <circle cx="12" cy="13" r="19" className="spot-halo" />
-              <path d={SETTLEMENT_PATH} fill={mine.fill} stroke={mine.edge} strokeWidth="1.6" strokeLinejoin="round" />
+              <Settlement3D colour={mine} />
             </g>
           );
         }
@@ -596,7 +695,7 @@ function HexBoard({
             className="spot spot--vertex"
             cx={px(v.x)}
             cy={px(v.y)}
-            r="9"
+            r="7"
             onClick={onVertex ? () => onVertex(vertexId) : undefined}
             role="button"
             tabIndex={0}
@@ -605,6 +704,36 @@ function HexBoard({
           />
         );
       })}
+
+      {/* Who can be robbed: a badge on each of their buildings by the dragon */}
+      {(victims || []).map(({ vertexId, playerId, cards }) => {
+        const v = geo.vertices[vertexId];
+        const colour = colourOf(playerId);
+        const name = players.find((player) => player.id === playerId)?.name || 'this player';
+        return (
+          <g
+            key={`victim-${vertexId}`}
+            className="victim-badge"
+            transform={`translate(${px(v.x)} ${px(v.y) - 30})`}
+            onClick={onVictim ? () => onVictim(playerId) : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label={`Rob ${name}, ${cards} cards`}
+            onKeyDown={onPress(() => onVictim?.(playerId))}
+          >
+            <g className="victim-badge-pin">
+              <circle r="15" fill={colour.fill} stroke="#ffffff" strokeWidth="2.5" />
+              <text y="1" textAnchor="middle" dominantBaseline="middle">
+                {cards}
+              </text>
+              <path d="M-5 13 0 20 5 13" fill="#ffffff" />
+            </g>
+          </g>
+        );
+      })}
+
+      {/* The robber flies over everything, then sleeps on its tile */}
+      {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} board={board} />}
 
       {selected && <ConfirmChip selected={selected} geo={geo} />}
     </svg>
