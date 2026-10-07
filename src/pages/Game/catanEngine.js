@@ -8,6 +8,7 @@
 // feeds into the public methods below, each of which checks that the move
 // is legal for that player right now and returns false when it is not.
 
+import { tallyEvent } from './gameStats';
 import {
   BEGINNER_COLOURS,
   BEGINNER_SETTLEMENTS,
@@ -438,6 +439,7 @@ export default class GameEngine {
       events: [...(this.state.events || []), entry].slice(-EVENT_LIMIT),
       eventCounter,
       tracker: trackEvent(this.state.tracker, entry, this.state),
+      stats: tallyEvent(this.state.stats, entry),
     });
   }
 

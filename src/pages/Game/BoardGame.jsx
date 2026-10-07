@@ -9,7 +9,7 @@ import ThemeToggle from '../../components/ThemeToggle';
 import { premiumAdvisor } from '../../services/premiumAi';
 import { transportKind } from '../../services/roomTransport';
 import { playSfx } from '../../services/sfx';
-import { RESOURCES, RESOURCE_LABELS } from './catanBoard';
+import { RESOURCES, RESOURCE_LABELS, geometryOf } from './catanBoard';
 import GameEngine, { AI_CALL_BUDGET, DEFAULT_TIMING, createInitialState } from './catanEngine';
 import {
   COSTS,
@@ -30,9 +30,11 @@ import {
 import CardFlights from './CardFlights.jsx';
 import Dice3D, { DiceThrow } from './Dice3D.jsx';
 import { DeckCard, DevRow, ResourceRow } from './GameCards.jsx';
+import { DiceChart, GameStatsTable } from './StatsPanels.jsx';
 import EmoteBar from './EmoteBar.jsx';
 import GameToasts from './GameToasts.jsx';
 import useFreshEvent from './useFreshEvent';
+import useTurnAlert, { askToNotify } from './useTurnAlert';
 import { affordableBuilds, firstMissing, listBuilds, listMissing } from './buildHints';
 import { botSkillLabel, settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
@@ -764,6 +766,14 @@ export default function BoardGame({
     }
   };
 
+  // A counter-offer: say no to theirs, then open the trade window with it
+  // turned round, addressed back to them, ready to change and send.
+  const counterOffer = (trade) => {
+    act({ type: 'trade-respond', tradeId: trade.id, accept: false });
+    setTradeDraft({ give: { ...emptyBundle(), ...trade.get }, get: { ...emptyBundle(), ...trade.give }, to: trade.from });
+    setSheet('trade');
+  };
+
   const openTrade = () => {
     setTradeDraft({ give: emptyBundle(), get: emptyBundle(), to: null });
     setSheet('trade');
@@ -835,38 +845,48 @@ export default function BoardGame({
     );
   };
 
+  // Choosing who to rob: their buildings by the dragon carry a badge with
+  // their card count on the board; tap one, or a name in the bar below.
   const renderSteal = () => {
     if (!isMyTurn || phase !== 'steal' || over) return null;
     return (
-      <div className="property-card-overlay end-overlay">
-        <div className="property-card steal-sheet" role="dialog" aria-modal="true" aria-labelledby="steal-title">
-          <header className="property-card-header">
-            <p className="property-card-kicker">The robber</p>
-            <h3 id="steal-title">Steal a card from</h3>
-          </header>
-          <div className="property-card-body">
-            <div className="steal-options">
-              {view.stealFrom.map((id) => {
-                const player = players.find((entry) => entry.id === id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`steal-option seat-${player.pieceKey}`}
-                    onClick={() => act({ type: 'steal', victimId: id })}
-                  >
-                    <PieceMark piece={player.pieceKey} variant="token" />
-                    <strong>{player.name}</strong>
-                    <span>{visibleHandSize(view.hands[id])} cards</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      <div className="steal-bar" role="group" aria-labelledby="steal-title">
+        <strong id="steal-title">Rob who?</strong>
+        <div className="steal-options">
+          {view.stealFrom.map((id) => {
+            const player = players.find((entry) => entry.id === id);
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`steal-option seat-${player.pieceKey}`}
+                onClick={() => act({ type: 'steal', victimId: id })}
+              >
+                <PieceMark piece={player.pieceKey} variant="token" />
+                <strong>{player.name}</strong>
+                <span>{visibleHandSize(view.hands[id])} cards</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
   };
+
+  // The buildings by the dragon whose owners can be robbed.
+  const victims = useMemo(() => {
+    if (!isMyTurn || phase !== 'steal' || over || view.board.robber === null || view.board.robber === undefined) return null;
+    const hex = geometryOf(view.board).hexes[view.board.robber];
+    const seen = new Set();
+    return (hex?.vertices || [])
+      .filter((vertexId) => {
+        const owner = view.buildings[vertexId]?.owner;
+        if (!owner || !(view.stealFrom || []).includes(owner) || seen.has(owner)) return false;
+        seen.add(owner);
+        return true;
+      })
+      .map((vertexId) => ({ vertexId, playerId: view.buildings[vertexId].owner, cards: visibleHandSize(view.hands[view.buildings[vertexId].owner]) }));
+  }, [isMyTurn, phase, over, view.board, view.buildings, view.stealFrom, view.hands]);
 
   const renderDevPick = () => {
     if (!devPick) return null;
@@ -1155,6 +1175,14 @@ export default function BoardGame({
               </li>
             ))}
           </ol>
+
+          {view.stats && (
+            <details className="results-stats">
+              <summary>Game stats</summary>
+              <GameStatsTable stats={view.stats} players={players} />
+              <DiceChart stats={view.stats} />
+            </details>
+          )}
 
           <div className="results-actions">
             {isHost && onRestart && <GoldButton onClick={onRestart}>Play again</GoldButton>}
@@ -1458,6 +1486,23 @@ export default function BoardGame({
     );
   };
 
+  // A background tab calls you back when the table is waiting on you.
+  const offersForMe = (view.trades || []).filter(
+    (trade) => trade.from !== myPlayerId && (trade.to === myPlayerId || !trade.to) && trade.responses?.[myPlayerId] === undefined,
+  ).length;
+  useTurnAlert(
+    !me || over
+      ? null
+      : iOweDiscard
+        ? 'Discard your cards'
+        : setupTurn || (isMyTurn && phase !== 'discard')
+          ? 'Your turn'
+          : offersForMe && phase === 'actions'
+            ? `${activePlayer.name} offers you a trade`
+            : null,
+  );
+  const [notifyState, setNotifyState] = useState(() => (typeof window !== 'undefined' && window.Notification ? window.Notification.permission : 'denied'));
+
   // Space rolls; R, S and C show where a road, settlement or city can go;
   // D buys a development card, T opens trading, E ends the turn.
   hotkeys.current = (event) => {
@@ -1607,6 +1652,7 @@ export default function BoardGame({
           localTime={localTime}
           notice={buildNotice}
           sound={toastSound}
+          onCounter={counterOffer}
         />
       )}
 
@@ -1732,6 +1778,9 @@ export default function BoardGame({
             myPiece={me?.pieceKey}
             rolled={phase === 'actions' && rolledTotal !== 7 ? rolledTotal : null}
             harvest={harvest}
+            rollCounts={view.stats?.rolls}
+            victims={victims}
+            onVictim={(playerId) => act({ type: 'steal', victimId: playerId })}
           />
 
           {renderDice()}
@@ -1851,6 +1900,8 @@ export default function BoardGame({
             />
           )}
 
+          {view.stats && <DiceChart stats={view.stats} highlight={rolledTotal} />}
+
           {trades.length > 0 && !over && (
             <section className="trade-pending" aria-label="Trade offers">
               <p className="eyebrow">Trade offers</p>
@@ -1940,6 +1991,11 @@ export default function BoardGame({
             <button type="button" className="dice-info-button" onClick={() => setSheet('costs')}>
               Building costs
             </button>
+            {notifyState === 'default' && session && (
+              <button type="button" className="dice-info-button" onClick={async () => setNotifyState(await askToNotify())}>
+                Notify me on my turn
+              </button>
+            )}
             <button type="button" className="dice-info-button" onClick={() => setSheet('dice')}>
               Fair play{view.boardId ? ` · Island ${view.boardId.slice(0, 4)}` : ''}
             </button>

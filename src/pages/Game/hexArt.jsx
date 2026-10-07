@@ -177,10 +177,16 @@ export function ResourceIcon({ resource, size = 18, className = '' }) {
   );
 }
 
-function NumberToken({ number, x, y, hot, blocked = false, pop = null }) {
+function NumberToken({ number, x, y, hot, blocked = false, pop = null, rolled = null }) {
   const pips = PIPS[number] || 0;
+  const ways = 6 - Math.abs(7 - number);
   return (
     <g className={`number-token ${hot ? 'number-token--hot' : ''} ${blocked ? 'number-token--blocked' : ''}`} transform={`translate(${x} ${y})`}>
+      <title>
+        {`${number}: ${ways} in 36, ${((ways / 36) * 100).toFixed(1)}% a roll${rolled !== null ? ` \u00b7 rolled ${rolled} time${rolled === 1 ? '' : 's'} so far` : ''}${
+          blocked ? ' \u00b7 blocked by the dragon' : ''
+        }`}
+      </title>
       <g key={pop ?? 'still'} className={pop ? 'number-token-pop' : undefined}>
       <circle r="19.5" cy="2" className="number-token-shadow" />
       <circle r="19.5" className="number-token-face" />
@@ -396,6 +402,9 @@ function HexBoard({
   myPiece = null,
   rolled = null,
   harvest = null,
+  rollCounts = null,
+  victims = null,
+  onVictim = null,
   compact = false,
   className = '',
   label = 'Catan board',
@@ -535,6 +544,7 @@ function HexBoard({
                 hot={tile.number === 6 || tile.number === 8}
                 blocked={board.robber === tile.id}
                 pop={harvest?.hexes.includes(tile.id) ? harvest.key : null}
+                rolled={rollCounts ? rollCounts[tile.number] || 0 : null}
               />
             )}
           </g>
@@ -692,6 +702,33 @@ function HexBoard({
             aria-label={`Build a settlement by ${placeOf(board, v.hexes)}`}
             onKeyDown={onPress(() => onVertex?.(vertexId))}
           />
+        );
+      })}
+
+      {/* Who can be robbed: a badge on each of their buildings by the dragon */}
+      {(victims || []).map(({ vertexId, playerId, cards }) => {
+        const v = geo.vertices[vertexId];
+        const colour = colourOf(playerId);
+        const name = players.find((player) => player.id === playerId)?.name || 'this player';
+        return (
+          <g
+            key={`victim-${vertexId}`}
+            className="victim-badge"
+            transform={`translate(${px(v.x)} ${px(v.y) - 30})`}
+            onClick={onVictim ? () => onVictim(playerId) : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label={`Rob ${name}, ${cards} cards`}
+            onKeyDown={onPress(() => onVictim?.(playerId))}
+          >
+            <g className="victim-badge-pin">
+              <circle r="15" fill={colour.fill} stroke="#ffffff" strokeWidth="2.5" />
+              <text y="1" textAnchor="middle" dominantBaseline="middle">
+                {cards}
+              </text>
+              <path d="M-5 13 0 20 5 13" fill="#ffffff" />
+            </g>
+          </g>
         );
       })}
 

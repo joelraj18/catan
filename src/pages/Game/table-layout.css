@@ -1108,3 +1108,198 @@
     display: none;
   }
 }
+
+/* ------------------------------------------------------- dice so far */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dice-chart {
+  display: grid;
+  gap: 8px;
+}
+
+.dice-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.dice-chart-head span {
+  color: var(--ink-tertiary);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-chart-bars {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+  height: 74px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dice-chart-bars li {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.dice-chart-bar {
+  position: relative;
+  display: block;
+  min-height: 2px;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 4px 4px 1px 1px;
+  transition: height 0.5s var(--ease-out);
+}
+
+.dice-chart-bar em {
+  position: absolute;
+  top: -13px;
+  left: 0;
+  right: 0;
+  color: var(--ink-tertiary);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dice-chart-hot .dice-chart-bar {
+  background: color-mix(in srgb, #c0392b 45%, transparent);
+}
+
+.dice-chart-now .dice-chart-bar {
+  background: var(--accent);
+}
+
+.dice-chart-expected {
+  position: absolute;
+  right: 1px;
+  left: 1px;
+  height: 0;
+  margin-bottom: 15px;
+  border-top: 1.5px dashed color-mix(in srgb, var(--ink) 45%, transparent);
+  pointer-events: none;
+}
+
+.dice-chart-bars strong {
+  padding-top: 3px;
+  color: var(--ink-secondary);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ------------------------------------------------- stats after the game */
+
+.results-stats {
+  margin: 4px 24px 0;
+  padding: 10px 14px;
+  background: var(--canvas);
+  border-radius: 14px;
+}
+
+.results-stats summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.results-stats[open] {
+  display: grid;
+  gap: 14px;
+}
+
+.game-stats {
+  overflow-x: auto;
+}
+
+.game-stats table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-stats th,
+.game-stats td {
+  padding: 5px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.game-stats tbody th {
+  color: var(--ink-secondary);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.game-stats thead .piece-mark {
+  width: 20px;
+  height: 20px;
+}
+
+.game-stats-top {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* Choosing who to rob, without covering the board */
+.steal-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 24px);
+  padding: 8px 10px 8px 16px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+  animation: toastIn 0.32s var(--ease-out);
+}
+
+.steal-bar .steal-options {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.steal-bar .steal-option {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 6px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.steal-bar .steal-option .piece-mark {
+  grid-row: span 2;
+  width: 22px;
+  height: 22px;
+}
+
+.steal-bar .steal-option span {
+  font-size: 0.72rem;
+}
+
+.property-action-btn--ghost {
+  color: var(--ink-secondary);
+  background: transparent;
+  border-color: var(--hairline-strong);
+}

@@ -83,7 +83,7 @@ export const describeEvent = (event, { me, nameOf, board, buildings }) => {
 
 // Small notes that slide in at the side: what just happened to you, and
 // offers waiting for your answer, with the buttons right on them.
-export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime, notice = null, sound = null }) {
+export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime, notice = null, sound = null, onCounter = null }) {
   const [toasts, setToasts] = useState([]);
   const seen = useRef(null);
   const timers = useRef(new Set());
@@ -221,6 +221,11 @@ export default function GameToasts({ view, myPlayerId, act, players, myHand, loc
               >
                 Accept
               </button>
+              {onCounter && (
+                <button type="button" className="property-action-btn property-action-btn--ghost" onClick={() => onCounter(trade)}>
+                  Counter
+                </button>
+              )}
               <button type="button" className="text-link" onClick={() => act({ type: 'trade-respond', tradeId: trade.id, accept: false })}>
                 Decline
               </button>

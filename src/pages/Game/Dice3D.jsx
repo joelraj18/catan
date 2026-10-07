@@ -87,7 +87,7 @@ export default function Dice3D({ dice, rolling, rollKey }) {
 // come to rest on the faces the host rolled, with the total popping up
 // between them. They then fade, leaving the small pair in the corner.
 const THROW_MS = 950;
-const STAY_MS = 900;
+const STAY_MS = 650;
 
 function ThrownDie({ value, index, fromTop }) {
   const wrap = useRef(null);

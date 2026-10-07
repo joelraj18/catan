@@ -1184,3 +1184,39 @@
 :root[data-motion='off'] .hex-board--browse .building--upgradable {
   animation: none;
 }
+
+/* Who to rob: a pin in the victim's colour with their card count */
+.victim-badge {
+  cursor: pointer;
+  outline: none;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+}
+
+.victim-badge-pin {
+  animation: victimBob 1.2s ease-in-out infinite alternate;
+}
+
+.victim-badge text {
+  fill: #ffffff;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 2px;
+}
+
+.victim-badge:hover circle,
+.victim-badge:focus-visible circle {
+  stroke-width: 4;
+}
+
+@keyframes victimBob {
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+:root[data-motion='off'] .victim-badge-pin {
+  animation: none;
+}

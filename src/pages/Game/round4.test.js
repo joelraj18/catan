@@ -90,3 +90,33 @@ test('what a build is still missing reads naturally', () => {
   expect(listMissing({}, { ore: 3, grain: 2 })).toBe('3 ore and 2 grain');
   expect(listMissing({ ore: 3, grain: 2 }, { ore: 3, grain: 2 })).toBe('');
 });
+
+describe('the game keeps score of the dice and the cards', () => {
+  // eslint-disable-next-line global-require
+  const { emptyStats, tallyEvent, rollOdds } = require('./gameStats');
+
+  test('rolls, harvests, thefts, discards and cards played are counted', () => {
+    let stats = emptyStats();
+    [
+      { type: 'roll', dice: [3, 5] },
+      { type: 'roll', dice: [4, 4] },
+      { type: 'roll', dice: [6, 1] },
+      { type: 'produce', gains: { p1: { ore: 2, wool: 1 }, p2: { grain: 1 } } },
+      { type: 'steal', actor: 'p2', victim: 'p1', resource: null },
+      { type: 'discard', actor: 'p1', count: 4 },
+      { type: 'playDev', actor: 'p2', card: 'knight' },
+      { type: 'monopoly', actor: 'p2', resource: 'ore', total: 3 },
+      { type: 'emote', actor: 'p1', key: 'sheep' },
+    ].forEach((event) => {
+      stats = tallyEvent(stats, event);
+    });
+    expect(stats.rolls[8]).toBe(2);
+    expect(stats.rolls[7]).toBe(1);
+    expect(stats.gained).toEqual({ p1: 3, p2: 4 });
+    expect(stats.stole).toEqual({ p2: 1 });
+    expect(stats.robbed).toEqual({ p1: 1 });
+    expect(stats.discarded).toEqual({ p1: 4 });
+    expect(stats.devPlayed).toEqual({ p2: 1 });
+    expect(rollOdds(8)).toBe('5/36, 13.9%');
+  });
+});
