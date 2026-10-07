@@ -34,7 +34,7 @@ import EmoteBar from './EmoteBar.jsx';
 import GameToasts from './GameToasts.jsx';
 import useFreshEvent from './useFreshEvent';
 import { affordableBuilds, firstMissing, listBuilds, listMissing } from './buildHints';
-import { settingsOf, timerLabel } from './gameSettings';
+import { botSkillLabel, settingsOf, timerLabel } from './gameSettings';
 import HexBoard, { ResourceIcon } from './hexArt.jsx';
 import {
   ArmyIcon,
@@ -1236,6 +1236,12 @@ export default function BoardGame({
                       <span>Victory</span>
                       <strong>{goal} points</strong>
                     </li>
+                    {players.some((player) => player.kind === 'bot' || player.kind === 'ai') && (
+                      <li>
+                        <span>Computer opponents</span>
+                        <strong>{botSkillLabel(rules.botSkill)}</strong>
+                      </li>
+                    )}
                     {rules.board === 'random' && (
                       <li>
                         <span>Number tokens</span>
