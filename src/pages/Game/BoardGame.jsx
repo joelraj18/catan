@@ -2218,7 +2218,17 @@ export default function BoardGame({
           )}
 
           {session && <VoicePanel session={session} compact />}
-          {session && <ChatPanel session={session} compact />}
+          {session && (
+            <ChatPanel
+              session={session}
+              compact
+              myPlayerId={myPlayerId}
+              canStartTrade={Boolean(isMyTurn && phase === 'actions' && !over)}
+              tradeCandidates={players
+                .filter((player) => player.id !== myPlayerId && player.kind === 'human')
+                .map(({ id, name, pieceKey }) => ({ id, name, pieceKey }))}
+            />
+          )}
 
         </aside>
       </section>
