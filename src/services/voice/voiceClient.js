@@ -47,7 +47,7 @@ export default class VoiceClient {
     this.session = session;
     this.listeners = new Set();
     this.peers = new Map(); // clientId -> { pc, mode, route, audio, volume, level, pending: [] }
-    this.roster = (session.isHost ? session.voiceRoster() : session.voiceRosterCache) || { channels: [], people: {} };
+    this.roster = (session.isHost ? session.voiceRoster(session.myClientId) : session.voiceRosterCache) || { channels: [], people: {} };
     this.channel = null;
     this.stream = null;
     this.muted = false;
@@ -174,6 +174,8 @@ export default class VoiceClient {
     this.roster = roster || { channels: [], people: {} };
     const mine = this.roster.channels.find((channel) => channel.members.includes(this.me));
     this.channel = mine ? mine.id : null;
+    // An invite to a channel that has closed (a trade talk ending) goes too.
+    this.invites = this.invites.filter((invite) => this.roster.channels.some((channel) => channel.id === invite.channel && !channel.hidden));
     if (!mine) this.closeAll();
     const wanted = new Set(mine ? mine.members.filter((id) => id !== this.me) : []);
     [...this.peers.keys()].forEach((id) => !wanted.has(id) && this.closePeer(id));

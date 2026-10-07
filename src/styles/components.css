@@ -219,6 +219,139 @@
   stroke-linejoin: round;
 }
 
+/* Trade talk: a private tab for the traders, gone when the talk ends */
+
+.chat-modes {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+}
+
+.chat-modes button {
+  padding: 3px 11px;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.3s var(--ease), color 0.3s var(--ease);
+}
+
+.chat-modes button.is-on {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.chat-trade-banner,
+.chat-trade-note {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.chat-trade-banner {
+  padding: 6px 10px;
+  color: var(--ink-secondary);
+  background: var(--accent-soft);
+  border-radius: 10px;
+}
+
+.chat-trade-note {
+  color: var(--ink-quaternary);
+  text-align: center;
+}
+
+.chat-trade-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.chat-trade-bar .text-link:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.chat-trade-end {
+  color: var(--ink-tertiary);
+}
+
+.chat-trade-pick {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border-radius: 14px;
+}
+
+.chat-trade-pick fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.chat-trade-pick legend {
+  margin-bottom: 4px;
+  color: var(--ink-tertiary);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.chat-trade-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.chat-trade-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+
+.chat-trade-go {
+  padding: 5px 13px;
+  color: #ffffff;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chat-trade-go:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.chat-panel--trade .chat-line--trade {
+  background: var(--accent-soft);
+}
+
+.chat-panel--compact .chat-trade-pick {
+  padding: 8px 10px;
+}
+
+[data-theme='dark'] .chat-trade-banner {
+  color: var(--ink-secondary);
+  background: rgba(95, 211, 148, 0.1);
+}
+
 /* API key information sheet */
 
 .key-info-overlay {
