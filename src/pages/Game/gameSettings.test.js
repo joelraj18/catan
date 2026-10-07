@@ -23,6 +23,8 @@ describe('table settings', () => {
       DEFAULT_SETTINGS,
     );
     expect(cleanSettings({ turnSeconds: '30' }).turnSeconds).toBe(30);
+    expect(cleanSettings({ botSkill: 'casual' }).botSkill).toBe('casual');
+    expect(cleanSettings({ botSkill: 'genius' }).botSkill).toBe('strong');
   });
 
   test('a game saved before settings existed plays the classic rules with no timer', () => {

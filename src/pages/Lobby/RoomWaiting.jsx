@@ -16,10 +16,12 @@ import {
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../services/roomSession';
 import { PIECES, PieceMark } from '../Game/pieces.jsx';
 import {
+  BOT_SKILL_CHOICES,
   DEFAULT_SETTINGS,
   HAND_LIMIT_CHOICES,
   TIMER_CHOICES,
   VICTORY_CHOICES,
+  botSkillLabel,
   timerLabel,
 } from '../Game/gameSettings';
 import '../Game/board-game.css';
@@ -514,6 +516,7 @@ function GameSettings({ settings, isHost, onChange }) {
           <li>Timer {timerLabel(settings.turnSeconds)}</li>
           <li>Discard above {settings.handLimit}</li>
           <li>{settings.victoryPoints} points to win</li>
+          <li>{botSkillLabel(settings.botSkill)} computers</li>
           {random && <li>{settings.redsMayTouch ? '6 & 8 may touch' : '6 & 8 apart'}</li>}
           {random && <li>{settings.extremesMayTouch ? '2 & 12 may touch' : '2 & 12 apart'}</li>}
         </ul>
@@ -565,6 +568,7 @@ function GameSettings({ settings, isHost, onChange }) {
       {segment('Turn timer', 'turnSeconds', TIMER_CHOICES, timerLabel, 'to roll, then per move')}
       {segment('Discard on a 7 above', 'handLimit', HAND_LIMIT_CHOICES, (value) => `${value} cards`)}
       {segment('Points to win', 'victoryPoints', VICTORY_CHOICES)}
+      {segment('Computer opponents', 'botSkill', BOT_SKILL_CHOICES, botSkillLabel, 'casual keeps it gentle')}
       <div className="settings-toggles">
         {toggle('6 and 8 may touch', 'redsMayTouch', 'Red numbers side by side make rich, swingy spots')}
         {toggle('2 and 12 may touch', 'extremesMayTouch', 'Off keeps the rarest numbers apart')}
