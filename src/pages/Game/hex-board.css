@@ -976,3 +976,211 @@
 :root[data-motion='off'] .number-token-pop {
   opacity: 1;
 }
+
+/* ------------------------------------------------------------------
+   The island, evenly spaced: every tile sits on the same warm ground,
+   one gap from its neighbours and one gap from the sea. The gaps are a
+   mid sand, never white, so roads and the spots for them stand out. */
+
+.hex-board {
+  --ground: #d9c48c;
+  --ground-edge: #c2a96c;
+}
+
+.hex-board-ground polygon {
+  fill: var(--ground);
+  stroke: var(--ground);
+  stroke-linejoin: round;
+}
+
+.hex-board-surf {
+  filter: drop-shadow(0 5px 9px rgba(16, 48, 72, 0.3));
+}
+
+.hex-board-surf polygon {
+  fill: rgba(255, 255, 255, 0.4);
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-linejoin: round;
+}
+
+.hex-tile-face,
+[data-theme='dark'] .hex-tile-face {
+  stroke: none;
+}
+
+.hex-tile-bevel {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.hex-tile--producing .hex-tile-face,
+[data-theme='dark'] .hex-tile--producing .hex-tile-face {
+  stroke: #fff4c4;
+  stroke-width: 4;
+}
+
+[data-theme='dark'] .hex-board {
+  --ground: #8f7d55;
+  --ground-edge: #6f603f;
+}
+
+[data-theme='dark'] .hex-board-surf polygon {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+/* Harbours: a round token and two wooden piers to the coast */
+
+.harbor-token,
+.harbor circle.harbor-token,
+[data-theme='dark'] .harbor circle.harbor-token {
+  fill: #fbf4e1;
+  stroke: #9b7a46;
+  stroke-width: 2;
+  filter: drop-shadow(0 2px 3px rgba(10, 30, 50, 0.35));
+}
+
+.harbor-pier {
+  fill: none;
+  stroke: none;
+  stroke-dasharray: none;
+}
+
+.harbor-pier line {
+  stroke-linecap: butt;
+}
+
+.harbor-pier-base {
+  stroke: #6e4c26;
+  stroke-width: 7;
+}
+
+/* Planks across the pier: the deck broken by thin dark seams */
+.harbor-pier-deck {
+  stroke: #c3955a;
+  stroke-width: 5;
+  stroke-dasharray: 4 1.3;
+}
+
+/* Spots to build on: small and see-through, a darker rim so they read on
+   any tile or gap. Hovering shows your own colour there. */
+
+.spot--vertex,
+.hex-board--browse .spot--vertex,
+[data-theme='dark'] .spot--vertex {
+  r: 7;
+  fill: rgba(255, 255, 255, 0.5);
+  stroke: rgba(28, 30, 34, 0.45);
+  stroke-width: 1.6;
+  animation: spotBreathe 1.8s ease-in-out infinite alternate;
+}
+
+.hex-board--browse .spot--vertex {
+  r: 6;
+}
+
+.spot--vertex:hover,
+.spot--vertex:focus-visible,
+.hex-board--browse .spot--vertex:hover,
+.hex-board--browse .spot--vertex:focus-visible {
+  fill: var(--mine, var(--accent));
+  fill-opacity: 0.8;
+  stroke: var(--mine-edge, #ffffff);
+  stroke-width: 2;
+  opacity: 1;
+  animation: none;
+}
+
+.spot-edge-under {
+  stroke: rgba(28, 30, 34, 0.32);
+  stroke-width: 7.5;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.spot--edge,
+.hex-board--browse .spot--edge,
+[data-theme='dark'] .spot--edge {
+  stroke: rgba(255, 255, 255, 0.62);
+  stroke-dasharray: none;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  animation: spotBreathe 1.8s ease-in-out infinite alternate;
+}
+
+.spot--edge:hover,
+.spot--edge:focus-visible,
+.hex-board--browse .spot--edge:hover,
+.hex-board--browse .spot--edge:focus-visible {
+  stroke: var(--mine, var(--accent));
+  stroke-opacity: 0.9;
+  stroke-width: 7;
+  opacity: 1;
+  animation: none;
+}
+
+@keyframes spotBreathe {
+  from {
+    opacity: 0.75;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* A settlement that can become a city: a soft see-through ring */
+.building-upgrade-ring,
+.building--upgradable path.building-upgrade-ring,
+.hex-board--browse .building--upgradable path.building-upgrade-ring {
+  fill: rgba(255, 255, 255, 0.18);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-dasharray: 2.5 2;
+  stroke-width: 1.4;
+  transform: translate(-3px, -3px) scale(1.25);
+  pointer-events: none;
+}
+
+.building--upgradable path:last-child {
+  stroke-width: 1.4;
+}
+
+.building--upgradable:hover .piece3d,
+.building--upgradable:focus-visible .piece3d {
+  filter: brightness(1.12);
+}
+
+.hex-board--browse .building--upgradable {
+  animation: spotBreathe 1.8s ease-in-out infinite alternate;
+}
+
+.spot-halo {
+  fill: rgba(255, 255, 255, 0.28);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.6;
+}
+
+/* The pieces, a little in the round */
+
+.piece3d-shadow,
+.road-shadow {
+  fill: rgba(0, 0, 0, 0.26);
+  stroke: rgba(0, 0, 0, 0.22) !important;
+}
+
+.piece3d-shadow {
+  stroke: none !important;
+}
+
+.road-light {
+  opacity: 0.7;
+}
+
+:root[data-motion='off'] .spot--vertex,
+:root[data-motion='off'] .spot--edge,
+:root[data-motion='off'] .hex-board--browse .building--upgradable {
+  animation: none;
+}

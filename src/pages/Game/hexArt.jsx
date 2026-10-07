@@ -1,6 +1,6 @@
 import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PIPS, RESOURCE_LABELS, TERRAINS, geometryOf } from './catanBoard';
-import { CITY_PATH, PIECES, SETTLEMENT_PATH } from './pieces.jsx';
+import { CITY_PATH, City3D, PIECES, SETTLEMENT_PATH, Settlement3D } from './pieces.jsx';
 import { scaled } from '../../services/motion';
 import './hex-board.css';
 
@@ -37,27 +37,12 @@ const hexPoints = (geo, hex, inset = 0) =>
     })
     .join(' ');
 
-// Island outline for the sand rim: every coastal path, pushed slightly out.
-const coastCache = new Map();
-const coastPointsOf = (geo) => {
-  if (!coastCache.has(geo)) {
-    const points = [];
-    geo.coast.forEach(({ edge }) => {
-      geo.edges[edge].vertices.forEach((vertexId) => {
-        if (!points.includes(vertexId)) points.push(vertexId);
-      });
-    });
-    coastCache.set(
-      geo,
-      points
-        .map((id) => geo.vertices[id])
-        .sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x))
-        .map((v) => `${px(v.x * 1.07)},${px(v.y * 1.07)}`)
-        .join(' '),
-    );
-  }
-  return coastCache.get(geo);
-};
+// The gap between two tiles, in hex radii. Every tile is drawn this much
+// smaller, and the island's ground shows through: the same width between
+// two tiles as between a tile and the sea.
+export const GAP = 0.07;
+const HARBOR_R = 16;
+const TILE_INSET = GAP / Math.sqrt(3); // from the centre toward each corner
 
 // Terrain motifs, drawn around (0,0) inside a hex of radius UNIT.
 function TerrainMotif({ terrain }) {
@@ -436,6 +421,7 @@ function HexBoard({
     <svg
       className={`hex-board ${compact ? 'hex-board--compact' : ''} ${highlight.browse ? 'hex-board--browse' : ''} ${selected ? 'hex-board--picking' : ''} ${className}`.trim()}
       viewBox={`${-width} ${-height} ${width * 2} ${height * 2}`}
+      style={{ '--mine': mine.fill, '--mine-edge': mine.edge }}
       role="img"
       aria-label={label}
     >
@@ -462,16 +448,44 @@ function HexBoard({
           .join(' ')}
         fill={`url(#sea-${uid})`}
       />
-      <polygon className="hex-board-sand" points={coastPointsOf(geo)} />
+      {/* The island's ground: every tile at full size, edged out by half a
+          gap, so the coast sits one gap from the tiles all the way round.
+          A lighter, wider pass underneath is the surf. */}
+      <g className="hex-board-surf" style={{ strokeWidth: px(GAP) + 9 }}>
+        {board.hexes.map((tile) => (
+          <polygon key={tile.id} points={hexPoints(geo, geo.hexes[tile.id])} />
+        ))}
+      </g>
+      <g className="hex-board-ground" style={{ strokeWidth: px(GAP) }}>
+        {board.hexes.map((tile) => (
+          <polygon key={tile.id} points={hexPoints(geo, geo.hexes[tile.id])} />
+        ))}
+      </g>
 
-      {/* Harbours */}
+      {/* Harbours: a token out in the water, joined to the two corners of
+          its stretch of coast by wooden piers */}
       {board.harbors.map((harbor) => {
         const [a, b] = harbor.vertices.map((id) => geo.vertices[id]);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const piers = [a, b].map((v) => {
+          // From just inside the corner, on the coast, to the token's rim.
+          const start = { x: v.x + (mid.x - v.x) * 0.22, y: v.y + (mid.y - v.y) * 0.22 };
+          const dx = start.x - harbor.x;
+          const dy = start.y - harbor.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const rim = HARBOR_R / UNIT - 0.02;
+          return { x1: px(start.x), y1: px(start.y), x2: px(harbor.x + (dx / length) * rim), y2: px(harbor.y + (dy / length) * rim) };
+        });
         return (
           <g key={harbor.edge} className={`harbor harbor--${harbor.type}`}>
             <title>{harbor.type === 'any' ? 'Harbour: any 3 identical resources for 1' : `Harbour: 2 ${RESOURCE_LABELS[harbor.type].toLowerCase()} for 1`}</title>
-            <path className="harbor-pier" d={`M${px(a.x)} ${px(a.y)}L${px(harbor.x)} ${px(harbor.y)}L${px(b.x)} ${px(b.y)}`} />
-            <circle cx={px(harbor.x)} cy={px(harbor.y)} r="16" />
+            {piers.map((pier, index) => (
+              <g key={index} className="harbor-pier">
+                <line {...pier} className="harbor-pier-base" />
+                <line {...pier} className="harbor-pier-deck" />
+              </g>
+            ))}
+            <circle className="harbor-token" cx={px(harbor.x)} cy={px(harbor.y)} r={HARBOR_R} />
             {harbor.type === 'any' ? (
               <text x={px(harbor.x)} y={px(harbor.y) + 1} textAnchor="middle" dominantBaseline="middle" className="harbor-rate harbor-rate--any">
                 3:1
@@ -507,8 +521,9 @@ function HexBoard({
             aria-label={target ? `Move the robber to ${TERRAINS[tile.terrain].label} ${tile.number || ''}` : undefined}
             onKeyDown={target && onHex ? onPress(() => onHex(tile.id)) : undefined}
           >
-            <polygon points={hexPoints(geo, hex, 0.03)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
-            <polygon points={hexPoints(geo, hex, 0.03)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(geo, hex, TILE_INSET)} className="hex-tile-face" style={{ fill: `var(--terrain-${tile.terrain})` }} />
+            <polygon points={hexPoints(geo, hex, TILE_INSET)} fill={`url(#shade-${uid})`} className="hex-tile-shade" />
+            <polygon points={hexPoints(geo, hex, TILE_INSET + 0.035)} className="hex-tile-bevel" />
             <g transform={`translate(${px(hex.x)} ${px(hex.y) + (tile.number ? -25 : 0)})`}>
               <TileArt terrain={tile.terrain} />
             </g>
@@ -534,8 +549,8 @@ function HexBoard({
           if (!hex) return null;
           return (
             <g key={`harvest-${harvest.key}-${hexId}`} className="harvest" aria-hidden="true">
-              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-glow" />
-              <polygon points={hexPoints(geo, hex, 0.03)} className="harvest-ring" />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} className="harvest-glow" />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} className="harvest-ring" />
               {[-22, -6, 10, 24].map((dx, i) => (
                 <circle key={dx} className="harvest-mote" cx={px(hex.x) + dx} cy={px(hex.y) + 10 - (i % 2) * 14} r={2.2 + (i % 2)} style={{ animationDelay: `${0.15 + i * 0.12}s` }} />
               ))}
@@ -548,7 +563,7 @@ function HexBoard({
           if (!hex) return null;
           return (
             <g key={`blocked-${harvest.key}-${hexId}`} className="harvest-blocked" aria-hidden="true">
-              <polygon points={hexPoints(geo, hex, 0.03)} />
+              <polygon points={hexPoints(geo, hex, TILE_INSET)} />
               <path d={`M${px(hex.x) - 12} ${px(hex.y) + 1}l24 24m0 -24l-24 24`} transform="translate(0 0)" />
             </g>
           );
@@ -565,8 +580,12 @@ function HexBoard({
         const y2 = b.y + (a.y - b.y) * shrink;
         return (
           <g key={`road-${edgeId}`} className={`road ${isNew(`r${edgeId}`) ? 'road--new' : ''}`}>
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.edge} strokeWidth="11" strokeLinecap="round" pathLength="1" />
-            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.5" strokeLinecap="round" pathLength="1" />
+            {/* A wooden beam: its shadow and dark underside, the painted top, a
+                line of light along the upper edge */}
+            <line x1={px(x1)} y1={px(y1) + 2.5} x2={px(x2)} y2={px(y2) + 2.5} className="road-shadow" strokeWidth="10" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1) + 1.2} x2={px(x2)} y2={px(y2) + 1.2} stroke={colour.edge} strokeWidth="10" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1)} x2={px(x2)} y2={px(y2)} stroke={colour.fill} strokeWidth="7.4" strokeLinecap="round" pathLength="1" />
+            <line x1={px(x1)} y1={px(y1) - 1.4} x2={px(x2)} y2={px(y2) - 1.4} stroke={colour.light} strokeWidth="2" strokeLinecap="round" pathLength="1" className="road-light" />
           </g>
         );
       })}
@@ -579,16 +598,24 @@ function HexBoard({
           <React.Fragment key={`edge-${edgeId}`}>
             {picked && (
               <g className="ghost ghost--road" aria-hidden="true">
-                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.edge} strokeWidth="11" strokeLinecap="round" />
+                <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18) + 1.2} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18) + 1.2} stroke={mine.edge} strokeWidth="10" strokeLinecap="round" />
                 <line x1={px(a.x + (b.x - a.x) * 0.18)} y1={px(a.y + (b.y - a.y) * 0.18)} x2={px(b.x + (a.x - b.x) * 0.18)} y2={px(b.y + (a.y - b.y) * 0.18)} stroke={mine.fill} strokeWidth="7.5" strokeLinecap="round" />
               </g>
             )}
           <line
+            className="spot-edge-under"
+            x1={px(a.x + (b.x - a.x) * 0.26)}
+            y1={px(a.y + (b.y - a.y) * 0.26)}
+            x2={px(b.x + (a.x - b.x) * 0.26)}
+            y2={px(b.y + (a.y - b.y) * 0.26)}
+            aria-hidden="true"
+          />
+          <line
             className={`spot spot--edge ${picked ? 'spot--picked' : ''}`}
-            x1={px(a.x + (b.x - a.x) * 0.2)}
-            y1={px(a.y + (b.y - a.y) * 0.2)}
-            x2={px(b.x + (a.x - b.x) * 0.2)}
-            y2={px(b.y + (a.y - b.y) * 0.2)}
+            x1={px(a.x + (b.x - a.x) * 0.26)}
+            y1={px(a.y + (b.y - a.y) * 0.26)}
+            x2={px(b.x + (a.x - b.x) * 0.26)}
+            y2={px(b.y + (a.y - b.y) * 0.26)}
             onClick={onEdge ? () => onEdge(edgeId) : undefined}
             role="button"
             tabIndex={0}
@@ -613,7 +640,7 @@ function HexBoard({
           <g
             key={`b-${vertexId}`}
             className={`building building--${building.type} ${upgradable ? 'building--upgradable' : ''} ${picked ? 'building--picked' : ''} ${arriving ? `building--new-${building.type}` : ''}`}
-            transform={`translate(${px(v.x) - (city ? 14 : 12)} ${px(v.y) - (city ? 15 : 13)}) scale(${city ? 1.15 : 1})`}
+            transform={`translate(${px(v.x) - (city ? 17 : 13.4)} ${px(v.y) - (city ? 17.8 : 14.6)}) scale(${city ? 1.3 : 1.12})`}
             onClick={upgradable && onVertex ? () => onVertex(Number(vertexId)) : undefined}
             role={upgradable ? 'button' : undefined}
             tabIndex={upgradable ? 0 : undefined}
@@ -622,8 +649,8 @@ function HexBoard({
           >
             {arriving && <ellipse className="building-dust" cx="12" cy="22" rx="10" ry="3" />}
             <g className="building-body">
-              <path d={city ? CITY_PATH : SETTLEMENT_PATH} className="building-shadow" transform="translate(1 2)" />
-              <path d={picked ? CITY_PATH : city ? CITY_PATH : SETTLEMENT_PATH} fill={colour.fill} stroke={colour.edge} strokeWidth="1.6" strokeLinejoin="round" />
+              {city || picked ? <City3D colour={colour} /> : <Settlement3D colour={colour} />}
+              {upgradable && <path d={SETTLEMENT_PATH} className="building-upgrade-ring" />}
               {arriving && city && <path d={CITY_PATH} className="building-shine" />}
             </g>
           </g>
@@ -648,7 +675,7 @@ function HexBoard({
               onKeyDown={onPress(() => onVertex?.(vertexId))}
             >
               <circle cx="12" cy="13" r="19" className="spot-halo" />
-              <path d={SETTLEMENT_PATH} fill={mine.fill} stroke={mine.edge} strokeWidth="1.6" strokeLinejoin="round" />
+              <Settlement3D colour={mine} />
             </g>
           );
         }
@@ -658,7 +685,7 @@ function HexBoard({
             className="spot spot--vertex"
             cx={px(v.x)}
             cy={px(v.y)}
-            r="9"
+            r="7"
             onClick={onVertex ? () => onVertex(vertexId) : undefined}
             role="button"
             tabIndex={0}

@@ -264,6 +264,7 @@
 /* -------------------------------------------------------------- the board */
 
 .table-board.game-board-area {
+  order: 0;
   width: 100%;
   max-width: none;
   margin: 0;
@@ -964,4 +965,21 @@
   box-shadow:
     inset 0 0 0 1.5px #e2b84f,
     0 6px 14px rgba(20, 24, 30, 0.35);
+}
+
+/* Open water from edge to edge, as on colonist: the island floats in the
+   middle of the table instead of on a framed hexagon of sea */
+.table-board.game-board-area,
+[data-theme='dark'] .table-board.game-board-area {
+  background:
+    radial-gradient(70% 65% at 50% 48%, color-mix(in srgb, var(--sea) 92%, #ffffff) 0%, var(--sea) 55%, var(--sea-deep) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+    inset 0 0 60px rgba(10, 40, 70, 0.25),
+    var(--shadow-card);
+}
+
+.table-board .hex-board-sea {
+  fill: transparent;
+  stroke: none;
 }
