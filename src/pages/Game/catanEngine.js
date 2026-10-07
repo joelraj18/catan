@@ -1521,7 +1521,7 @@ export default class GameEngine {
       `${this.nameOf(playerId)} offers ${listResources(cleanGive)} for ${listResources(cleanGet)}${target ? ` to ${this.nameOf(target)}` : ''}`,
       playerId,
     );
-    this.sound('trade');
+    // No sound for the table: the players asked hear their own ping.
     this.afterAction(playerId);
     return true;
   }

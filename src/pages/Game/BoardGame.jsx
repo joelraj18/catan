@@ -28,7 +28,7 @@ import {
   visibleHandSize,
 } from './catanRules';
 import CardFlights from './CardFlights.jsx';
-import Dice3D from './Dice3D.jsx';
+import Dice3D, { DiceThrow } from './Dice3D.jsx';
 import { DeckCard, DevRow, ResourceRow } from './GameCards.jsx';
 import EmoteBar from './EmoteBar.jsx';
 import GameToasts from './GameToasts.jsx';
@@ -486,6 +486,10 @@ export default function BoardGame({
     },
     [effectsOn, audioSettings.effectsVolume],
   );
+  const toastSound = useMemo(
+    () => (effectsOn ? (key) => playSfx(key, audioSettings.effectsVolume) : null),
+    [effectsOn, audioSettings.effectsVolume],
+  );
   const tickSound = useMemo(
     () => (effectsOn ? () => playSfx('tick', audioSettings.effectsVolume) : null),
     [effectsOn, audioSettings.effectsVolume],
@@ -527,8 +531,17 @@ export default function BoardGame({
     (first || dialog).focus?.({ preventScroll: true });
   });
 
+  // Keyboard shortcuts, read from the latest render (set further down).
+  const hotkeys = useRef(null);
+
   useEffect(() => {
     const onKey = (event) => {
+      if (event.key !== 'Escape') {
+        const typing = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
+        const onButton = event.key === ' ' && event.target.closest?.('button, [role="button"]');
+        if (!typing && !onButton && !event.metaKey && !event.ctrlKey && !event.altKey) hotkeys.current?.(event);
+        return;
+      }
       if (event.key === 'Escape') {
         setSheet(null);
         pendingRef.current = null;
@@ -1388,7 +1401,9 @@ export default function BoardGame({
                   <BuildArt kind={key} size={24} />
                   <span className="action-btn-count">{piecesRemaining}</span>
                   <span className="action-tip" role="tooltip">
-                    <strong>{label}</strong>
+                    <strong>
+                      {label} <kbd>{label[0]}</kbd>
+                    </strong>
                     <CostChips cost={cost} size={13} />
                     <em>{reason}</em>
                   </span>
@@ -1407,7 +1422,9 @@ export default function BoardGame({
                 <path d="M4 8h14l-4-4M20 16H6l4 4" />
               </svg>
               <span className="action-tip" role="tooltip">
-                <strong>Trade</strong>
+                <strong>
+                  Trade <kbd>T</kbd>
+                </strong>
                 <em>{canTrade ? (isMyTurn ? 'With players or the bank' : `Offer ${activePlayer.name} a trade`) : 'After the roll'}</em>
               </span>
             </button>
@@ -1423,6 +1440,7 @@ export default function BoardGame({
               }}
             >
               End turn
+              <kbd>E</kbd>
             </button>
           ) : (
             <span className={`action-status ${canRoll || setupTurn || iOweDiscard ? 'action-status--you' : ''}`} aria-live="polite">
@@ -1432,6 +1450,26 @@ export default function BoardGame({
         </div>
       </section>
     );
+  };
+
+  // Space rolls; R, S and C show where a road, settlement or city can go;
+  // D buys a development card, T opens trading, E ends the turn.
+  hotkeys.current = (event) => {
+    const key = event.key.toLowerCase();
+    if (key === ' ' && canRoll) {
+      event.preventDefault();
+      act({ type: 'roll' });
+    } else if (canBuildNow && ['r', 's', 'c'].includes(key)) {
+      const kind = { r: 'road', s: 'settlement', c: 'city' }[key];
+      setFocus((current) => (current === kind ? null : kind));
+    } else if (key === 'd' && canBuildNow && hasResources(myHand, COSTS.dev) && deckLeft > 0) {
+      choose('dev', 'deck', () => act({ type: 'buy-dev' }));
+    } else if (key === 't' && canTrade) {
+      openTrade();
+    } else if (key === 'e' && canBuildNow) {
+      pick(null);
+      act({ type: 'end-turn' });
+    }
   };
 
   // The dice sit in the board's corner. On your turn you roll by tapping them.
@@ -1562,6 +1600,7 @@ export default function BoardGame({
           myHand={myHand}
           localTime={localTime}
           notice={buildNotice}
+          sound={toastSound}
         />
       )}
 
@@ -1690,6 +1729,7 @@ export default function BoardGame({
           />
 
           {renderDice()}
+          <DiceThrow dice={view.dice} rollKey={view.dice ? `${view.turnCount}:${view.dice.join('-')}` : null} fromTop={!isMyTurn} />
 
           {session && me && (
             <EmoteBar

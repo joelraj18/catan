@@ -83,7 +83,7 @@ export const describeEvent = (event, { me, nameOf, board, buildings }) => {
 
 // Small notes that slide in at the side: what just happened to you, and
 // offers waiting for your answer, with the buttons right on them.
-export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime, notice = null }) {
+export default function GameToasts({ view, myPlayerId, act, players, myHand, localTime, notice = null, sound = null }) {
   const [toasts, setToasts] = useState([]);
   const seen = useRef(null);
   const timers = useRef(new Set());
@@ -151,6 +151,19 @@ export default function GameToasts({ view, myPlayerId, act, players, myHand, loc
   // This player's own open offers that someone took up.
   const taken = trades.filter((trade) => trade.from === myPlayerId && !trade.to && (trade.accepted || []).length);
 
+  // A ping for an offer waiting on you, and a brighter one when someone
+  // takes up yours. Only the players concerned hear them.
+  const askKey = asks.map((trade) => trade.id).join(',');
+  const takenKey = taken.map((trade) => `${trade.id}:${trade.accepted.length}`).join(',');
+  const heard = useRef({ asks: null, taken: null });
+  useEffect(() => {
+    const before = heard.current;
+    const fresh = (key, last) => last !== null && key.split(',').some((id) => id && !last.split(',').includes(id));
+    if (fresh(askKey, before.asks)) sound?.('tradeAsk');
+    else if (fresh(takenKey, before.taken)) sound?.('tradeAccepted');
+    heard.current = { asks: askKey, taken: takenKey };
+  }, [askKey, takenKey, sound]);
+
   if (!toasts.length && !asks.length && !taken.length) return null;
 
   return (
@@ -188,7 +201,7 @@ export default function GameToasts({ view, myPlayerId, act, players, myHand, loc
       {asks.slice(0, 2).map((trade) => {
         const able = hasResources(myHand, trade.get);
         return (
-          <div key={`ask-${trade.id}`} className="game-toast game-toast--offer">
+          <div key={`ask-${trade.id}`} className="game-toast game-toast--offer game-toast--ask">
             <strong className="game-toast-title">
               {nameOf(trade.from)} offers {trade.to ? 'you' : 'the table'} a trade
             </strong>

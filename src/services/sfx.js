@@ -221,6 +221,17 @@ const EFFECTS = {
     bell(ctx, out, { freq: NOTE.G5, gain: 0.07, length: 0.4 });
     bell(ctx, out, { freq: NOTE.C6, start: 0.1, gain: 0.07, length: 0.5 });
   },
+  // Someone offers you a trade: a bright "ding-ding" that asks for an answer.
+  tradeAsk: (ctx, out) => {
+    tone(ctx, out, { freq: NOTE.E5, length: 0.09, type: 'triangle', gain: 0.12 });
+    tone(ctx, out, { freq: NOTE.A5, start: 0.12, length: 0.12, type: 'triangle', gain: 0.12 });
+    bell(ctx, out, { freq: NOTE.A5, start: 0.12, gain: 0.06, length: 0.9 });
+  },
+  // Someone said yes to your offer: a rising pair, warmer than the ask.
+  tradeAccepted: (ctx, out) => {
+    bell(ctx, out, { freq: NOTE.C5, gain: 0.07, length: 0.5 });
+    bell(ctx, out, { freq: NOTE.G5, start: 0.09, gain: 0.08, length: 0.8 });
+  },
   // A bank trade: a counter bell.
   maritime: (ctx, out) => {
     knock(ctx, out, { freq: 280, gain: 0.18 });
