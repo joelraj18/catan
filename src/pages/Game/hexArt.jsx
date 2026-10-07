@@ -1,4 +1,4 @@
-import React, { memo, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PIPS, RESOURCE_LABELS, TERRAINS, geometryOf } from './catanBoard';
 import { CITY_PATH, City3D, PIECES, SETTLEMENT_PATH, Settlement3D } from './pieces.jsx';
 import { scaled } from '../../services/motion';
@@ -381,6 +381,105 @@ function useArrivals(roads, buildings) {
   }, [roads, buildings]);
 }
 
+// The open spot nearest a point on the board (in hex radii), for the piece
+// that follows the cursor: corners for a settlement or city, paths for a
+// road. Nothing beyond `reach` counts, so a piece far from any spot floats.
+export const nearestSpot = (geo, point, { vertices = [], edges = [] }, reach = 0.55) => {
+  let best = null;
+  const consider = (kind, id, distance, at) => {
+    if (distance <= reach && (!best || distance < best.distance)) best = { kind, id, distance, ...at };
+  };
+  vertices.forEach((id) => {
+    const v = geo.vertices[id];
+    if (v) consider('vertex', id, Math.hypot(point.x - v.x, point.y - v.y), { x: v.x, y: v.y, angle: 0 });
+  });
+  edges.forEach((id) => {
+    const [a, b] = geo.edges[id].vertices.map((vertexId) => geo.vertices[vertexId]);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+    const x = a.x + dx * t;
+    const y = a.y + dy * t;
+    consider('edge', id, Math.hypot(point.x - x, point.y - y), {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+      angle: (Math.atan2(dy, dx) * 180) / Math.PI,
+    });
+  });
+  return best;
+};
+
+// The piece in your hand, drawn where the cursor is: snapped onto the spot
+// it would go, or floating with a red tint when there is nowhere near.
+function PieceCursor({ kind, at, colour }) {
+  if (!at) return null;
+  const lifted = at.snap ? 0 : -6;
+  return (
+    <g
+      className={`piece-cursor ${at.snap ? 'piece-cursor--snapped' : 'piece-cursor--loose'}`}
+      transform={`translate(${at.x} ${at.y + lifted})`}
+      aria-hidden="true"
+    >
+      <ellipse className="piece-cursor-shadow" cx="0" cy={6 - lifted} rx={kind === 'road' ? 26 : 13} ry="4" />
+      {kind === 'road' ? (
+        <g transform={`rotate(${at.angle || 0})`} strokeLinecap="round">
+          <line x1="-24" y1="1.2" x2="24" y2="1.2" stroke={colour.edge} strokeWidth="10" />
+          <line x1="-24" y1="0" x2="24" y2="0" stroke={colour.fill} strokeWidth="7.4" />
+          <line x1="-23" y1="-1.4" x2="23" y2="-1.4" stroke={colour.light} strokeWidth="2" />
+        </g>
+      ) : (
+        <g transform={kind === 'city' ? 'translate(-17 -17.8) scale(1.3)' : 'translate(-13.4 -14.6) scale(1.12)'}>
+          {kind === 'city' ? <City3D colour={colour} /> : <Settlement3D colour={colour} />}
+        </g>
+      )}
+    </g>
+  );
+}
+
+function PieceCursorLayer({ svgRef, snapRef, geo, kind, spots, colour, dragging, onDrop }) {
+  const [cursor, setCursor] = useState(null);
+  const live = useRef({ spots, dragging, onDrop });
+  live.current = { spots, dragging, onDrop };
+
+  useEffect(() => {
+    const locate = (event) => {
+      const svg = svgRef.current;
+      const matrix = svg?.getScreenCTM?.();
+      if (!svg || !matrix) return null;
+      const rect = svg.getBoundingClientRect();
+      // A finger hides what is under it, so a dragged piece sits above it.
+      const lift = event.pointerType === 'touch' && live.current.dragging ? 40 : 0;
+      const clientY = event.clientY - lift;
+      if (event.clientX < rect.left || event.clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = clientY;
+      const at = point.matrixTransform(matrix.inverse());
+      const snap = nearestSpot(geo, { x: at.x / UNIT, y: at.y / UNIT }, live.current.spots || {});
+      return snap ? { x: px(snap.x), y: px(snap.y), angle: snap.angle, snap } : { x: at.x, y: at.y, angle: 0, snap: null };
+    };
+    const onMove = (event) => {
+      const at = locate(event);
+      snapRef.current = at?.snap || null;
+      setCursor(at);
+    };
+    const onUp = (event) => {
+      if (!live.current.dragging) return;
+      const at = locate(event);
+      live.current.onDrop(at?.snap || null);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    return () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      snapRef.current = null;
+    };
+  }, [svgRef, snapRef, geo]);
+
+  return <PieceCursor kind={kind} at={cursor} colour={colour} />;
+}
+
 /**
  * @param {{
  *   board: object, buildings?: object, roads?: object, players?: object[],
@@ -405,6 +504,9 @@ function HexBoard({
   rollCounts = null,
   victims = null,
   onVictim = null,
+  placing = null,
+  dragging = false,
+  onDragEnd = null,
   compact = false,
   className = '',
   label = 'Catan board',
@@ -419,6 +521,45 @@ function HexBoard({
   const isPicked = (kind, id) => selected?.kind === kind && selected.id === id;
   const isNew = useArrivals(roads, buildings);
   const geo = geometryOf(board);
+
+  // Placing a piece: the cursor becomes that piece and snaps to the nearest
+  // open spot. A click there (or letting go after dragging it in from the
+  // bar) is the first tap; a second click on it builds it. The cursor keeps
+  // its own state, so moving the mouse never redraws the island.
+  const svgRef = useRef(null);
+  const snapRef = useRef(null);
+  const placeSpots =
+    placing === 'road'
+      ? { edges: [...edgeSet] }
+      : placing === 'settlement'
+        ? { vertices: [...vertexSet] }
+        : placing === 'city'
+          ? { vertices: [...citySet] }
+          : null;
+  const place = (snap) => {
+    if (!snap) return;
+    if (snap.kind === 'edge') onEdge?.(snap.id);
+    else onVertex?.(snap.id);
+  };
+
+  // While placing, a click anywhere on the island means "here": it goes to
+  // the snapped spot, never to whatever element happens to be under it.
+  const onPlaceClick = (event) => {
+    if (!placing || dragging) return;
+    event.stopPropagation();
+    event.preventDefault();
+    // A tap on a touch screen arrives without a move first: find the spot
+    // from where it landed.
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM?.();
+    if (!matrix) return;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const at = point.matrixTransform(matrix.inverse());
+    place(nearestSpot(geo, { x: at.x / UNIT, y: at.y / UNIT }, placeSpots || {}) || snapRef.current);
+  };
+
   // The sea is a flat-topped hexagon around the island, with room for the
   // harbours on every side.
   const seaX = geo.maxX + 1.2;
@@ -428,7 +569,11 @@ function HexBoard({
 
   return (
     <svg
-      className={`hex-board ${compact ? 'hex-board--compact' : ''} ${highlight.browse ? 'hex-board--browse' : ''} ${selected ? 'hex-board--picking' : ''} ${className}`.trim()}
+      ref={svgRef}
+      className={`hex-board ${compact ? 'hex-board--compact' : ''} ${highlight.browse ? 'hex-board--browse' : ''} ${selected ? 'hex-board--picking' : ''} ${
+        placing ? 'hex-board--placing' : ''
+      } ${className}`.trim()}
+      onClickCapture={placing ? onPlaceClick : undefined}
       viewBox={`${-width} ${-height} ${width * 2} ${height * 2}`}
       style={{ '--mine': mine.fill, '--mine-edge': mine.edge }}
       role="img"
@@ -736,6 +881,22 @@ function HexBoard({
       {board.robber !== null && board.robber !== undefined && <Dragon hexId={board.robber} geo={geo} board={board} />}
 
       {selected && <ConfirmChip selected={selected} geo={geo} />}
+
+      {placing && (
+        <PieceCursorLayer
+          svgRef={svgRef}
+          snapRef={snapRef}
+          geo={geo}
+          kind={placing}
+          spots={placeSpots}
+          colour={mine}
+          dragging={dragging}
+          onDrop={(snap) => {
+            place(snap);
+            onDragEnd?.(Boolean(snap));
+          }}
+        />
+      )}
     </svg>
   );
 }

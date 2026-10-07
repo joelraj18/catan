@@ -96,6 +96,28 @@ export function DevBack({ size = 30 }) {
   );
 }
 
+// The banner across the top of the deck: the word is stretched or squeezed
+// to fill it exactly, so it always fits however small the card is drawn. A
+// card too small to read it says DEV instead.
+function DevRibbon() {
+  return (
+    <span className="dev-back-ribbon" aria-hidden="true">
+      <svg className="dev-back-ribbon-long" viewBox="0 0 100 24" preserveAspectRatio="none">
+        <path d="M2 5h96l-4 7 4 7H2l4-7z" />
+        <text x="50" y="13" textAnchor="middle" dominantBaseline="middle" textLength="80" lengthAdjust="spacingAndGlyphs">
+          DEVELOPMENT
+        </text>
+      </svg>
+      <svg className="dev-back-ribbon-short" viewBox="0 0 100 24" preserveAspectRatio="none">
+        <path d="M2 5h96l-4 7 4 7H2l4-7z" />
+        <text x="50" y="13" textAnchor="middle" dominantBaseline="middle" textLength="56" lengthAdjust="spacingAndGlyphs">
+          DEV
+        </text>
+      </svg>
+    </span>
+  );
+}
+
 const DEV_BANDS = { knight: 'knight', roadBuilding: 'progress', yearOfPlenty: 'progress', monopoly: 'progress', victoryPoint: 'vp' };
 
 // Development cards grouped by kind. A card bought this turn waits a turn;
@@ -163,7 +185,7 @@ export function DeckCard({ deck }) {
           title="Buy a development card: 1 ore, 1 wool, 1 grain"
           aria-label={`Buy a development card, ${deck.left} left. Costs 1 ore, 1 wool and 1 grain${deck.note ? `. ${deck.note}` : ''}${deck.selected ? '. Tap again to buy' : ''}`}
         >
-          <span className="dev-back-ribbon">Development</span>
+          <DevRibbon />
           <span className="game-card-art">
             <DevBack size={30} />
           </span>
